@@ -1,0 +1,905 @@
+<!--
+ Copyright 2025 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<resources>
+  <string name="about_this_update">About this update</string>
+  <string name="all">All</string>
+  <string name="add">Add</string>
+  <string name="added">Added</string>
+  <string name="add_audio">+Audio</string>
+  <string name="aicore_access_panel_title">You cannot access this model yet. Please follow the steps and return when complete.</string>
+  <string name="aicore_access_panel_button">Open guide</string>
+  <string name="aicore_image_limit_message">The current model can only support 1 image per chat. To ask about another image, create a new chat.</string>
+  <string name="aichat_initializing_title">Initializing model</string>
+  <string name="aichat_initializing_content">Sit tight, this can take up to 1 minute</string>
+  <string name="app_intro">Real-time voice translation with</string>
+  <string name="app_name">Bao Translate</string>
+  <string name="app_name_first_part">Bao</string>
+  <string name="app_name_second_part">Translate</string>
+  <string name="app_title_google">Bao</string>
+  <string name="app_title_ai_edge_gallery">Translate</string>
+  <string name="intro_gm4_prefix">Real-time voice translation powered by </string>
+  <string name="intro_gm4_link_litert">on-device AI</string>
+  <string name="intro_gm4_middle"> — </string>
+  <string name="intro_gm4_link_gemma4">Bao Translate</string>
+  <string name="intro_gm4_suffix">.</string>
+  <string name="bao_translate">Bao Translate</string>
+  <string name="bao_translate_description">On-device speech translation with voice profiles and nearby-device conversation support</string>
+  <string name="bao_translate_short_description">Translate speech in real-time</string>
+  <string name="bao_translate_start">Start Translating</string>
+  <string name="bao_translate_stop">Stop</string>
+  <string name="bao_translate_listening">Listening...</string>
+  <string name="bao_translate_translating">Translating...</string>
+  <string name="bao_translate_speaking">Speaking...</string>
+  <string name="bao_translate_source_language">Source Language</string>
+  <string name="bao_translate_target_language">Target Language</string>
+  <string name="bao_translate_swap_languages">Swap languages</string>
+  <string name="bao_translate_enroll_voice">Enroll voice</string>
+  <string name="bao_translate_voice_enrolled">Voice enrolled</string>
+  <string name="bao_translate_conversation_mode">Conversation Mode</string>
+  <string name="bao_translate_connect_device">Connect Device</string>
+  <string name="bao_translate_disconnect">Disconnect</string>
+  <string name="bao_translate_auto_detect">Auto-detect</string>
+  <string name="bao_translate_language_english">English</string>
+  <string name="bao_translate_language_spanish">Spanish</string>
+  <string name="bao_translate_language_french">French</string>
+  <string name="bao_translate_language_german">German</string>
+  <string name="bao_translate_language_chinese">Chinese</string>
+  <string name="bao_translate_language_japanese">Japanese</string>
+  <string name="bao_translate_language_portuguese">Portuguese</string>
+  <string name="bao_translate_language_italian">Italian</string>
+  <string name="bao_translate_language_russian">Russian</string>
+  <string name="bao_translate_language_arabic">Arabic</string>
+  <string name="askimage_emptystate_title">Ask Image</string>
+  <string name="askimage_emptystate_content">To get started, tap the + below to add an image (max 10 images per chat) and type a prompt to ask a question about it!</string>
+  <string name="askimage_emptystate_content_aicore">To get started, tap the + below to add an image (max 1 image per chat) and type a prompt to ask a question about it!</string>
+  <string name="askaudio_emptystate_title">Ask Audio</string>
+  <string name="askaudio_emptystate_content">To get started, tap the + below to add a audio clip (limited to 1 clip up to 30 seconds) and type a prompt to transcribe or translate it!</string>
+  <string name="gallery_news_notification_title">Gallery News</string>
+  <string name="baseline">Baseline</string>
+  <string name="basic_info">Basic info</string>
+  <string name="benchmark">Benchmark</string>
+  <string name="benchmark_comparison_help_title">How to compare benchmark runs</string>
+  <string name="benchmark_comparison_help_content">Compare benchmark runs by tapping the **Baseline** chip on any run result card to set the run as the comparison baseline. We\'ll automatically calculate and display the percentage differences in **all other** run result cards.</string>
+  <string name="benchmark_model">Benchmark model</string>
+  <string name="benchmark_download_required">Download this model before running a benchmark.</string>
+  <string name="benchmark_results">Benchmark results</string>
+  <string name="benchmark_no_results">No benchmark results</string>
+  <string name="benchmark_stat_model">Model</string>
+  <string name="benchmark_stat_accelerator">Accelerator</string>
+  <string name="benchmark_stat_prefill_tokens">Prefill tokens</string>
+  <string name="benchmark_stat_decode_tokens">Decode tokens</string>
+  <string name="benchmark_stat_number_of_runs">Number of runs</string>
+  <string name="benchmark_stat_app_version">App version</string>
+  <string name="cd_state_selected">Selected</string>
+  <string name="cd_state_not_selected">Not selected</string>
+  <string name="task_label_ai_chat">AI Chat</string>
+  <string name="task_label_ask_image">Ask Image</string>
+  <string name="task_label_audio_scribe">Audio Scribe</string>
+  <string name="task_label_prompt_lab">Prompt Lab</string>
+  <string name="benchmark_tokens_limit_message">Ensure that the sum of prefill and decode tokens remains under the model\'s maximum token limit (%1$d vs %2$d)</string>
+  <string name="best_overall">Best overall</string>
+  <string name="model_list_experimental_label">EXPERIMENTAL</string>
+  <string name="cancel">Cancel</string>
+  <string name="category_unlabeled">Unlabeled</string>
+  <string name="category_llm">LLM</string>
+  <string name="category_agents">Agents</string>
+  <string name="category_classical_ml">Classical ML</string>
+  <string name="category_experimental">Experimental</string>
+  <string name="chat_textinput_placeholder">Type message…</string>
+  <string name="chat_you">You</string>
+  <string name="chat_llm_agent_name">LLM</string>
+  <string name="show_thinking">Show thinking</string>
+  <string name="checking_access">Checking access...</string>
+  <string name="close">Close</string>
+  <string name="collapse_all">Collapse all</string>
+  <string name="discard">Discard</string>
+  <string name="discard_changes_dialog_title">Discard changes?</string>
+  <string name="discard_changes_dialog_content">You have unsaved changes. Are you sure you want to discard them?</string>
+  <string name="delete_benchmark_result_dialog_title">Delete benchmark result</string>
+  <string name="delete_benchmark_result_dialog_content">Are you sure you want to delete the benchmark result?</string>
+  <string name="error">Error</string>
+  <string name="confirm_delete_model_dialog_title">Delete download</string>
+  <string name="confirm_delete_model_dialog_content">Are you sure you want to delete the downloaded model \"%s\"?</string>
+  <string name="conversation_reset_message">Conversation was reset</string>
+  <string name="engin_reset_message">Engine was reset</string>
+  <string name="chat_agent_agent_name">Agent</string>
+  <string name="chat_generic_agent_name">Model</string>
+  <string name="chat_generic_result_name">Result</string>
+  <string name="clear">Clear</string>
+  <string name="collect">Collect</string>
+  <string name="color">Color</string>
+  <string name="config_dialog_tab_model_configs">Model configs</string>
+  <string name="config_dialog_tab_system_prompt">System prompt</string>
+  <string name="configurations_dialog_title">Configurations</string>
+  <string name="benchmark_configs_dialog_title">Benchmark configs</string>
+  <string name="start_button_label">Start</string>
+  <string name="continue_button_label">Continue</string>
+  <string name="conversation_history">Conversation History</string>
+  <string name="copy">Copy</string>
+  <string name="create">Create</string>
+  <string name="delete">Delete</string>
+  <string name="description_required">Description*</string>
+  <string name="disabled">Disabled</string>
+  <string name="dismiss">Dismiss</string>
+  <string name="read_more">Read more</string>
+  <string name="import_label">Import</string>
+  <string name="from_local_model_file">From local model file</string>
+  <string name="unsupported_file_type">Unsupported file type</string>
+  <string name="only_task_or_litertlm_supported">Only ".task" or ".litertlm" file type is supported.</string>
+  <string name="unsupported_model_type">Unsupported model type</string>
+  <string name="web_only_model_not_supported">Looks like the model is a web-only model and is not supported by the app.</string>
+  <string name="model_imported_successfully">Model imported successfully</string>
+  <string name="acknowledge_user_agreement">Acknowledge user agreement</string>
+  <string name="open_user_agreement">Open user agreement</string>
+  <string name="unknown_network_error">Unknown network error</string>
+  <string name="please_check_internet">Please check your internet connection.</string>
+  <string name="gated_model_agreement_message">This is a gated model. Please click the button below to view and agree to the user agreement. After accepting, simply close that tab to proceed with the model download.</string>
+  <string name="download_and_try_it">Download &amp; Try it</string>
+  <string name="enter_content">Enter content</string>
+  <string name="preview_prompt">Preview prompt</string>
+  <string name="seconds_short">%d s</string>
+  <string name="promo_gm4_introducing">Introducing</string>
+  <string name="promo_gm4_title">Bao Translate</string>
+  <string name="promo_gm4_description">Real-time speech translation with optional voice clone and nearby-device conversations — all running locally on your device.</string>
+  <string name="promo_banner_gm4_title">Bao Translate: now available</string>
+  <string name="promo_banner_gm4_description">Real-time on-device voice translation with Sherpa-ONNX Whisper STT, LiteRT-LM translation, Kokoro TTS, and optional PocketTTS voice cloning.</string>
+  <string name="done">Done</string>
+  <string name="hide_password">Hide password</string>
+  <string name="show_password">Show password</string>
+  <string name="download">Download</string>
+  <string name="downloaded_size">%1$s downloaded</string>
+  <string name="drawer_settings_label">Settings</string>
+  <string name="drawer_settings_description">Manage application settings</string>
+  <string name="drawer_models_label">Models</string>
+  <string name="drawer_models_description">Browse, try, and benchmark models</string>
+  <string name="drawer_notifications_label">Notifications</string>
+  <string name="drawer_notifications_description">View scheduled notifications</string>
+  <string name="notifications_title">Notifications</string>
+  <string name="notifications_empty_state">No scheduled notifications</string>
+  <string name="notifications_delete_dialog_title">Delete Notification</string>
+  <string name="notifications_delete_dialog_content">Are you sure you want to delete the scheduled notification \"%s\"?</string>
+  <string name="notifications_time_label">Time: %s</string>
+  <string name="notifications_date_label">Date: %s</string>
+  <string name="notifications_repeat_daily">Daily</string>
+  <string name="notifications_repeat_one_time">One-time</string>
+  <string name="edit">Edit</string>
+  <string name="edit_secret">Edit secret</string>
+  <string name="enter_instruction">Enter instruction</string>
+  <string name="expand_all">Expand all</string>
+  <string name="failed_to_save">Failed to save</string>
+  <string name="flashlight_off_message">I\'ve turned off the flashlight.</string>
+  <string name="flashlight_on_message">I\'ve turned on the flashlight.</string>
+  <string name="function_name">Function name</string>
+  <string name="generate_and_copy">Generate and copy</string>
+  <string name="grant_permissions">Grant permissions</string>
+  <string name="grant_record_audio_permission">Grant record audio permission</string>
+  <string name="hold_down_to_talk">Hold to talk</string>
+  <string name="input_history">Input history</string>
+  <string name="instructions">Instructions</string>
+  <string name="introducing">Introducing</string>
+  <string name="invalid_response">Invalid response</string>
+  <string name="learn_more">Learn more and see model license</string>
+  <string name="listening">Listening...</string>
+  <string name="litert_community_label">on-device AI</string>
+  <string name="loading_model_list">Loading model list...</string>
+  <string name="logs_viewer_filter_text_input_placeholder">Filter logs</string>
+  <string name="logs_viewer_title">Logs viewer</string>
+  <string name="logs_viewer_no_matching_logs">No logs match the filter</string>
+  <string name="memory_warning_content">The model you\'ve selected may exceed your device\'s memory, which can cause the app to crash. For the best experience, we recommend trying a smaller model.</string>
+  <string name="memory_warning_proceed_anyway">Proceed anyway</string>
+  <string name="memory_warning_title">Memory Warning</string>
+  <string name="max_tokens_warning_message">Setting max tokens above 10000 may cause app to be unstable.</string>
+  <string name="model_is_initializing_msg">Initializing model…</string>
+  <string name="model_list_imported_models_title">Imported models</string>
+  <plurals name="model_list_number_of_models_available">
+    <item quantity="one">%d model available</item>
+    <item quantity="other">%d models available</item>
+  </plurals>
+  <string name="model_list_recommended_models_title">Recommended models</string>
+  <string name="model_manager">Model Manager</string>
+  <string name="model_manager_select_task_title">Select a use case to try</string>
+  <string name="model_not_downloaded_msg">Model not downloaded yet</string>
+  <string name="name">Name</string>
+  <string name="no_cutouts_collected">No cutouts collected</string>
+  <string name="notification_content_fail">Failed to download model "%s"</string>
+  <string name="notification_content_success">Model "%s" has been downloaded</string>
+  <string name="notification_title_fail">Model download failed</string>
+  <string name="notification_title_success">Model download succeeded</string>
+  <string name="ok">OK</string>
+  <string name="paste_from_clipboard">Paste from clipboard</string>
+  <string name="pick_from_album">Pick from album</string>
+  <string name="preview">Preview</string>
+  <string name="release_to_send">Release to send</string>
+  <string name="replace">Replace</string>
+  <string name="results">Results</string>
+  <string name="reset">Reset</string>
+  <string name="reset_note">Tapping \"Reset\" will reset LiteRT-LM engine only. The game progress won\'t be affected.</string>
+  <string name="resetting_engine">Resetting engine...</string>
+  <string name="restore_default">Restore default</string>
+  <string name="reinitializing_description">The game progress won\'t be affected</string>
+  <string name="run">Run</string>
+  <string name="running">Running...</string>
+  <plurals name="runs">
+    <item quantity="one">%d run</item>
+    <item quantity="other">%d runs</item>
+  </plurals>
+  <string name="run_again">Run again</string>
+  <string name="run_benchmark">Run benchmark</string>
+  <string name="run_benchmark_confirmation_msg">This process typically takes several minutes and cannot be interrupted once started. Would you like to proceed?</string>
+  <string name="running_benchmark_msg">Running model benchmark...</string>
+  <string name="save">Save</string>
+  <string name="secret">Secret</string>
+  <string name="select_downloaded_model">Select a downloaded model</string>
+  <string name="select_model">Select a model</string>
+  <string name="selected_count">%d selected</string>
+  <string name="settings_dialog_tos_title">Terms of service</string>
+  <string name="settings_dialog_view_app_terms_of_service">View App Terms of Service</string>
+  <string name="settings_dialog_gemma_prohibited_use_policy">Gemma Prohibited Use Policy</string>
+  <string name="share">Share</string>
+  <string name="slide_up_to_cancel">Slide up to cancel</string>
+  <string name="system_prompt_placeholder">Enter system instructions (e.g., \"You are a versatile assistant. Provide accurate, context-aware responses in a professional tone.\")</string>
+  <string name="system_prompt_updated">System prompt updated</string>
+  <string name="submit">Submit</string>
+  <string name="take_a_picture">Take a picture</string>
+  <string name="tap_to_change_color">Tap to change color</string>
+  <string name="tap_to_see_value">Tap on graph to see value</string>
+  <string name="test">Test</string>
+  <string name="text_image_generation_text_field_placeholder">Type prompt…</string>
+  <string name="text_input_placeholder_llm_chat">Type prompt…</string>
+  <string name="response_will_appear_here">Response will appear here</string>
+  <string name="tos_dialog_title_app">Welcome to Bao Translate</string>
+  <string name="tos_dialog_title_gemma">Gemma Terms of Use</string>
+  <string name="tos_dialog_accept_and_continue_button_label">Accept &amp; continue</string>
+  <string name="tos_dialog_agree_and_continue_button_label">Agree &amp; continue</string>
+  <string name="try_it">Try it</string>
+  <string name="turn_on_all">Turn on all</string>
+  <string name="turn_off_all">Turn off all</string>
+  <string name="undo">Undo</string>
+  <string name="unsupported_action">Unsupported action</string>
+  <string name="set_screen_brightness_message">I\'ve set the screen brightness to %1$d%%.</string>
+  <string name="set_timer_message">Setting the timer for %1$d seconds.</string>
+  <string name="add_calendar_event_message">Adding \"Team meeting (10AM-11AM)\" to your calendar.</string>
+  <string name="take_picture_message">Opening the camera app.</string>
+  <string name="mobile_actions_title">Mobile Actions</string>
+  <string name="mobile_actions_description">Control your device with simple commands</string>
+  <string name="mobile_actions_supported_actions">Supported sample actions:</string>
+  <string name="mobile_actions_tab_model_response">Model response</string>
+  <string name="mobile_actions_tab_function_called">Function(s) called</string>
+  <string name="update">Update</string>
+  <string name="update_available">Update available</string>
+  <string name="view_results">View results</string>
+  <string name="view_console_logs">View console logs</string>
+  <string name="warming_up">warming up…</string>
+  <string name="warning_no_function_call">No function recognized</string>
+  <string name="snackbar_no_function_call">No function recognized</string>
+  <string name="unknown_error">Unknown error</string>
+  <string name="view">View</string>
+  <string name="view_in_full_screen">View in full screen</string>
+  <string name="snackbar_save_to_album_success">Saved to photo album</string>
+  <string name="snackbar_save_to_album_failed">Failed to save to photo album</string>
+  <string name="snackbar_copy_to_clipboard_success">Copied to clipboard</string>
+
+  <plurals name="parameter">
+    <item quantity="one">Parameter</item>
+    <item quantity="other">Parameters</item>
+  </plurals>
+  <string name="prompt_template_label_flash_on_off">Turn flashlight on/off</string>
+  <string name="prompt_template_label_flash_on">Flashlight on</string>
+  <string name="prompt_template_label_flash_off">Flashlight off</string>
+  <string name="prompt_template_label_create_contact">Create contact</string>
+  <string name="prompt_template_label_send_email">Send email</string>
+  <string name="prompt_template_label_create_calendar_event">Create calendar event</string>
+  <string name="prompt_template_label_show_location_on_map">Show location on map</string>
+  <string name="prompt_template_label_open_wifi_settings">Open WIFI settings</string>
+
+  <!-- Prompt template editor labels -->
+  <string name="prompt_template_label_tone">Tone</string>
+  <string name="prompt_template_label_style">Style</string>
+  <string name="prompt_template_label_language">Language</string>
+
+  <!-- Prompt template types -->
+  <string name="prompt_template_free_form">Free form</string>
+  <string name="prompt_template_rewrite_tone">Rewrite tone</string>
+  <string name="prompt_template_summarize_text">Summarize text</string>
+  <string name="prompt_template_code_snippet">Code snippet</string>
+
+  <!-- Rewrite tone options -->
+  <string name="rewrite_tone_formal">Formal</string>
+  <string name="rewrite_tone_casual">Casual</string>
+  <string name="rewrite_tone_friendly">Friendly</string>
+  <string name="rewrite_tone_polite">Polite</string>
+  <string name="rewrite_tone_enthusiastic">Enthusiastic</string>
+  <string name="rewrite_tone_concise">Concise</string>
+
+  <!-- Summarization options -->
+  <string name="summarization_key_bullet_point">Key bullet points (3-5)</string>
+  <string name="summarization_short_paragraph">Short paragraph (1-2 sentences)</string>
+  <string name="summarization_concise_summary">Concise summary (~50 words)</string>
+  <string name="summarization_headline_title">Headline / title</string>
+  <string name="summarization_one_sentence_summary">One-sentence summary</string>
+
+  <!-- Language options -->
+  <string name="language_cpp">C++</string>
+  <string name="language_java">Java</string>
+  <string name="language_javascript">JavaScript</string>
+  <string name="language_kotlin">Kotlin</string>
+  <string name="language_python">Python</string>
+  <string name="language_swift">Swift</string>
+  <string name="language_typescript">TypeScript</string>
+
+  <!-- Strings for MobileActionsChallengeDialog -->
+  <string name="mobile_actions_challenge_title">Mobile Actions Finetune Challenge</string>
+  <string name="mobile_actions_challenge_subtitle">Build it to play it!</string>
+  <string name="mobile_actions_challenge_description">This demo is locked. To unlock the Mobile Actions agent, you need to compile the model yourself using our open-source recipe.</string>
+  <string name="mobile_actions_challenge_instructions_title">Instructions:</string>
+  <string name="mobile_actions_challenge_instruction_1">1. <![CDATA[<b>On your computer</b>]]>, open <![CDATA[<a href="https://ai.google.dev/gemma/docs/mobile-actions">this guide</a>]]></string>
+  <string name="mobile_actions_challenge_instruction_1_link">Open the guide</string>
+  <string name="mobile_actions_challenge_instruction_2">2. Follow the instructions to fine tune the model and convert it to .litertlm format.</string>
+  <string name="mobile_actions_challenge_instruction_3">3. Transfer the file to this phone.</string>
+  <string name="mobile_actions_challenge_instruction_4">4. Tap <![CDATA[<b>Load Model</b>]]> below to unlock the demo.</string>
+  <string name="mobile_actions_challenge_email_colab">Email guide to myself</string>
+  <string name="mobile_actions_challenge_load_model">Load Model</string>
+
+  <!-- Strings for skills -->
+  <string name="aichat_emptystate_title">AI Chat</string>
+  <string name="aichat_emptystate_content">Chat with on-device large language models.</string>
+  <string name="add_script">Add script</string>
+  <string name="add_default_script">Add default script</string>
+  <string name="add_skill">Add skill</string>
+  <string name="add_skill_option_view_community_skills_title">View Community Skills</string>
+  <string name="add_skill_option_view_community_skills_description">Explore community contributed skills on GitHub discussions</string>
+  <string name="add_skill_option_featured_list_title">Add skill from featured list</string>
+  <string name="add_skill_option_featured_list_description">Add a skill from a curated list of community contributed skills</string>
+  <string name="add_skill_option_url_title">Load skill from URL</string>
+  <string name="add_skill_option_url_description">Enter the URL of a skill directory hosted on Web</string>
+  <string name="add_skill_option_local_title">Import local skill</string>
+  <string name="add_skill_option_local_description">Import the skill directory locally</string>
+  <string name="add_skill_option_skill_creator_title">Skill creator</string>
+  <string name="add_skill_option_skill_creator_description">Create a skill from scratch in-app</string>
+  <string name="add_skill_from_url_dialog_title">Add skill from URL</string>
+  <string name="add_skill_dialog_title_from_local_import">Import local skill</string>
+  <string name="add_skill_dialog_subtitle_from_local_import">Please first \"adb push\" the whole skill directory to /sdcard/Download</string>
+  <string name="add_skill_manual_input_sheet_title">Create a skill</string>
+  <string name="agent_skills">Agent Skills</string>
+  <string name="agent_skills_empty_description">Use specialized, high-order reasoning by loading different skills or creating your own. Explore community contributed skills on GitHub discussions.\n\nTry tapping a sample prompt below to see Agent Skills in action!</string>
+  <string name="agent_skills_description_prefix">Use specialized, high-order reasoning by loading different skills or </string>
+  <string name="agent_skills_description_middle">. Explore community contributed skills on </string>
+  <string name="agent_skills_description_suffix">.\n\nTry tapping a sample prompt below to see Agent Skills in action!</string>
+  <string name="agent_skills_creating_own">creating\u00A0your\u00A0own</string>
+  <string name="agent_skills_github_discussions">GitHub\u00A0discussions</string>
+  <string name="disclaimer_dialog_content">Third-party skills are not authored or endorsed by Google. Google is not responsible for their contents, security, or data handling practices.\n\nPlease exercise caution before providing sensitive information, such as personal identification, tokens, or API keys.\n\nAny use of an Agent Skill is subject to the applicable terms for that Skill.</string>
+  <string name="disclaimer_dialog_title">Add third-party skill</string>
+  <string name="disclaimer_dialog_agree">Agree</string>
+  <string name="delete_script_dialog_title">Delete script</string>
+  <string name="delete_script_dialog_content">Are you sure you want to delete \'%1$s\'?</string>
+  <string name="disabled_skill_dialog_title">The \"%1$s\" skill is currently disabled</string>
+  <string name="skill_tester_input_data">Input Data</string>
+  <string name="skill_tester_custom_data">Custom Data</string>
+  <string name="skill_tester_tab_result">Result</string>
+  <string name="skill_tester_tab_logs">Logs</string>
+  <string name="delete_skill_dialog_title">Delete skill</string>
+  <string name="delete_skill_dialog_content">Are you sure you want to delete the skill?</string>
+  <string name="delete_selected_skills_title">Delete selected skills</string>
+  <plurals name="delete_selected_skills_content">
+    <item quantity="one">Are you sure you want to delete %d skill?</item>
+    <item quantity="other">Are you sure you want to delete %d skills?</item>
+  </plurals>
+  <plurals name="selected_custom_skills_count">
+    <item quantity="one">%d selected</item>
+    <item quantity="other">%d selected</item>
+  </plurals>
+  <string name="built_in_skills_title">Built-in Skills</string>
+  <string name="custom_skills_title">Custom Skills</string>
+  <string name="describe_requirements">Describe requirements</string>
+  <string name="describe_input_data">Describe input data</string>
+  <string name="describe_input_data_support_text">The field names need to match the ones in instructions.</string>
+  <string name="describe_output_data">Describe output data</string>
+  <string name="duplicated_script_name">Duplicated script name</string>
+  <string name="enable_skill_dialog_content">Please enable the skill by tapping the Skills button below.</string>
+  <string name="edit_skill">Edit skill</string>
+  <string name="enter_skill_url">Enter URL of skill\'s root directory</string>
+  <string name="featured_skills_title">Featured skills</string>
+  <string name="featured_skills_description">A curated list of community contributed skills</string>
+  <string name="generate_llm_prompt_title">Generate LLM prompt</string>
+  <string name="generate_llm_prompt_button_label">LLM prompt</string>
+  <string name="learn_how_to_write_skills">Learn how to write skills</string>
+  <string name="loading_skills_allowlist">Loading featured skills...</string>
+  <string name="manage_skills">Manage skills</string>
+  <string name="manage_skills_description">View, create, and manage your skills</string>
+  <string name="skill_limit_warning">Enabling more than %s may impact performance.</string>
+  <string name="no_directory_selected">No directory selected</string>
+  <string name="pick_skill_dir">Pick skill\'s root directory</string>
+  <string name="prompt_copied_message">Prompt copied to clipboard. Paste it into your favorite LLM app to generate the code and copy/paste the code here.</string>
+  <string name="prompt_chip_kitchen_adventure">Kitchen adventure</string>
+  <string name="prompt_chip_calculate_hash">Calculate hash</string>
+  <string name="prompt_chip_query_wikipedia">Query Wikipedia</string>
+  <string name="prompt_chip_plot_chart">Plot chart</string>
+  <string name="prompt_chip_interactive_map">Interactive map</string>
+  <string name="prompt_chip_text_spinner">Spin label on my head</string>
+  <string name="prompt_chip_send_email">Send email</string>
+  <string name="replace_skill_dialog_title">Replace existing skill</string>
+  <string name="replace_skill_dialog_content">A skill with the same name already exists. Do you want to replace it?</string>
+  <string name="search_skill">Search for a skill</string>
+  <string name="select_script">Select script</string>
+  <string name="script_name">Script name</string>
+  <string name="script_content">Script content</string>
+  <string name="skills">Skills</string>
+  <plurals name="skills_count">
+    <item quantity="one">%d skill</item>
+    <item quantity="other">%d skills</item>
+  </plurals>
+  <string name="skill_name_input_description">REQUIRED. In the form of my-skill-name</string>
+  <string name="skill_description_input_description">REQUIRED. A brief description of the skill\'s function and trigger conditions or keywords.</string>
+  <string name="skill_instructions_input_description">Detailed instructions in Markdown format that LLM must follow to accomplish the task.</string>
+  <string name="use_call_js_template">Use Call JS template</string>
+
+  <!-- Strings for MCP -->
+  <string name="mcp">MCP</string>
+  <string name="mcp_tool_call_permission_title">Permission to call MCP tool?</string>
+  <string name="mcp_tool_name_label">Tool name</string>
+  <string name="mcp_tool_input_label">Input</string>
+  <string name="mcp_tool_always_allow">Always allow</string>
+  <string name="mcp_tool_allow_once">Allow once</string>
+  <string name="mcp_tool_dont_allow">Don\'t allow</string>
+  <string name="mcp_tool_revoke">Revoke</string>
+  <string name="mcp_tool_revoke_permission">Revoke tool call permission</string>
+  <string name="mcp_tool_revoke_permission_title">Revoke permission?</string>
+  <string name="mcp_tool_revoke_permission_content">Are you sure you want to revoke permission to automatically call this tool?</string>
+  <string name="manage_mcp_servers">Manage MCP servers</string>
+  <string name="add_mcp_server">Add MCP server</string>
+  <string name="learn_more_about_mcp">Learn more about MCP in Bao Translate</string>
+  <string name="learn_more_about_mcp_short">Learn more</string>
+  <string name="search_mcp_server">Search for an MCP server</string>
+  <plurals name="mcp_servers_count">
+    <item quantity="one">%d MCP server</item>
+    <item quantity="other">%d MCP servers</item>
+  </plurals>
+  <plurals name="mcp_tools_count">
+    <item quantity="one">%d tool</item>
+    <item quantity="other">%d tools</item>
+  </plurals>
+  <string name="add_mcp_server_from_url_dialog_title">Add MCP server from URL</string>
+  <string name="enter_mcp_server_url">Enter MCP server URL</string>
+  <string name="delete_mcp_server_dialog_title">Delete MCP server</string>
+  <string name="delete_mcp_server_dialog_content">Are you sure you want to delete this MCP server?</string>
+  <string name="manage_tools">Manage tools</string>
+  <string name="mcp_server_label">MCP server: %s</string>
+  <string name="mcp_tool_description">Description</string>
+  <string name="mcp_tool_schema">Schema</string>
+  <string name="mcp_disclaimer_dialog_title">Add third-party MCP</string>
+  <string name="mcp_disclaimer_dialog_content">Third-party MCPs are not authored or endorsed by Google. Google is not responsible for their contents, security, or data handling practices.\n\nPlease exercise caution before providing sensitive information, such as personal identification, tokens, or API keys.\n\nAny use of an MCP is subject to the applicable terms for that MCP.</string>
+  <string name="mcp_server_duplicate_title">Duplicate MCP server</string>
+  <string name="mcp_server_duplicate_content">This MCP server URL is already added.</string>
+  <string name="mcp_server_authorization">Authorization</string>
+  <string name="mcp_server_auth_none">None</string>
+  <string name="mcp_server_auth_request_header">Request header</string>
+  <string name="mcp_server_auth_oauth_wip">OAuth (WIP)</string>
+  <string name="mcp_server_header_name">Header name</string>
+  <string name="mcp_server_header_value">Header value</string>
+
+  <!-- Strings for ChatHistorySideSheet component (used for the chat history side bar) -->
+  <!-- Displayed as the header and section title for the user's past chats. -->
+  <string name="chat_history_title">Chat history</string>
+  <!-- Displayed on the button to clear and start a new chat session. -->
+  <string name="new_chat">New chat</string>
+  <!-- Displayed in the new-release banner on the home screen, with a placeholder for the version. -->
+  <string name="new_release_available">New release %1$s available</string>
+  <!-- Displayed as the link text in the new-release banner on the home screen. -->
+  <string name="new_release_view">View</string>
+  <!-- Status label shown while a model archive is being extracted. -->
+  <string name="model_status_unzipping">Unzipping…</string>
+  <!-- Suffix appended to download progress when a partial download is being resumed. -->
+  <string name="model_status_resuming">(resuming…)</string>
+  <!-- Suffix appended to a model path pointing at the app\'s external files directory. -->
+  <string name="model_status_local_files_dir">External files dir</string>
+  <!-- Link text shown next to the API documentation URL on a model\'s task header. -->
+  <string name="model_list_api_documentation_link">API Documentation</string>
+  <!-- Link text shown next to the example code URL on a model\'s task header. -->
+  <string name="model_list_example_code_link">Example code</string>
+  <!-- Title for the model picker list (followed by the task name). -->
+  <string name="model_picker_title">%1$s models</string>
+  <!-- Displayed to clear all current chat history items from the list. -->
+  <string name="clear_all">Clear all</string>
+  <!-- Displayed as a persistent notice at the bottom of the side bar regarding demo usage. -->
+  <string name="chat_history_demo_notice">Chat history does not persist across demos.</string>
+  <!-- Title for warning dialog before clearing chat history. -->
+  <string name="clear_history_dialog_title">Clear history?</string>
+  <!-- Content descriptive text for the clear history warning dialog. -->
+  <string name="clear_history_dialog_content">Are you sure you want to clear the history? This action cannot be undone.</string>
+
+  <!-- Settings dialog -->
+  <string name="settings_title">Settings</string>
+  <string name="settings_app_version">App version: %1$s (%2$d)</string>
+  <string name="settings_theme">Theme</string>
+  <string name="settings_hf_token">HuggingFace access token</string>
+  <string name="settings_hf_token_expires">Expires at: %1$s</string>
+  <string name="settings_hf_token_not_available">Not available</string>
+  <string name="settings_hf_token_hint">The token will be automatically retrieved when a gated model is downloaded</string>
+  <string name="settings_clear">Clear</string>
+  <string name="settings_enter_token">Enter token manually</string>
+  <string name="settings_third_party_libraries">Third-party libraries</string>
+  <string name="settings_view_licenses">View licenses</string>
+  <string name="settings_close">Close</string>
+
+  <!-- Theme labels -->
+  <string name="theme_auto">Auto</string>
+  <string name="theme_light">Light</string>
+  <string name="theme_dark">Dark</string>
+  <string name="theme_unknown">Unknown</string>
+
+  <!-- Chat input actions -->
+  <string name="chat_take_picture">Take a picture</string>
+  <string name="chat_pick_from_album">Pick from album</string>
+  <string name="chat_record_audio">Record audio clip</string>
+  <string name="chat_pick_wav">Pick wav file</string>
+  <string name="chat_input_history">Input history</string>
+
+  <!-- Home screen -->
+  <string name="home_try_gemma4">Try Bao Translate</string>
+  <string name="home_gemma4_intro">Real-time voice translation, optional voice clone, and multi-device conversations — all on-device.</string>
+  <string name="home_explore_use_cases">All features</string>
+  <string name="home_gemma4_chat_desc">Real-time voice translation with on-device AI</string>
+  <string name="home_gemma4_agent_desc">Multi-device BLE mesh conversation mode</string>
+  <string name="new_feature_badge">New</string>
+  <string name="experimental_badge">Experimental</string>
+  <string name="error_check_internet">Please check your internet connection and try again later.</string>
+  <string name="retry">Retry</string>
+
+  <!-- Model count -->
+  <string name="model_count_single">1 Model</string>
+  <string name="model_count_many">%d Models</string>
+
+  <!-- The following entries are for accessibility -->
+
+  <!-- Content description spoken when the "add" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_add_icon">Add</string>
+  <!-- Content description spoken when the "import model" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_import_model_button">Import model</string>
+  <!-- Content description spoken when the task card is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_task_card">%1$s task with %2$d models</string>
+  <!-- Content description spoken when the error icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_error">Error</string>
+  <!-- Content description spoken when the "import model from local file" button is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_import_model_from_local_file_button">Import model from local file</string>
+  <!-- Content description spoken when the back arrow icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_navigate_back_icon">Go back</string>
+  <!-- Content description spoken when the settings icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_app_settings_icon">Settings</string>
+  <!-- Content description spoken when the done icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_done_icon">Done</string>
+  <!-- Content description spoken when the collapse icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_collapse_icon">Collapse</string>
+  <!-- Content description spoken when the expand icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_expand_icon">Expand</string>
+  <!-- Content description spoken when the stop icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_stop_icon">Stop</string>
+  <!-- Content description spoken when the delete icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_delete_icon">Delete</string>
+  <!-- Content description spoken when the close icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_close_icon">Close</string>
+  <!-- Content description spoken when the selected icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_selected_icon">Selected</string>
+  <!-- Content description spoken when the "model settings" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_model_settings_icon">Model settings</string>
+  <!-- Content description spoken when the "reset session" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_reset_session_icon">Reset session</string>
+  <!-- Content description spoken when the "model picker chip" is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_change_model">Current model is %1$s. Tap to change model.</string>
+  <!-- Content description spoken when the "close image viewer" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_close_image_viewer_icon">Close image viewer</string>
+  <!-- Content description spoken when the "copy to clipboard" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_copy_to_clipboard_icon">Copy to clipboard</string>
+  <!-- Content description spoken when the "prompt input" text field is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_prompt_input_text_field">Prompt input</string>
+  <!-- Content description spoken when the "send prompt" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_send_prompt_icon">Send prompt</string>
+  <!-- Content description spoken when the "model response" text is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_model_response_text">Model response text</string>
+  <!-- Content description spoken when the "clear input history" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_clear_input_history_icon">Clear input history</string>
+  <!-- Content description spoken when the "delete input history entry" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_delete_input_history_entry_icon">Delete input history entry</string>
+  <!-- Content description spoken when the "content input field" is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_content_input_field">Content input</string>
+  <!-- Content description spoken when the "add example prompt" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_add_example_prompt_icon">Add example prompt</string>
+  <!-- Content description spoken when the image thumbnail is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_image_thumbnail">Image thumbnail</string>
+  <!-- Content description spoken when an user image is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_user_image">User image %1$d</string>
+  <!-- Content description spoken when an user image in a group is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_user_image_in_group">User image %1$d of %2$d</string>
+  <!-- Content description spoken when the "add content" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_add_content_icon">Add content</string>
+  <!-- Content description spoken when the "camera shutter" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_camera_shutter_icon">Camera shutter</string>
+  <!-- Content description spoken when the "toggle front or back camera" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_toggle_front_back_camera_icon">Toggle front or back camera</string>
+  <!-- Content description spoken when the "pick file" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_pick_file">Pick file</string>
+  <!-- Content description spoken when the "play audio" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_play_audio_icon">Play audio</string>
+  <!-- Content description spoken when the "stop playback" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_stop_playback_icon">Stop playback</string>
+  <!-- Content description spoken when the "send audio clip" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_send_audio_clip_icon">Send audio clip</string>
+  <!-- Content description spoken when the "start recording" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_start_recording">Start recording</string>
+  <!-- Content description spoken when the "downloaded" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_downloaded_icon">Downloaded</string>
+  <!-- Content description spoken when the "not downloaded" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_not_downloaded_icon">Not downloaded</string>
+  <!-- Content description spoken when the "downloading" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_downloading_icon">Downloading</string>
+  <!-- Content description spoken when the "download failed" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_download_failed_icon">Download failed</string>
+  <!-- Content description spoken when the "download failed" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_chat_panel">Chat panel</string>
+  <!-- Content description spoken when the "switch to keyboard" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_switch_to_keyboard">Switch to keyboard</string>
+  <!-- Content description spoken when the "switch to voice" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_switch_to_voice">Switch to voice</string>
+  <!-- Content description spoken when the "show history" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_show_history">Show history</string>
+  <!-- Content description spoken when the "more options" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_more_options">More options</string>
+  <!-- Content description spoken when the "help" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_help">Help</string>
+  <!-- Content description spoken when the "menu" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_menu">Menu</string>
+  <!-- Content description spoken when the "scroll to bottom" button is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_scroll_to_bottom">Scroll to bottom</string>
+  <!-- Content description spoken when the "chat history" icon is focused. [CHAR_LIMIT=NONE] -->
+  <string name="cd_chat_history">Chat history</string>
+
+  <!-- Bao Translate additional strings -->
+  <string name="bao_translate_title">Bao Translate</string>
+  <string name="bao_translate_record_voice_title">Record Your Voice</string>
+  <string name="bao_translate_record_voice_desc">Record a local voice profile for PocketTTS voice clone. You can un-enroll anytime in Settings.</string>
+  <string name="bao_translate_record_prompt">The quick brown fox jumps over the lazy dog.</string>
+  <string name="bao_translate_tap_to_record">Tap to Record</string>
+  <string name="bao_translate_tap_to_stop">Tap to Stop</string>
+  <string name="bao_translate_min_record">Minimum 3 seconds. Works best with 5-10 seconds of clear speech.</string>
+  <string name="bao_translate_recording_remaining_format">%.1fs more</string>
+  <string name="bao_translate_task_description">On-device speech translation with optional voice clone and nearby-device conversation support</string>
+  <string name="bao_translate_task_short_description">Translate speech in real-time</string>
+  <string name="bao_translate_voice_enrolled_success">Voice enrolled successfully</string>
+  <string name="bao_translate_extracting_voice">Extracting voice profile...</string>
+  <string name="bao_translate_conversation">Conversation</string>
+  <string name="bao_translate_connected_devices">Connected Devices</string>
+  <string name="bao_translate_scanning">Scanning for devices...</string>
+  <string name="bao_translate_find_devices">Find nearby devices</string>
+  <string name="bao_translate_start_group">Start Group Conversation</string>
+  <string name="bao_translate_connected">Connected</string>
+  <string name="bao_translate_disconnected">Disconnected</string>
+  <string name="bao_translate_played">Played</string>
+  <string name="bao_translate_settings">Bao Translate Settings</string>
+  <string name="bao_translate_source_label">Source</string>
+  <string name="bao_translate_target_label">Target</string>
+  <string name="cd_bao_translate_start">Start translating</string>
+  <string name="cd_bao_translate_stop">Stop recording</string>
+  <string name="cd_bao_translate_swap">Swap languages</string>
+  <string name="cd_bao_translate_enroll">Enroll voice</string>
+  <string name="cd_bao_translate_settings_enroll_voice">Enroll voice from settings</string>
+  <string name="cd_bao_translate_waveform">Audio waveform</string>
+
+  <string name="bao_translate_detect_automatically">Detect automatically</string>
+  <string name="bao_translate_source_language_hint">Speech input</string>
+  <string name="bao_translate_target_language_hint">Target language</string>
+  <string name="bao_translate_start_speaking">Start speaking to translate</string>
+  <string name="bao_translate_arrow_format">→ %1$s</string>
+  <string name="bao_translate_settings_models">Models</string>
+  <string name="bao_translate_settings_voice">Voice</string>
+  <string name="bao_translate_settings_audio">Audio</string>
+  <string name="bao_translate_settings_downloads">Downloads</string>
+  <string name="bao_translate_required_models">Required for offline translate</string>
+  <string name="bao_translate_optional_models">Optional voice clone and upgrades</string>
+  <string name="bao_translate_stt_model">STT Model</string>
+  <string name="bao_translate_translation_model">Translation Model</string>
+  <string name="bao_translate_tts_engine">TTS Engine</string>
+  <string name="bao_translate_voice_enrolled_label">Enrolled</string>
+  <string name="bao_translate_voice_not_enrolled">Not enrolled</string>
+  <string name="bao_translate_your_voice_profile">Your voice profile</string>
+  <string name="bao_translate_phone_speaker">Phone speaker</string>
+  <string name="bao_translate_read_prompt_label">Read this sentence aloud:</string>
+  <string name="bao_translate_recording_failed">Recording failed</string>
+  <string name="bao_translate_try_again">Try Again</string>
+  <string name="bao_translate_connect_subtitle">Connect with nearby devices for multi-language conversations</string>
+  <string name="bao_translate_you_suffix">%1$s (You)</string>
+  <string name="bao_translate_stop_scanning">Stop Scanning</string>
+  <string name="bao_translate_scan_devices">Scan for Devices</string>
+  <string name="bao_translate_delete_all_models">Delete all models</string>
+  <string name="bao_translate_storage_format">Storage used: %1$.0f MB</string>
+  <string name="bao_translate_group_conversation_format">Start Group Conversation (%1$d connected)</string>
+  <string name="bao_translate_language_korean">Korean</string>
+  <string name="bao_translate_wifi_only">WiFi only for model downloads</string>
+  <string name="bao_translate_output_device">Output device</string>
+  <string name="bao_translate_stt_model_option_whisper">Whisper Base via Sherpa-ONNX (148 MB)</string>
+  <string name="bao_translate_stt_model_option_qwen3">Qwen3 ASR 0.6B (2.4 GB)</string>
+  <string name="bao_translate_stt_model_option_parakeet">Parakeet TDT 0.6B (2.4 GB)</string>
+  <string name="bao_translate_translation_model_option_qwen25">Qwen2.5 1.5B compact (1.5 GB)</string>
+  <string name="bao_translate_translation_model_option_gemma4_e2b">Gemma 4 E2B LiteRT-LM upgrade (2.5 GB)</string>
+  <string name="bao_translate_tts_option_kokoro">Kokoro 82M (preset voices)</string>
+  <string name="bao_translate_tts_option_pocket_tts">PocketTTS (voice clone)</string>
+  <string name="bao_translate_loading_models">Loading models…</string>
+  <string name="bao_translate_hint_detail">Use the translate control to start real-time voice translation</string>
+  <string name="bao_translate_re_record_voice">Re-record voice</string>
+  <string name="bao_translate_unenroll_voice">Un-enroll</string>
+  <string name="bao_translate_voice_profile_saved">Saved on this device</string>
+  <string name="bao_translate_voice_profile_empty">No voice profile saved</string>
+  <string name="bao_translate_voice_clone_requires_setup">Requires PocketTTS download and an enrolled voice.</string>
+  <string name="bao_translate_error_voice_clone_not_ready">Download PocketTTS and enroll a voice before selecting voice clone.</string>
+  <string name="bao_translate_error_translation_model_not_ready">Download this translation model before selecting it.</string>
+  <string name="bao_translate_model_download_first">Download from the Models section first.</string>
+  <string name="bao_translate_download_busy">Wait for the current model download to finish.</string>
+  <string name="cd_bao_translate_playback">Audio playback</string>
+  <string name="bao_translate_default_voice_name">Default Voice</string>
+  <string name="bao_translate_error_download_failed">Failed to download models: %1$s</string>
+  <string name="bao_translate_error_download_unknown">Download failed</string>
+  <string name="bao_translate_error_wifi_required">WiFi is required for model downloads.</string>
+  <string name="bao_translate_error_unknown_model">Unknown model: %1$s</string>
+  <string name="bao_translate_error_storage_required">Not enough storage. Free at least %1$d MB before downloading.</string>
+  <string name="bao_translate_error_models_not_ready">Download and initialize the required models before recording.</string>
+  <string name="bao_translate_error_runtime_not_ready">Downloaded models could not initialize: %1$s.</string>
+  <string name="bao_translate_error_stt_not_init">STT model not initialized</string>
+  <string name="bao_translate_error_translation_not_init">Translation model not initialized</string>
+  <string name="bao_translate_permission_mic_denied">Microphone permission is required to translate speech.</string>
+  <string name="bao_translate_permission_nearby_denied">Nearby devices permission is required for group conversations.</string>
+  <string name="bao_translate_error_microphone_init">Microphone initialization failed</string>
+  <string name="bao_translate_error_recording_short">Recording too short</string>
+  <string name="bao_translate_error_no_speech_detected">No speech detected</string>
+  <string name="bao_translate_error_no_clear_speech">No clear speech detected. Please speak louder and try again.</string>
+  <string name="bao_translate_error_vad_init">Voice activity detection failed to initialize</string>
+  <string name="bao_translate_recording_seconds_format">Recording %1$.1fs</string>
+  <string name="cd_bao_translate_start_recording">Start recording</string>
+  <string name="cd_bao_translate_stop_recording">Stop recording</string>
+  <string name="cd_bao_translate_voice_enrolled_icon">Voice enrolled</string>
+  <string name="generic_error">Error</string>
+  <string name="cd_bao_translate_connected_icon">Connected</string>
+  <string name="bao_translate_discovered_devices_section">Discovered Devices</string>
+  <string name="bao_translate_no_devices_found">No devices found</string>
+  <string name="bao_translate_devices_hint">Make sure other devices have Bao Translate open and scanning</string>
+  <string name="bao_translate_connect_action">Connect</string>
+  <string name="bao_translate_connecting">Connecting…</string>
+  <string name="bao_translate_advertising">Ready for nearby devices to join</string>
+  <string name="bao_translate_ready_to_pair">Ready to pair</string>
+  <string name="bao_translate_devices_found_format">(%1$d found)</string>
+  <string name="bao_translate_device_count_format">%1$d device%2$s found</string>
+  <string name="cd_bao_translate_disconnect_action">Disconnect from device</string>
+  <string name="bao_translate_lang_pair_format">%1$s → %2$s</string>
+  <string name="bao_translate_audio_device_bluetooth">Bluetooth headset</string>
+  <string name="bao_translate_audio_device_wired">Wired headset</string>
+  <string name="bao_translate_unknown_device">Unknown</string>
+  <string name="bao_translate_you">You</string>
+
+  <string name="bao_translate_extracting">Extracting…</string>
+  <string name="bao_translate_model_ready">Ready</string>
+  <string name="bao_translate_download">Download</string>
+  <string name="bao_translate_downloading_models">Downloading…</string>
+  <string name="bao_translate_download_progress_format">%1$.1f MB / %2$.1f MB</string>
+  <string name="bao_translate_model_size_format">%1$d MB</string>
+  <string name="bao_translate_model_size_under_one_mb">&lt; 1 MB</string>
+  <string name="bao_translate_retry">Retry</string>
+  <string name="bao_translate_delete">Delete</string>
+  <string name="bao_translate_models_needed">Download required models to get started</string>
+  <string name="bao_translate_runtime_needed">Required downloads are present. Initialize the runtime before translating.</string>
+  <string name="bao_translate_download_all">Download All Models</string>
+  <string name="bao_translate_initialize_models">Initialize Models</string>
+  <string name="bao_translate_download_required">Download Required</string>
+  <string name="bao_translate_next">Next</string>
+  <string name="bao_translate_get_started">Get Started</string>
+  <string name="bao_translate_start_conversation">Start Conversation</string>
+  <string name="bao_translate_mic_working">Mic is working!</string>
+  <string name="bao_translate_detected_language">Detected: %1$s</string>
+  <string name="bao_translate_audio_unavailable">Audio unavailable</string>
+  <string name="bao_translate_initializing">Initializing models…</string>
+  <string name="bao_translate_error_retry">Retry</string>
+  <string name="bao_translate_select_audio_device">Select audio device</string>
+  <string name="bao_translate_dismiss">Dismiss</string>
+  <string name="bao_translate_connect_devices_first">Connect devices first</string>
+
+  <!-- Audio device chip + picker (multi-BT) -->
+  <string name="bao_translate_audio_chip_cd_format">Audio output: %1$s. Microphone input: %2$s. %3$d output option(s) available</string>
+  <string name="bao_translate_audio_device_count_short">%1$d avail</string>
+  <string name="bao_translate_audio_picker_title">Audio devices</string>
+  <string name="bao_translate_audio_picker_subtitle">Choose speaker output and microphone input independently.</string>
+  <string name="bao_translate_audio_output_label">Output</string>
+  <string name="bao_translate_audio_input_label">Microphone input</string>
+  <string name="bao_translate_audio_input_short_label">Mic</string>
+  <string name="bao_translate_audio_input_hint">Choose the microphone Bao Translate records from.</string>
+  <string name="bao_translate_audio_input_default">Device default microphone</string>
+  <string name="bao_translate_audio_input_default_short">Default mic</string>
+  <string name="bao_translate_audio_output_row_cd_format">Output device: %1$s</string>
+  <string name="bao_translate_audio_output_row_cd_with_detail_format">Output device: %1$s, %2$s</string>
+  <string name="bao_translate_audio_input_row_cd_format">Microphone input: %1$s</string>
+  <string name="bao_translate_audio_input_row_cd_with_detail_format">Microphone input: %1$s, %2$s</string>
+  <string name="bao_translate_audio_no_outputs">No output devices detected</string>
+  <string name="bao_translate_audio_no_bt_inputs">No Bluetooth microphones available</string>
+  <string name="bao_translate_audio_transport_ble">Bluetooth LE Audio</string>
+  <string name="bao_translate_audio_transport_a2dp">Bluetooth A2DP</string>
+  <string name="bao_translate_audio_transport_sco">Bluetooth HFP / SCO</string>
+  <string name="bao_translate_audio_transport_ble_short">BLE</string>
+  <string name="bao_translate_audio_transport_a2dp_short">A2DP</string>
+  <string name="bao_translate_audio_transport_sco_short">HFP</string>
+  <string name="bao_translate_audio_output_only_suffix">- output only</string>
+  <string name="bao_translate_audio_status_format">Status: %1$s</string>
+  <string name="bao_translate_audio_status_idle">Idle</string>
+  <string name="bao_translate_audio_status_routing">Routing</string>
+  <string name="bao_translate_audio_status_connected">Connected</string>
+  <string name="bao_translate_audio_status_failed">Routing failed</string>
+  <string name="bao_translate_audio_status_no_bt">No Bluetooth output</string>
+  <string name="bao_translate_change_audio_devices">Change audio devices</string>
+
+  <!-- Welcome sheet -->
+  <string name="bao_translate_welcome_title">Welcome to Bao Translate</string>
+  <string name="bao_translate_welcome_step_models_title">Download models</string>
+  <string name="bao_translate_welcome_step_models_body">Download the required offline models from the setup panel before translating</string>
+  <string name="bao_translate_welcome_step_audio_title">Connect audio</string>
+  <string name="bao_translate_welcome_step_audio_body">Tap the audio chip at the top to pick a Bluetooth headset or speaker</string>
+  <string name="bao_translate_welcome_step_speak_title">Start speaking</string>
+  <string name="bao_translate_welcome_step_speak_body">Press and hold the mic button to record, release to translate</string>
+  <string name="bao_translate_welcome_get_started">Get Started</string>
+
+  <!-- Bluetooth pairing guidance -->
+  <string name="bao_translate_audio_open_bt_settings">Open Bluetooth Settings</string>
+  <string name="bao_translate_audio_pair_output_hint">Pair a Bluetooth headset in your phone settings, then return here</string>
+  <string name="bao_translate_audio_pair_input_hint">Connect a Bluetooth headset with a microphone to use it as input</string>
+
+  <!-- Tooltips -->
+  <string name="bao_translate_tooltip_record">Hold to record, release to translate</string>
+  <string name="bao_translate_tooltip_conversation">Connect nearby devices for group conversation</string>
+  <string name="bao_translate_tooltip_swap">Swap source and target languages</string>
+
+  <string name="bao_error_transcription_failed">Transcription failed: %1$s</string>
+  <string name="bao_translate_error_tts_synthesis_failed">Text-to-speech synthesis failed</string>
+  <string name="bao_translate_error_tts_engine_not_ready">Text-to-speech engine not ready</string>
+  <string name="bao_translate_error_translation_failed">Translation failed: %1$s</string>
+
+  <!-- Model display names -->
+  <string name="bao_model_kokoro_tts">Kokoro Multi-Lang TTS</string>
+  <string name="bao_model_pocket_tts">PocketTTS Voice Cloning</string>
+  <string name="bao_model_silero_vad">Silero VAD</string>
+  <string name="bao_model_whisper_base">Whisper Base STT (Sherpa-ONNX)</string>
+  <string name="bao_model_qwen25_1b">Qwen2.5 1.5B Translation (LiteRT-LM compact)</string>
+  <string name="bao_model_gemma4_e2b">Gemma 4 E2B Translation (LiteRT-LM upgrade)</string>
+
+  <!-- Component names for error messages -->
+  <string name="bao_component_whisper_stt">Whisper STT</string>
+  <string name="bao_component_translation">translation</string>
+  <string name="bao_component_kokoro_tts">Kokoro TTS</string>
+  <string name="bao_component_silero_vad">Silero VAD</string>
+
+  <!-- Error messages -->
+  <string name="bao_translate_error_model_not_available">Model \'%1$s\' not yet available</string>
+  <string name="bao_ble_unknown_device">Unknown Device</string>
+  <string name="bao_error_unknown">Unknown error</string>
+  <string name="bao_error_license_required">License required. Visit the model page and accept the license first.</string>
+  <string name="bao_error_model_not_found">Model not found at %1$s</string>
+  <string name="bao_error_incomplete_download">Incomplete download: %1$d/%2$d bytes</string>
+
+  <!-- OSS Licenses -->
+  <string name="oss_licenses_menu_title">Open Source Licenses</string>
+  <string name="oss_licenses_title">License Details</string>
+
+  <!-- Accessibility -->
+  <string name="cd_toggle_skill">Toggle %1$s</string>
+  <string name="cd_toggle_server">Toggle %1$s</string>
+  <string name="cd_error_message">Error: %1$s</string>
+  <string name="cd_close_viewer">Close viewer</string>
+  <string name="cd_clear_filter">Clear filter</string>
+
+</resources>

@@ -1,0 +1,35 @@
+# OS
+.DS_Store
+
+# Android / Gradle build output
+build/
+.gradle/
+.cxx/
+.externalNativeBuild/
+captures/
+local.properties
+*.iml
+.idea/
+
+# Large vendored native dependency — re-obtain to build (per maintainer decision)
+Android/src/app/libs/sherpa-onnx-v1.13.2.aar
+
+# Build artifacts
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+
+# Secrets / signing material
+*.jks
+*.keystore
+keystore.properties
+*.p12
+*.pem
+*.env
+.env
+.env.*
+
+# Scratch / runtime
+.tmp/
