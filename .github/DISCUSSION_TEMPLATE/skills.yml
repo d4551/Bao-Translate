@@ -10,7 +10,7 @@ body:
     id: webhost-path
     attributes:
       label: Skill Webhost Path
-      description: The live URL where your skill is hosted. Users will use this link to import your skill directly into the AI Edge Gallery app.
+      description: The live URL where your skill is hosted. Users will use this link to import your skill directly into the Bao Translate app.
       placeholder: https://{username}.github.io/{repo}/path/to/skill_folder
     validations:
       required: true

@@ -1,6 +1,6 @@
-# **The Complete Guide to Capturing AI Edge Gallery Bug Reports for ANDROID devices**
+# **The Complete Guide to Capturing Bao Translate Bug Reports for ANDROID devices**
 
-Thank you for helping us improve the AI Edge Gallery app\! To find and fix bugs effectively, our engineers need detailed diagnostic information from your device. A **Full Bug Report** is the best way to provide this.
+Thank you for helping us improve the Bao Translate app\! To find and fix bugs effectively, our engineers need detailed diagnostic information from your device. A **Full Bug Report** is the best way to provide this.
 
 Please note that this guide is specifically for capturing bug reports on **Android devices**.
 

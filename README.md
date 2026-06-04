@@ -1,87 +1,123 @@
-# Google AI Edge Gallery ✨
+<p align="center">
+  <img src="bao-translate/appstore.png" alt="Bao Translate" width="128" height="128" />
+</p>
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/google-ai-edge/gallery)](https://github.com/google-ai-edge/gallery/releases)
+<h1 align="center">Bao Translate</h1>
 
-**Explore, Experience, and Evaluate the Future of On-Device Generative AI with Google AI Edge.**
+<p align="center"><strong>Private, on-device real-time speech translation and AI chat for Android — fully offline.</strong></p>
 
-AI Edge Gallery is the premier destination for running the world's most powerful open-source Large Language Models (LLMs) on your mobile device. Experience high-performance Generative AI directly on your hardware—fully offline, private, and lightning-fast.
+<p align="center">
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" /></a>
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Android%2012%2B-3DDC84.svg" />
+  <a href="https://ai.google.dev/edge"><img alt="Built on Google AI Edge" src="https://img.shields.io/badge/built%20on-Google%20AI%20Edge%20%7C%20LiteRT-4285F4.svg" /></a>
+  <a href="https://github.com/d4551/bao-translate/releases"><img alt="Release" src="https://img.shields.io/github/v/release/d4551/bao-translate?include_prereleases" /></a>
+</p>
 
-**Now Featuring: Gemma 4**
+---
 
-The latest version brings official support for the newly released Gemma 4 family. As the centerpiece of this release, Gemma 4 allows you to test the cutting edge of on-device AI. Experience advanced reasoning, logic, and creative capabilities without ever sending your data to a server.
+Bao Translate runs a complete speech-translation pipeline **entirely on your device** — voice activity detection, speech-to-text, machine translation, and text-to-speech — with no servers and nothing leaving your phone. On top of translation it ships a full on-device AI workspace: chat with agent skills, tools, MCP servers, and function calling, plus model management and hardware benchmarking.
 
+It is built on the open-source [Google AI Edge Gallery](https://github.com/google-ai-edge/gallery) foundation (Apache-2.0) and the [LiteRT](https://ai.google.dev/edge/litert) runtime — see [Built on](#-built-on).
 
-| **Install the app today from Google Play** | **Install the app today from App Store** |
-| :--- | :--- |
-| <a href='https://play.google.com/store/apps/details?id=com.google.ai.edge.gallery'><img alt='Get it on Google Play' height="120" src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png'/></a> | <a href="https://apps.apple.com/us/app/google-ai-edge-gallery/id6749645337?itscg=30200&itsct=apps_box_badge&mttnsubad=6749645337" style="display: inline-block;"> <img src="https://toolbox.marketingtools.apple.com/api/v2/badges/download-on-the-app-store/black/en-us?releaseDate=1771977600" alt="Download on the App Store" style="width: 246px; height: 90px; vertical-align: middle; object-fit: contain;" /></a> |
+## How it works
 
-For users without Google Play access, install the apk from the [**latest release**](https://github.com/google-ai-edge/gallery/releases/latest/)
+Audio flows through a fully local pipeline; the live **Conversation mode** then relays each translated turn to a paired phone over Bluetooth LE and speaks it aloud, so both speakers hear the other side in their own language:
 
+```
+mic ─▶ VAD (Silero) ─▶ STT (Whisper · Sherpa-ONNX) ─▶ Translation (Qwen2.5-1.5B · LiteRT-LM) ─▶ TTS (Kokoro) ─▶ speaker
+                                                                                                  └─▶ BLE peer ─▶ speaker
+```
 
-## App Preview
+## Screenshots
 
-<img width="480" alt="01" src="https://github.com/user-attachments/assets/a809ad78-aef4-4169-91ee-de7213cbb3bd" />
-<img width="480" alt="02" src="https://github.com/user-attachments/assets/1effd10d-f45a-4f7b-9435-f50f1bdd36b6" />
-<img width="480" alt="03" src="https://github.com/user-attachments/assets/e5089e41-2c18-4fbe-9011-ebe9e5a02044" />
-<img width="480" alt="04" src="https://github.com/user-attachments/assets/0f39d3ed-7403-4606-a7c6-b2c7e51ba6c1" />
-<img width="480" alt="05" src="https://github.com/user-attachments/assets/8c229e96-b598-4735-9f60-e96907e1d5d5" />
-<img width="480" alt="06" src="https://github.com/user-attachments/assets/ac9fb77b-81de-4197-9ed3-f6fe58290b3e" />
-<img width="480" alt="07" src="https://github.com/user-attachments/assets/bc86ba07-2eaf-49b1-980f-8a87a85c596f" />
-<img width="480" alt="08" src="https://github.com/user-attachments/assets/061564ed-030f-4630-810b-13a7863fce4c" />
+<p align="center">
+  <img src="docs/screenshots/01-translate-home.png" alt="Bao Translate home — on-device model stack and Bluetooth audio routing" width="280" />
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/02-benchmark.png" alt="On-device model benchmarking — GPU/CPU, prefill/decode tokens" width="280" />
+</p>
 
-## ✨ Core Features
+<p align="center"><em>Left: translation home with the on-device model stack and Bluetooth audio routing. Right: on-device model benchmarking.</em></p>
 
-* **Agent Skills**: Transform your LLM from a conversationalist into a proactive assistant. Use the Agent Skills tile to augment model capabilities with tools like Wikipedia for fact-grounding, interactive maps, and rich visual summary cards. You can even load modular skills from a URL or browse community contributions on GitHub Discussions.
+## ✨ Features
 
-* **AI Chat with Thinking Mode**: Engage in fluid, multi-turn conversations and toggle the new Thinking Mode to peek "under the hood." This feature allows you to see the model’s step-by-step reasoning process, which is perfect for understanding complex problem-solving. Note: Thinking Mode currently works with supported models, starting with the Gemma 4 family.
+* **Real-time speech translation** — a complete on-device VAD → STT → translation → TTS pipeline.
+* **Live Conversation mode** — translated turns sync to a peer device over Bluetooth LE and play aloud on both ends.
+* **100% on-device & private** — all inference runs on your hardware; no internet required, nothing uploaded.
+* **AI Chat** — multi-turn chat with **agent skills**, tool use, **MCP server** integration (see [`mcp/`](mcp/)), and **function calling** (see [Function_Calling_Guide.md](Function_Calling_Guide.md)).
+* **Model management & benchmarking** — download curated models, load your own, and benchmark them on GPU/CPU with configurable prefill/decode tokens.
+* **Bluetooth audio routing** — pick headset mic and output devices directly in-app.
+* **Plus the AI Edge Gallery toolset** — Ask Image, Prompt Lab, Audio Scribe, and more, inherited from the upstream foundation.
 
-* **Ask Image**: Use multimodal power to identify objects, solve visual puzzles, or get detailed descriptions using your device’s camera or photo gallery.
+## On-device models
 
-* **Audio Scribe**: Transcribe and translate voice recordings into text in real-time using high-efficiency on-device language models.
+Downloaded in-app from Hugging Face on first run:
 
-* **Prompt Lab**: A dedicated workspace to test different prompts and single-turn use cases with granular control over model parameters like temperature and top-k.
+| Role | Model | Size |
+| --- | --- | --- |
+| Voice activity detection | Silero VAD | 2 MB |
+| Speech-to-text | Whisper Base (Sherpa-ONNX) | 148 MB |
+| Translation | Qwen2.5 1.5B (LiteRT-LM compact) | 1523 MB |
+| Text-to-speech | Kokoro Multi-Lang | 142 MB |
 
-* **Mobile Actions**: Unlock offline device controls and automated tasks powered entirely by a finetune of FunctionGemma 270m.
+## 🏁 Getting started
 
-* **Tiny Garden**: A fun, experimental mini-game that uses natural language to plant and harvest a virtual garden using a finetune of FunctionGemma 270m.
+**Requirements:** Android 12 (API 31) or newer.
 
-* **Model Management & Benchmark**: Gallery is a flexible sandbox for a wide variety of open-source models. Easily download models from the list or load your own custom models. Manage your model library effortlessly and run benchmark tests to understand exactly how each model performs on your specific hardware.
+1. Install the latest APK from [**Releases**](https://github.com/d4551/bao-translate/releases), or build from source (below).
+2. On first launch, tap **Download All Models** (or download individually) to fetch the on-device model stack.
+3. Open **Conversation mode**, pick your audio devices, and start translating.
 
-* **100% On-Device Privacy**: All model inferences happen directly on your device hardware. No internet is required, ensuring total privacy for your prompts, images, and sensitive data.
+## 🛠️ Build from source
 
-## 🏁 Get Started in Minutes!
+This is a standard Gradle Android project rooted at [`Android/src`](Android/src).
 
-1. **Check OS Requirement**: Android 12 and up, and iOS 17 and up.
-2.  **Download the App:**
-    - Install the app from [Google Play](https://play.google.com/store/apps/details?id=com.google.ai.edge.gallery) or [App Store](https://apps.apple.com/us/app/google-ai-edge-gallery/id6749645337).
-    - For users without Google Play access: install the apk from the [**latest release**](https://github.com/google-ai-edge/gallery/releases/latest/)
-3.  **Install & Explore:** For detailed installation instructions (including for corporate devices) and a full user guide, head over to our [**Project Wiki**](https://github.com/google-ai-edge/gallery/wiki)!
+```bash
+cd Android/src
 
-## 🛠️ Technology Highlights
+# Use Android Studio's bundled JBR (JDK 21) — matches Gradle 8.10.2 / AGP 8.8.2
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+export PATH="$HOME/Library/Android/sdk/platform-tools:$PATH"
 
-*   **Google AI Edge:** Core APIs and tools for on-device ML.
-*   **LiteRT:** Lightweight runtime for optimized model execution.
-*   **Hugging Face Integration:** For model discovery and download.
+./gradlew :app:assembleDebug          # compile + build the debug APK
+./gradlew :app:testDebugUnitTest      # run unit tests
 
-## ⌨️ Development
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb shell monkey -p com.bao.translate -c android.intent.category.LAUNCHER 1
+```
 
-Check out the [development notes](DEVELOPMENT.md) for instructions about how to build the app locally.
+* SDK: `compileSdk = 35`, `minSdk = 31`; `applicationId = com.bao.translate`.
+* See [DEVELOPMENT.md](DEVELOPMENT.md) for more.
 
-## 🤝 Feedback
+## 📁 Project structure
 
-This is an **experimental Beta release**, and your input is crucial!
+| Path | What |
+| --- | --- |
+| [`Android/`](Android/) | The Android app (Gradle project under `Android/src`) |
+| [`bao-translate/`](bao-translate/) | Brand assets and app-icon sets |
+| [`mcp/`](mcp/) | Model Context Protocol server integration and docs |
+| [`skills/`](skills/) | Agent skill packs |
+| [`model_allowlists/`](model_allowlists/), [`model_allowlist.json`](model_allowlist.json) | Curated model allowlist |
+| [`docs/`](docs/) | Screenshots and documentation |
 
-*   🐞 **Found a bug?** [Report it here!](https://github.com/google-ai-edge/gallery/issues/new?assignees=&labels=bug&template=bug_report.md&title=%5BBUG%5D)
-*   💡 **Have an idea?** [Suggest a feature!](https://github.com/google-ai-edge/gallery/issues/new?assignees=&labels=enhancement&template=feature_request.md&title=%5BFEATURE%5D)
+## 🧩 Built on
+
+Bao Translate stands on excellent open-source work — thank you to:
+
+* [**Google AI Edge Gallery**](https://github.com/google-ai-edge/gallery) — the app foundation (Apache-2.0)
+* [**LiteRT** / **LiteRT-LM**](https://github.com/google-ai-edge/LiteRT-LM) — on-device model runtime
+* [**sherpa-onnx**](https://github.com/k2-fsa/sherpa-onnx) — on-device STT/TTS engine
+* [**Whisper**](https://github.com/openai/whisper) — speech recognition
+* [**Qwen2.5**](https://github.com/QwenLM/Qwen2.5) — translation model
+* [**Kokoro**](https://huggingface.co/hexgrad/Kokoro-82M) — multilingual TTS
+* [**Silero VAD**](https://github.com/snakers4/silero-vad) — voice activity detection
+* [**Hugging Face**](https://huggingface.co/litert-community) — model hosting
+
+## 🤝 Feedback & contributing
+
+* 🐞 **Found a bug?** [Report it](https://github.com/d4551/bao-translate/issues/new?template=bug_report.md) (see also the [Bug Reporting Guide](Bug_Reporting_Guide.md)).
+* 💡 **Have an idea?** [Suggest a feature](https://github.com/d4551/bao-translate/issues/new?template=feature_request.md).
+* See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
 ## 📄 License
 
-Licensed under the Apache License, Version 2.0. See the [LICENSE](LICENSE) file for details.
-
-## 🔗 Useful Links
-
-*   [**Project Wiki (Detailed Guides)**](https://github.com/google-ai-edge/gallery/wiki)
-*   [Hugging Face LiteRT Community](https://huggingface.co/litert-community)
-*   [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM)
-*   [Google AI Edge Documentation](https://ai.google.dev/edge)
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE). Bao Translate is a derivative of Google AI Edge Gallery; upstream copyright and the Apache-2.0 license are retained.
