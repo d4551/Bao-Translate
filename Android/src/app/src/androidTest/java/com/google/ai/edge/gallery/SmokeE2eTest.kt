@@ -26,6 +26,7 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.espresso.Espresso.pressBack
@@ -80,13 +81,16 @@ class SmokeE2eTest {
     pressBack()
     composeRule.waitForContentDescription(audioChipPrefix, substring = true)
 
-    if (composeRule.hasContentDescription(composeRule.stringResource(R.string.bao_translate_conversation_mode))) {
-      composeRule.onNodeWithContentDescription(composeRule.stringResource(R.string.bao_translate_conversation_mode))
+    val conversationMode = composeRule.stringResource(R.string.bao_translate_conversation_mode)
+    if (composeRule.hasContentDescription(conversationMode)) {
+      composeRule.onAllNodesWithContentDescription(conversationMode, useUnmergedTree = true)
+        .onFirst()
         .performClick()
-      composeRule.waitForText(R.string.bao_translate_conversation)
+      composeRule.waitForText(R.string.bao_translate_conversation_mode)
       composeRule.onNodeWithText(composeRule.stringResource(R.string.bao_translate_connect_subtitle))
         .assertIsDisplayed()
-      composeRule.onNodeWithContentDescription(composeRule.stringResource(R.string.bao_translate_conversation_mode))
+      composeRule.onAllNodesWithContentDescription(conversationMode, useUnmergedTree = true)
+        .onFirst()
         .performClick()
     }
 
