@@ -34,6 +34,7 @@ import kotlinx.coroutines.withContext
 import java.util.UUID
 
 private const val REC_TAG = "BaoTranslateRec"
+private const val INPUT_ROUTE_TIMEOUT_MS = 2_000L
 
 internal class RecordingController(
   private val pipelines: PipelineLifecycleManager,
@@ -102,6 +103,15 @@ internal class RecordingController(
       }
 
       val preferredInputInfo = preferredInput?.let { audioRouter.getInputDeviceInfo(it) }
+      if (preferredInput != null && preferredInputInfo == null) {
+        BaoLog.e(REC_TAG, "Selected Bluetooth input is no longer available: $preferredInput")
+        unlockRecordingIfHeld()
+        uiState.update { it.copy(
+          pipelineStatus = PipelineStatus.Idle,
+          errorMessage = app.getString(R.string.bao_translate_error_microphone_init),
+        ) }
+        return@launch
+      }
 
       val recorder = AudioRecord(
         audioSource,
@@ -156,6 +166,24 @@ internal class RecordingController(
         return@launch
       }
 
+      if (preferredInputInfo != null && !recorder.waitForPreferredInputRoute(preferredInputInfo.id)) {
+        BaoLog.e(
+          REC_TAG,
+          "AudioRecord routed to ${recorder.routedDevice?.productName} instead of selected Bluetooth input ${preferredInputInfo.productName}",
+        )
+        if (recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+          recorder.stop()
+        }
+        recorder.release()
+        audioRecord = null
+        unlockRecordingIfHeld()
+        uiState.update { it.copy(
+          pipelineStatus = PipelineStatus.Idle,
+          errorMessage = app.getString(R.string.bao_translate_error_microphone_init),
+        ) }
+        return@launch
+      }
+
       // `isActive` lets the blocking read loop exit on coroutine cancellation (e.g. ViewModel
       // cleared mid-recording) so the AudioRecord below is released and the mic doesn't stay live.
       while (isActive && uiState.value.isRecording) {
@@ -183,7 +211,7 @@ internal class RecordingController(
               amplitudes = newAmplitudes,
             ) }
           }
-          readCount == AudioRecord.ERROR_INVALID_OPERATION || readCount == AudioRecord.ERROR_BAD_VALUE -> {
+          readCount < 0 -> {
             BaoLog.e(REC_TAG, "AudioRecord read returned error: $readCount")
             unlockRecordingIfHeld()
             uiState.update { it.copy(
@@ -405,5 +433,14 @@ internal class RecordingController(
 
     uiState.update { it.copy(pipelineStatus = PipelineStatus.Idle) }
     return played
+  }
+
+  private fun AudioRecord.waitForPreferredInputRoute(deviceId: Int): Boolean {
+    val deadline = System.currentTimeMillis() + INPUT_ROUTE_TIMEOUT_MS
+    do {
+      if (routedDevice?.id == deviceId) return true
+      Thread.sleep(50)
+    } while (System.currentTimeMillis() < deadline)
+    return routedDevice?.id == deviceId
   }
 }

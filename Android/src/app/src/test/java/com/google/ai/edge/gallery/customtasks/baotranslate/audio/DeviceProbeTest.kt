@@ -229,10 +229,92 @@ class DeviceProbeTest {
     }
   }
 
-  private fun device(type: Int, name: String, isSource: Boolean, isSink: Boolean) = DeviceDescriptor(
+  @Test
+  fun `placeholder SCO output matching local device is filtered`() {
+    val devices = listOf(
+      device(
+        DeviceProbe.TYPE_BLUETOOTH_SCO,
+        "V23001960",
+        isSource = true,
+        isSink = true,
+        address = "",
+      ),
+    )
+
+    val outputs = DeviceProbe.listOutputs(
+      devices,
+      speakerFallback = "Phone speaker",
+      wiredFallback = "Wired",
+      bluetoothFallback = "Bluetooth",
+      localModel = "V23001960",
+      localDevice = "VTL-202403",
+    )
+
+    assertEquals(listOf(AudioDevice.Speaker), outputs)
+  }
+
+  @Test
+  fun `placeholder SCO input without real media endpoint is filtered`() {
+    val devices = listOf(
+      device(
+        DeviceProbe.TYPE_BLUETOOTH_SCO,
+        "V23001960",
+        isSource = true,
+        isSink = false,
+        address = "",
+      ),
+    )
+
+    val inputs = DeviceProbe.listInputs(
+      devices,
+      fallback = "Bluetooth",
+      outputDevices = emptyList(),
+      localModel = "V23001960",
+      localDevice = "VTL-202403",
+    )
+
+    assertTrue(inputs.isEmpty())
+  }
+
+  @Test
+  fun `placeholder SCO input inherits real paired media endpoint name`() {
+    val input = device(
+      DeviceProbe.TYPE_BLUETOOTH_SCO,
+      "V23001960",
+      isSource = true,
+      isSink = false,
+      address = "",
+    )
+    val output = device(
+      DeviceProbe.TYPE_BLUETOOTH_A2DP,
+      "WF-1000XM6",
+      isSource = false,
+      isSink = true,
+    )
+
+    val inputs = DeviceProbe.listInputs(
+      devices = listOf(input),
+      fallback = "Bluetooth",
+      outputDevices = listOf(output),
+      localModel = "V23001960",
+      localDevice = "VTL-202403",
+    )
+
+    assertEquals(1, inputs.size)
+    assertEquals("WF-1000XM6", inputs.single().device.name)
+    assertEquals(BluetoothTransport.SCO, inputs.single().device.transport)
+  }
+
+  private fun device(
+    type: Int,
+    name: String,
+    isSource: Boolean,
+    isSink: Boolean,
+    address: String = "00:11:22:33:44:55",
+  ) = DeviceDescriptor(
     type = type,
     productName = name,
-    address = "00:11:22:33:44:55",
+    address = address,
     isSource = isSource,
     isSink = isSink,
   )

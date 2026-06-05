@@ -42,73 +42,116 @@ object DeviceProbe {
 
   fun isBuiltInSpeaker(type: Int): Boolean = type == TYPE_BUILTIN_SPEAKER
 
-  fun pickOutput(sinks: List<DeviceDescriptor>, speakerFallback: String): AudioDevice {
+  fun isPlaceholderBluetoothEndpoint(
+    device: DeviceDescriptor,
+    localModel: String,
+    localDevice: String,
+  ): Boolean {
+    val hasRealAddress = device.address.isNotBlank() && device.address != "00:00:00:00:00:00"
+    if (hasRealAddress) return false
+    if (device.productName.isBlank() || device.productName == "null") return true
+    return device.productName == localModel || device.productName == localDevice
+  }
+
+  fun isSelectableScoOutput(
+    device: DeviceDescriptor,
+    localModel: String,
+    localDevice: String,
+  ): Boolean =
+    device.type == TYPE_BLUETOOTH_SCO &&
+      device.isSink &&
+      !isPlaceholderBluetoothEndpoint(device, localModel, localDevice)
+
+  fun hasInputSupport(device: DeviceDescriptor, inputDevices: List<DeviceDescriptor>): Boolean {
+    if (device.isSource) return true
+    return inputDevices.any { input ->
+      input.isSource && input.productName == device.productName
+    }
+  }
+
+  fun pickOutput(
+    sinks: List<DeviceDescriptor>,
+    speakerFallback: String,
+    bluetoothFallback: String = speakerFallback,
+    wiredFallback: String = speakerFallback,
+    inputDevices: List<DeviceDescriptor> = emptyList(),
+    localModel: String = "",
+    localDevice: String = "",
+  ): AudioDevice {
     sinks.forEach { d ->
       if (isBleOutput(d.type) && d.isSink) {
         return AudioDevice.BluetoothHeadset(
-          name = d.productName.ifBlank { speakerFallback },
+          name = d.productName.ifBlank { bluetoothFallback },
           transport = BluetoothTransport.BLE_AUDIO,
-          supportsInput = d.isSource,
+          supportsInput = hasInputSupport(d, inputDevices),
         )
       }
     }
     sinks.forEach { d ->
       if (d.type == TYPE_BLUETOOTH_A2DP && d.isSink) {
         return AudioDevice.BluetoothHeadset(
-          name = d.productName.ifBlank { speakerFallback },
+          name = d.productName.ifBlank { bluetoothFallback },
           transport = BluetoothTransport.A2DP,
           supportsInput = false,
         )
       }
     }
     sinks.forEach { d ->
-      if (d.type == TYPE_BLUETOOTH_SCO && d.isSink) {
+      if (isSelectableScoOutput(d, localModel, localDevice)) {
         return AudioDevice.BluetoothHeadset(
-          name = d.productName.ifBlank { speakerFallback },
+          name = d.productName.ifBlank { bluetoothFallback },
           transport = BluetoothTransport.SCO,
-          supportsInput = d.isSource,
+          supportsInput = hasInputSupport(d, inputDevices),
         )
       }
     }
     sinks.forEach { d ->
       if (isWiredOutput(d.type) && d.isSink) {
-        return AudioDevice.WiredHeadset(name = d.productName.ifBlank { speakerFallback })
+        return AudioDevice.WiredHeadset(name = d.productName.ifBlank { wiredFallback })
       }
     }
     return AudioDevice.Speaker
   }
 
-  fun listOutputs(sinks: List<DeviceDescriptor>, speakerFallback: String, wiredFallback: String): List<AudioDevice> {
+  fun listOutputs(
+    sinks: List<DeviceDescriptor>,
+    speakerFallback: String,
+    wiredFallback: String,
+    bluetoothFallback: String = speakerFallback,
+    inputDevices: List<DeviceDescriptor> = emptyList(),
+    localModel: String = "",
+    localDevice: String = "",
+  ): List<AudioDevice> {
     val out = linkedSetOf<AudioDevice>(AudioDevice.Speaker)
     val bluetooth = linkedMapOf<String, AudioDevice.BluetoothHeadset>()
     sinks.forEach { d ->
       if (!d.isSink) return@forEach
       when {
         isBleOutput(d.type) -> bluetooth.getOrPut(
-          endpointKey(d.productName.ifBlank { speakerFallback }, BluetoothTransport.BLE_AUDIO)
+          endpointKey(d.productName.ifBlank { bluetoothFallback }, BluetoothTransport.BLE_AUDIO)
         ) {
           AudioDevice.BluetoothHeadset(
-            name = d.productName.ifBlank { speakerFallback },
+            name = d.productName.ifBlank { bluetoothFallback },
             transport = BluetoothTransport.BLE_AUDIO,
-            supportsInput = d.isSource,
+            supportsInput = hasInputSupport(d, inputDevices),
           )
         }
         d.type == TYPE_BLUETOOTH_A2DP -> bluetooth.getOrPut(
-          endpointKey(d.productName.ifBlank { speakerFallback }, BluetoothTransport.A2DP)
+          endpointKey(d.productName.ifBlank { bluetoothFallback }, BluetoothTransport.A2DP)
         ) {
           AudioDevice.BluetoothHeadset(
-            name = d.productName.ifBlank { speakerFallback },
+            name = d.productName.ifBlank { bluetoothFallback },
             transport = BluetoothTransport.A2DP,
             supportsInput = false,
           )
         }
-        d.type == TYPE_BLUETOOTH_SCO -> bluetooth.getOrPut(
-          endpointKey(d.productName.ifBlank { speakerFallback }, BluetoothTransport.SCO)
+        isSelectableScoOutput(d, localModel, localDevice) -> bluetooth.getOrPut(
+          endpointKey(d.productName.ifBlank { bluetoothFallback }, BluetoothTransport.SCO)
         ) {
           AudioDevice.BluetoothHeadset(
-            name = d.productName.ifBlank { speakerFallback },
+            name = d.productName.ifBlank { bluetoothFallback },
             transport = BluetoothTransport.SCO,
-            supportsInput = d.isSource,
+            supportsInput = hasInputSupport(d, inputDevices),
           )
         }
         isWiredOutput(d.type) -> out.add(
@@ -120,12 +163,26 @@ object DeviceProbe {
     return out.toList()
   }
 
-  fun listInputs(devices: List<DeviceDescriptor>, fallback: String): List<AudioInputOption> {
+  fun listInputs(
+    devices: List<DeviceDescriptor>,
+    fallback: String,
+    outputDevices: List<DeviceDescriptor> = emptyList(),
+    localModel: String = "",
+    localDevice: String = "",
+  ): List<AudioInputOption> {
     val seen = linkedMapOf<String, AudioInputOption>()
     devices.forEach { d ->
       if (!isBluetoothOutput(d.type)) return@forEach
       if (!d.isSource) return@forEach
-      val name = d.productName.ifBlank { fallback }
+      val name = when {
+        d.type == TYPE_BLUETOOTH_SCO && isPlaceholderBluetoothEndpoint(d, localModel, localDevice) ->
+          outputDevices.firstOrNull { output ->
+            output.isSink &&
+              (output.type == TYPE_BLE_HEADSET || output.type == TYPE_BLUETOOTH_A2DP) &&
+              !isPlaceholderBluetoothEndpoint(output, localModel, localDevice)
+          }?.productName ?: return@forEach
+        else -> d.productName.ifBlank { fallback }
+      }
       val transport = when (d.type) {
         TYPE_BLE_HEADSET -> BluetoothTransport.BLE_AUDIO
         TYPE_BLUETOOTH_SCO -> BluetoothTransport.SCO

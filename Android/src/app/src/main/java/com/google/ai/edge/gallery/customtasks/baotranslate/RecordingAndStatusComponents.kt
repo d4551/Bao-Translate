@@ -161,7 +161,7 @@ internal fun RecordingOverlay(
 
   Box(
     modifier = modifier
-      .background(MaterialTheme.customColors.recordButtonBgColor.copy(alpha = 0.05f))
+      .background(MaterialTheme.colorScheme.background)
       .semantics { liveRegion = LiveRegionMode.Polite; stateDescription = listeningDescription },
     contentAlignment = Alignment.Center,
   ) {

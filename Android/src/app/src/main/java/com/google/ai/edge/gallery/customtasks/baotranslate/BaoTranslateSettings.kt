@@ -561,7 +561,7 @@ private fun AudioRouteSummaryRow(label: String, value: String) {
 
 @Composable
 private fun audioDeviceName(device: AudioDevice): String = when (device) {
-  is AudioDevice.BluetoothHeadset -> "${device.name} (${transportShortLabel(device.transport)})"
+  is AudioDevice.BluetoothHeadset -> "${device.name} ${transportShortLabel(device.transport)}"
   is AudioDevice.WiredHeadset -> device.name
   AudioDevice.Speaker -> stringResource(R.string.bao_translate_phone_speaker)
 }

@@ -706,7 +706,7 @@
   <string name="bao_translate_settings_voice">Voice</string>
   <string name="bao_translate_settings_audio">Audio</string>
   <string name="bao_translate_settings_downloads">Downloads</string>
-  <string name="bao_translate_required_models">Required for offline translate</string>
+  <string name="bao_translate_required_models">Required for offline translation</string>
   <string name="bao_translate_optional_models">Optional voice clone and upgrades</string>
   <string name="bao_translate_stt_model">STT Model</string>
   <string name="bao_translate_translation_model">Translation Model</string>
@@ -726,7 +726,7 @@
   <string name="bao_translate_storage_format">Storage used: %1$.0f MB</string>
   <string name="bao_translate_group_conversation_format">Start Group Conversation (%1$d connected)</string>
   <string name="bao_translate_language_korean">Korean</string>
-  <string name="bao_translate_wifi_only">WiFi only for model downloads</string>
+  <string name="bao_translate_wifi_only">Wi-Fi only for model downloads</string>
   <string name="bao_translate_output_device">Output device</string>
   <string name="bao_translate_stt_model_option_whisper">Whisper Base via Sherpa-ONNX (148 MB)</string>
   <string name="bao_translate_stt_model_option_qwen3">Qwen3 ASR 0.6B (2.4 GB)</string>

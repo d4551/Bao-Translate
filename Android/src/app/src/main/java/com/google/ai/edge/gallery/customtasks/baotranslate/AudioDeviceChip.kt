@@ -487,7 +487,7 @@ private fun audioRouteLabel(
 ): String = when (device) {
   is AudioDevice.BluetoothHeadset -> {
     val transport = if (useShortTransport) transportShortLabel(device.transport) else transportLabel(device.transport)
-    "${device.name} ($transport)"
+    if (useShortTransport) "${device.name} $transport" else "${device.name} ($transport)"
   }
   is AudioDevice.WiredHeadset -> device.name
   AudioDevice.Speaker -> stringResource(R.string.bao_translate_phone_speaker)

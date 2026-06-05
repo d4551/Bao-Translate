@@ -61,7 +61,7 @@ class SmokeE2eTest {
     composeRule.onNodeWithText(composeRule.stringResource(R.string.bao_translate_title))
       .assertIsDisplayed()
     composeRule.waitForBaoTranslateReadyOrSetup()
-    val audioChipPrefix = "Audio output:"
+    val audioChipPrefix = composeRule.audioChipContentDescriptionPrefix()
     composeRule.waitForContentDescription(audioChipPrefix, substring = true)
     composeRule.onNode(
         hasContentDescriptionMatcher(audioChipPrefix, substring = true),
@@ -230,6 +230,16 @@ private fun MainActivityComposeRule.stringResource(@StringRes resId: Int): Strin
 
 private fun MainActivityComposeRule.stringResource(@StringRes resId: Int, vararg formatArgs: Any): String =
   activity.getString(resId, *formatArgs)
+
+private fun MainActivityComposeRule.audioChipContentDescriptionPrefix(): String {
+  val outputMarker = "__OUTPUT_DEVICE__"
+  return stringResource(
+    R.string.bao_translate_audio_chip_cd_format,
+    outputMarker,
+    "__INPUT_DEVICE__",
+    0,
+  ).substringBefore(outputMarker)
+}
 
 private fun MainActivityComposeRule.prepareHome(): String {
   collapseSystemShade()

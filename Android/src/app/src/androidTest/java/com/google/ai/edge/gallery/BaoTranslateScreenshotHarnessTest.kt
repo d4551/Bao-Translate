@@ -29,6 +29,7 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.espresso.Espresso.pressBack
@@ -72,7 +73,7 @@ class BaoTranslateScreenshotHarnessTest {
     composeRule.waitForBaoTranslateReadyOrSetup()
     composeRule.captureScreenshot("02_bao_translate_initial_state", screenshotRunDir)
 
-    val audioChipPrefix = "Audio output:"
+    val audioChipPrefix = composeRule.audioChipContentDescriptionPrefix()
     composeRule.waitForContentDescription(audioChipPrefix, substring = true)
     composeRule.onNode(
         hasContentDescriptionMatcher(audioChipPrefix, substring = true),
@@ -92,20 +93,23 @@ class BaoTranslateScreenshotHarnessTest {
     )
     composeRule.onNodeWithText(composeRule.stringResource(R.string.bao_translate_audio_input_default))
       .assertIsDisplayed()
+    composeRule.assertNoLocalPhoneBluetoothRoute()
     composeRule.captureScreenshot("03_audio_device_picker", screenshotRunDir)
     pressBack()
     composeRule.waitForContentDescription(audioChipPrefix, substring = true)
 
     val conversationMode = composeRule.stringResource(R.string.bao_translate_conversation_mode)
     if (composeRule.hasContentDescription(conversationMode)) {
-      composeRule.onNodeWithContentDescription(conversationMode)
-        .assertIsDisplayed()
+      composeRule.onAllNodesWithContentDescription(conversationMode, useUnmergedTree = true)
+        .onFirst()
         .performClick()
-      composeRule.waitForText(R.string.bao_translate_conversation)
+      composeRule.waitForText(R.string.bao_translate_conversation_mode)
       composeRule.onNodeWithText(composeRule.stringResource(R.string.bao_translate_connect_subtitle))
         .assertIsDisplayed()
       composeRule.captureScreenshot("04_conversation_mode", screenshotRunDir)
-      composeRule.onNodeWithContentDescription(conversationMode).performClick()
+      composeRule.onAllNodesWithContentDescription(conversationMode, useUnmergedTree = true)
+        .onFirst()
+        .performClick()
       composeRule.waitForContentDescription(audioChipPrefix, substring = true)
     }
 
@@ -132,11 +136,13 @@ class BaoTranslateScreenshotHarnessTest {
     composeRule.waitForBaoTranslateReadyForRecording(timeoutMillis = 180_000)
     composeRule.captureScreenshot("07_bao_translate_ready_state", screenshotRunDir)
 
+    composeRule.captureRecordingStateScreenshot(context, screenshotRunDir)
+
     composeRule.openBaoTranslateSettings()
     composeRule.onNodeWithText(composeRule.stringResource(R.string.bao_translate_settings_models))
       .performScrollTo()
       .assertIsDisplayed()
-    composeRule.captureScreenshot("08_settings_after_all_models_ready", screenshotRunDir)
+    composeRule.captureScreenshot("09_settings_after_all_models_ready", screenshotRunDir)
 
     Log.i(TAG, "BaoTranslate screenshot run saved to $screenshotRunDir")
   }
@@ -209,6 +215,16 @@ private fun MainActivityScreenshotRule.stringResource(@StringRes resId: Int): St
 
 private fun MainActivityScreenshotRule.stringResource(@StringRes resId: Int, vararg formatArgs: Any): String =
   activity.getString(resId, *formatArgs)
+
+private fun MainActivityScreenshotRule.audioChipContentDescriptionPrefix(): String {
+  val outputMarker = "__OUTPUT_DEVICE__"
+  return stringResource(
+    R.string.bao_translate_audio_chip_cd_format,
+    outputMarker,
+    "__INPUT_DEVICE__",
+    0,
+  ).substringBefore(outputMarker)
+}
 
 private fun MainActivityScreenshotRule.prepareScreenshotHome(): String {
   runScreenshotShell("cmd statusbar collapse")
@@ -295,6 +311,39 @@ private fun MainActivityScreenshotRule.waitForBaoTranslateReadyForRecording(
     .assertIsDisplayed()
 }
 
+private fun MainActivityScreenshotRule.captureRecordingStateScreenshot(
+  context: Context,
+  screenshotRunDir: String,
+) {
+  onNodeWithContentDescription(stringResource(R.string.cd_bao_translate_start))
+    .assertIsDisplayed()
+    .performClick()
+  waitForText(R.string.bao_translate_listening, timeoutMillis = 180_000)
+  onNodeWithContentDescription(stringResource(R.string.cd_bao_translate_stop))
+    .assertIsDisplayed()
+
+  Thread.sleep(1_500)
+  val audioMonitorBlock = currentAudioMonitorBlock()
+  assertTrue(
+    "Bao Translate did not expose an active recorder while the screenshot harness was recording: $audioMonitorBlock",
+    !audioMonitorBlock.contains("Recorder port map: {}"),
+  )
+  assertTrue(
+    "Bao Translate active recorder did not belong to app uid ${context.applicationInfo.uid}: $audioMonitorBlock",
+    audioMonitorBlock.contains(context.applicationInfo.uid.toString()),
+  )
+
+  captureScreenshot("08_recording_default_mic_state", screenshotRunDir)
+
+  onNodeWithContentDescription(stringResource(R.string.cd_bao_translate_stop))
+    .assertIsDisplayed()
+    .performClick()
+  waitForContentDescription(
+    stringResource(R.string.cd_bao_translate_start),
+    timeoutMillis = 20_000,
+  )
+}
+
 private fun MainActivityScreenshotRule.waitForText(
   @StringRes resId: Int,
   timeoutMillis: Long = 10_000,
@@ -374,6 +423,26 @@ private fun MainActivityScreenshotRule.hasContentDescription(
     }
     .getOrDefault(false)
 
+private fun MainActivityScreenshotRule.assertNoLocalPhoneBluetoothRoute() {
+  val localDeviceLabels =
+    listOf(
+        Build.MODEL,
+        Build.DEVICE,
+        Build.MODEL.replace('_', '-'),
+        Build.DEVICE.replace('_', '-'),
+      )
+      .map { it.trim() }
+      .filter { it.isNotBlank() && it != "null" }
+      .distinct()
+
+  localDeviceLabels.forEach { label ->
+    assertTrue(
+      "Audio picker exposed local phone model as a Bluetooth route: $label",
+      !hasText(label, substring = true),
+    )
+  }
+}
+
 private fun MainActivityScreenshotRule.captureScreenshot(
   name: String,
   screenshotRunDir: String,
@@ -396,6 +465,14 @@ private fun parseRemoteFileSize(listing: String): Long {
   val firstLine = listing.lineSequence().firstOrNull { it.isNotBlank() } ?: return 0L
   val columns = firstLine.trim().split(Regex("\\s+"))
   return columns.getOrNull(4)?.toLongOrNull() ?: 0L
+}
+
+private fun currentAudioMonitorBlock(): String {
+  val audioDump = runScreenshotShell("dumpsys audio")
+  val start = audioDump.indexOf("AudioMonitor status:")
+  if (start < 0) return audioDump
+  val end = audioDump.indexOf("Events log: ZAudio service playbck & record monitor", start)
+  return if (end > start) audioDump.substring(start, end) else audioDump.substring(start)
 }
 
 private fun runScreenshotShell(command: String): String {

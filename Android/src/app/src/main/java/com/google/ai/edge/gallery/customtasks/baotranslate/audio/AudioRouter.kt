@@ -10,6 +10,7 @@ import android.os.Looper
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.common.BaoLog
 import com.google.ai.edge.gallery.customtasks.baotranslate.config.PipelineConfig
+import java.util.concurrent.Executor
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -57,7 +58,9 @@ class AudioRouter(private val context: Context) {
 
   private var selectedOutputDevice: AudioDevice = AudioDevice.Speaker
   private var hasUserSelectedOutput = false
+  private var hasUserSelectedInput = false
   private val handler = Handler(Looper.getMainLooper())
+  private val mainExecutor = Executor { command -> handler.post(command) }
   private var cachedInputDevices: Array<out AudioDeviceInfo> = emptyArray()
 
   private val deviceCallback = object : AudioDeviceCallback() {
@@ -73,6 +76,10 @@ class AudioRouter(private val context: Context) {
   }
 
   private val routingTimeoutRunnable = Runnable { onRoutingTimeout() }
+  private val communicationDeviceChangedListener =
+    AudioManager.OnCommunicationDeviceChangedListener { device ->
+      onCommunicationDeviceChanged(device)
+    }
   @Volatile private var pendingRouteDeviceId: Int = 0
   @Volatile private var pendingRouteExpected: AudioDevice? = null
 
@@ -101,8 +108,31 @@ class AudioRouter(private val context: Context) {
     }
   }
 
+  private fun onCommunicationDeviceChanged(device: AudioDeviceInfo?) {
+    val expected = pendingRouteExpected ?: return
+
+    if (device?.id == pendingRouteDeviceId) {
+      BaoLog.i(TAG, "Communication route connected: $expected")
+      _routingStatus.value = RoutingStatus.CONNECTED
+      _currentDevice.value = expected
+      refreshInputDevices()
+      cancelRoutingTimeoutIfMatches(expected)
+      return
+    }
+
+    if (device != null) {
+      BaoLog.w(TAG, "Communication route changed to unexpected device: ${device.productName}")
+      _routingStatus.value = RoutingStatus.FAILED
+      cancelRoutingTimeoutIfMatches(expected)
+    }
+  }
+
   init {
     audioManager.registerAudioDeviceCallback(deviceCallback, handler)
+    audioManager.addOnCommunicationDeviceChangedListener(
+      mainExecutor,
+      communicationDeviceChangedListener,
+    )
     refreshDevice()
   }
 
@@ -112,106 +142,51 @@ class AudioRouter(private val context: Context) {
   }
 
   private fun detectBestAvailableDevice(): AudioDevice {
-    val devices: Array<AudioDeviceInfo> = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-    return pickOutputDevice(devices) ?: AudioDevice.Speaker
-  }
-
-  private fun pickOutputDevice(devices: Array<AudioDeviceInfo>): AudioDevice? {
-    val ble = devices.firstOrNull { isBleOutput(it) }
-    if (ble != null) {
-      return AudioDevice.BluetoothHeadset(
-        name = productNameOrFallback(ble, R.string.bao_translate_audio_device_bluetooth),
-        transport = BluetoothTransport.BLE_AUDIO,
-        supportsInput = ble.hasInputSupport(),
-      )
-    }
-    val a2dp = devices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
-    if (a2dp != null) {
-      return AudioDevice.BluetoothHeadset(
-        name = productNameOrFallback(a2dp, R.string.bao_translate_audio_device_bluetooth),
-        transport = BluetoothTransport.A2DP,
-        supportsInput = false,
-      )
-    }
-    val sco = devices.firstOrNull { isSelectableScoOutput(it) }
-    if (sco != null) {
-      return AudioDevice.BluetoothHeadset(
-        name = productNameOrFallback(sco, R.string.bao_translate_audio_device_bluetooth),
-        transport = BluetoothTransport.SCO,
-        supportsInput = true,
-      )
-    }
-    val wired = devices.firstOrNull { isWiredOutput(it) }
-    if (wired != null) {
-      return AudioDevice.WiredHeadset(
-        name = productNameOrFallback(wired, R.string.bao_translate_audio_device_wired),
-      )
-    }
-    return null
+    val outputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+    val inputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)
+    return DeviceProbe.pickOutput(
+      sinks = outputDevices.map(DeviceDescriptor::from),
+      speakerFallback = context.getString(R.string.bao_translate_phone_speaker),
+      bluetoothFallback = context.getString(R.string.bao_translate_audio_device_bluetooth),
+      wiredFallback = context.getString(R.string.bao_translate_audio_device_wired),
+      inputDevices = inputDevices.map(DeviceDescriptor::from),
+      localModel = Build.MODEL,
+      localDevice = Build.DEVICE,
+    )
   }
 
   fun getAvailableOutputDevices(): List<AudioDevice> {
-    val devices: Array<AudioDeviceInfo> = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-    val result = linkedSetOf<AudioDevice>(AudioDevice.Speaker)
-
-    val bluetooth = linkedMapOf<String, AudioDevice.BluetoothHeadset>()
-    devices.forEach { info ->
-      when {
-        isBleOutput(info) -> {
-          val name = productNameOrFallback(info, R.string.bao_translate_audio_device_bluetooth)
-          bluetooth.getOrPut(endpointKey(name, BluetoothTransport.BLE_AUDIO)) {
-            AudioDevice.BluetoothHeadset(name, BluetoothTransport.BLE_AUDIO, supportsInput = info.hasInputSupport())
-          }
-        }
-        info.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> {
-          val name = productNameOrFallback(info, R.string.bao_translate_audio_device_bluetooth)
-          bluetooth.getOrPut(endpointKey(name, BluetoothTransport.A2DP)) {
-            AudioDevice.BluetoothHeadset(name, BluetoothTransport.A2DP, supportsInput = false)
-          }
-        }
-        isSelectableScoOutput(info) -> {
-          val name = productNameOrFallback(info, R.string.bao_translate_audio_device_bluetooth)
-          bluetooth.getOrPut(endpointKey(name, BluetoothTransport.SCO)) {
-            AudioDevice.BluetoothHeadset(name, BluetoothTransport.SCO, supportsInput = info.hasInputSupport())
-          }
-        }
-        isWiredOutput(info) -> {
-          val name = productNameOrFallback(info, R.string.bao_translate_audio_device_wired)
-          result.add(AudioDevice.WiredHeadset(name))
-        }
-      }
-    }
-    result.addAll(bluetooth.values)
-    return result.toList()
+    val outputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+    val inputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)
+    return DeviceProbe.listOutputs(
+      sinks = outputDevices.map(DeviceDescriptor::from),
+      speakerFallback = context.getString(R.string.bao_translate_phone_speaker),
+      wiredFallback = context.getString(R.string.bao_translate_audio_device_wired),
+      bluetoothFallback = context.getString(R.string.bao_translate_audio_device_bluetooth),
+      inputDevices = inputDevices.map(DeviceDescriptor::from),
+      localModel = Build.MODEL,
+      localDevice = Build.DEVICE,
+    )
   }
 
   fun getAvailableInputDevices(): List<AudioInputOption> {
     val outputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
     val inputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)
     val preferred = (_currentDevice.value as? AudioDevice.BluetoothHeadset)?.takeIf { it.supportsInput }
-    val seen = linkedMapOf<String, AudioInputOption>()
-    (outputDevices + inputDevices).forEach { info ->
-      if (!isBluetoothOutput(info)) return@forEach
-      if (!info.isSource) return@forEach
-      val name = bluetoothInputName(info, outputDevices) ?: return@forEach
-      val transport = when (info.type) {
-        AudioDeviceInfo.TYPE_BLE_HEADSET -> BluetoothTransport.BLE_AUDIO
-        AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> BluetoothTransport.SCO
-        else -> return@forEach
-      }
-      if (!info.hasInputSupport()) return@forEach
-      seen.getOrPut(endpointKey(name, transport)) {
-        AudioInputOption(
-          device = AudioDevice.BluetoothHeadset(
-            name = name,
-            transport = transport,
-            supportsInput = true,
-          ),
-          isPreferred = preferred?.name == name,
-        )
-      }
+    return DeviceProbe.listInputs(
+      devices = (outputDevices + inputDevices).map(DeviceDescriptor::from),
+      fallback = context.getString(R.string.bao_translate_audio_device_bluetooth),
+      outputDevices = outputDevices.map(DeviceDescriptor::from),
+      localModel = Build.MODEL,
+      localDevice = Build.DEVICE,
+    ).map { option ->
+      option.copy(
+        isPreferred =
+          preferred?.let {
+            it.name == option.device.name && it.transport == option.device.transport
+          } == true,
+      )
     }
-    return seen.values.toList()
   }
 
   fun getInputDeviceInfo(device: AudioDevice.BluetoothHeadset): AudioDeviceInfo? {
@@ -270,12 +245,16 @@ class AudioRouter(private val context: Context) {
       audioManager.clearCommunicationDevice()
       _routingStatus.value = RoutingStatus.CONNECTED
       _currentDevice.value = selectedOutputDevice
+      refreshInputDevices()
       return true
     }
     _routingStatus.value = RoutingStatus.ROUTING
     val success = configureCommunicationDevice(candidate)
     if (success) {
       startRoutingTimeout(selectedOutputDevice, candidate.id)
+      if (audioManager.communicationDevice?.id == candidate.id) {
+        onCommunicationDeviceChanged(candidate)
+      }
     } else {
       _routingStatus.value = RoutingStatus.FAILED
     }
@@ -289,8 +268,8 @@ class AudioRouter(private val context: Context) {
     audioManager.mode = AudioManager.MODE_NORMAL
     audioManager.clearCommunicationDevice()
     _routingStatus.value = RoutingStatus.IDLE
-    _preferredInputDevice.value = null
     _currentDevice.value = selectedOutputDevice
+    refreshInputDevices()
   }
 
   fun selectWired(device: AudioDevice.WiredHeadset) {
@@ -300,8 +279,8 @@ class AudioRouter(private val context: Context) {
     audioManager.mode = AudioManager.MODE_NORMAL
     audioManager.clearCommunicationDevice()
     _routingStatus.value = RoutingStatus.IDLE
-    _preferredInputDevice.value = null
     _currentDevice.value = selectedOutputDevice
+    refreshInputDevices()
   }
 
   fun selectPreferredInput(device: AudioDevice.BluetoothHeadset?): Boolean {
@@ -309,6 +288,7 @@ class AudioRouter(private val context: Context) {
       BaoLog.w(TAG, "Ignoring unavailable Bluetooth input: $device")
       return false
     }
+    hasUserSelectedInput = true
     _preferredInputDevice.value = device
     return true
   }
@@ -325,7 +305,9 @@ class AudioRouter(private val context: Context) {
       return AudioPlayback.RouteResult(
         preferredDeviceApplied = false,
         preferredDeviceName = null,
+        preferredDeviceId = null,
         routedDeviceName = null,
+        routedDeviceId = null,
       )
     }
     val communicationRoute =
@@ -337,7 +319,7 @@ class AudioRouter(private val context: Context) {
       preferredDevice = outputInfo,
       useCommunicationRoute = communicationRoute,
     )
-    if (outputInfo != null && !result.preferredDeviceApplied) {
+    if (outputInfo != null && result.routedDeviceId != outputInfo.id) {
       BaoLog.w(TAG, "AudioTrack rejected preferred output route: $selected")
       _routingStatus.value = RoutingStatus.FAILED
     }
@@ -379,28 +361,28 @@ class AudioRouter(private val context: Context) {
       _currentDevice.value = selectedOutputDevice
     }
 
+    refreshInputDevices()
+  }
+
+  private fun refreshInputDevices() {
     val inputs = getAvailableInputDevices()
     _availableInputDevices.value = inputs
     val currentPreferred = _preferredInputDevice.value
-    if (currentPreferred == null) {
+    if (!hasUserSelectedInput) {
       _preferredInputDevice.value = inputs.firstOrNull { it.isPreferred }?.device
-        ?: inputs.firstOrNull()?.device
-    } else if (inputs.none { it.device == currentPreferred }) {
-      _preferredInputDevice.value = inputs.firstOrNull()?.device
+    } else if (currentPreferred != null && inputs.none { it.device == currentPreferred }) {
+      _preferredInputDevice.value = null
     }
   }
 
   private fun isWiredOutput(device: AudioDeviceInfo): Boolean =
-    device.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
-      device.type == AudioDeviceInfo.TYPE_WIRED_HEADSET
+    DeviceProbe.isWiredOutput(device.type)
 
   private fun isBleOutput(device: AudioDeviceInfo): Boolean =
-    device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+    DeviceProbe.isBleOutput(device.type)
 
   private fun isBluetoothOutput(device: AudioDeviceInfo): Boolean =
-    isBleOutput(device) ||
-      device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-      device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+    DeviceProbe.isBluetoothOutput(device.type)
 
   private fun isSelectableBluetoothOutput(device: AudioDeviceInfo): Boolean =
     isBleOutput(device) ||
@@ -408,7 +390,11 @@ class AudioRouter(private val context: Context) {
       isSelectableScoOutput(device)
 
   private fun isSelectableScoOutput(device: AudioDeviceInfo): Boolean =
-    device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO && !isPlaceholderBluetoothEndpoint(device)
+    DeviceProbe.isSelectableScoOutput(
+      DeviceDescriptor.from(device),
+      localModel = Build.MODEL,
+      localDevice = Build.DEVICE,
+    )
 
   private fun isSelectedDeviceAvailable(selected: AudioDevice, available: List<AudioDevice>): Boolean =
     available.any { device ->
@@ -420,9 +406,6 @@ class AudioRouter(private val context: Context) {
         else -> false
       }
     }
-
-  private fun endpointKey(name: String, transport: BluetoothTransport): String =
-    "$name:${transport.name}"
 
   private fun configureCommunicationDevice(device: AudioDeviceInfo): Boolean {
     return when (device.type) {
@@ -458,39 +441,39 @@ class AudioRouter(private val context: Context) {
       return bluetoothDeviceName(info)
     }
     return outputDevices.firstOrNull {
-      it.type == AudioDeviceInfo.TYPE_BLE_HEADSET || it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
+      (it.type == AudioDeviceInfo.TYPE_BLE_HEADSET || it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP) &&
+        !isPlaceholderBluetoothEndpoint(it)
     }?.let(::bluetoothDeviceName)
-      ?: context.getString(R.string.bao_translate_audio_device_bluetooth)
   }
 
   private fun isPlaceholderBluetoothEndpoint(info: AudioDeviceInfo): Boolean {
-    val productName = info.productName?.toString()
-    val address = info.address
-    val hasRealAddress = !address.isNullOrBlank() && address != "00:00:00:00:00:00"
-    if (hasRealAddress) return false
-    if (productName.isNullOrBlank() || productName == "null") return true
-    return productName == Build.MODEL || productName == Build.DEVICE
+    return DeviceProbe.isPlaceholderBluetoothEndpoint(
+      DeviceDescriptor.from(info),
+      localModel = Build.MODEL,
+      localDevice = Build.DEVICE,
+    )
   }
 
   private fun AudioDeviceInfo.hasInputSupport(): Boolean {
-    if (isSource) return true
     if (cachedInputDevices.isEmpty()) {
       cachedInputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)
     }
-    val matchName = productName?.toString()
-    return cachedInputDevices.any { input ->
-      input.productName?.toString() == matchName
-    }
+    return DeviceProbe.hasInputSupport(
+      DeviceDescriptor.from(this),
+      cachedInputDevices.map(DeviceDescriptor::from),
+    )
   }
 
   fun cleanup() {
     handler.removeCallbacks(routingTimeoutRunnable)
     pendingRouteExpected = null
     audioManager.unregisterAudioDeviceCallback(deviceCallback)
+    audioManager.removeOnCommunicationDeviceChangedListener(communicationDeviceChangedListener)
     AudioPlayback.releaseTrack()
     audioManager.mode = AudioManager.MODE_NORMAL
     audioManager.clearCommunicationDevice()
     _preferredInputDevice.value = null
+    hasUserSelectedInput = false
     _routingStatus.value = RoutingStatus.IDLE
   }
 

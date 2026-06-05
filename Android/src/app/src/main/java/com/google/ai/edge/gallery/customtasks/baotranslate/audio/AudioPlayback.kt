@@ -15,7 +15,9 @@ object AudioPlayback {
   data class RouteResult(
     val preferredDeviceApplied: Boolean,
     val preferredDeviceName: String?,
+    val preferredDeviceId: Int?,
     val routedDeviceName: String?,
+    val routedDeviceId: Int?,
   )
 
   private val lock = Any()
@@ -91,14 +93,18 @@ object AudioPlayback {
       return RouteResult(
         preferredDeviceApplied = preferredDevice == null,
         preferredDeviceName = preferredDevice?.productName?.toString(),
+        preferredDeviceId = preferredDevice?.id,
         routedDeviceName = null,
+        routedDeviceId = null,
       )
     }
 
     val track = ensureTrack(sampleRate, useCommunicationRoute) ?: return RouteResult(
       preferredDeviceApplied = false,
       preferredDeviceName = preferredDevice?.productName?.toString(),
+      preferredDeviceId = preferredDevice?.id,
       routedDeviceName = null,
+      routedDeviceId = null,
     )
     val preferredApplied = track.setPreferredDevice(preferredDevice)
 
@@ -117,14 +123,17 @@ object AudioPlayback {
       offset += written
     }
 
-    val routedDeviceName = track.routedDevice?.productName?.toString()
+    val routedDevice = track.routedDevice
     track.stop()
     track.flush()
 
     return RouteResult(
-      preferredDeviceApplied = preferredApplied,
+      preferredDeviceApplied =
+        preferredApplied && (preferredDevice == null || routedDevice?.id == preferredDevice.id),
       preferredDeviceName = preferredDevice?.productName?.toString(),
-      routedDeviceName = routedDeviceName,
+      preferredDeviceId = preferredDevice?.id,
+      routedDeviceName = routedDevice?.productName?.toString(),
+      routedDeviceId = routedDevice?.id,
     )
   }
 
@@ -133,7 +142,9 @@ object AudioPlayback {
       return RouteResult(
         preferredDeviceApplied = true,
         preferredDeviceName = null,
+        preferredDeviceId = null,
         routedDeviceName = null,
+        routedDeviceId = null,
       )
     }
 

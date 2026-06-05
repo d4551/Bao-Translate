@@ -32,7 +32,6 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
-import org.junit.Assume.assumeTrue
 import org.junit.rules.ExternalResource
 import org.junit.runner.RunWith
 
@@ -55,7 +54,7 @@ class BaoTranslateBluetoothAudioRoutingTest {
     router = audioRouter
 
     val bluetoothOutputs = waitForBluetoothOutputs(audioRouter)
-    assumeTrue(
+    assertTrue(
       "No connected Bluetooth output endpoints were available to verify; reconnect a headset to run the real route probe.",
       bluetoothOutputs.isNotEmpty(),
     )
@@ -70,10 +69,19 @@ class BaoTranslateBluetoothAudioRoutingTest {
         "AudioTrack did not accept selected Bluetooth output $output; result=$routeResult",
         routeResult.preferredDeviceApplied,
       )
+      assertNotNull(
+        "Route probe did not expose the preferred Bluetooth output id; result=$routeResult",
+        routeResult.preferredDeviceId,
+      )
+      assertEquals(
+        "AudioTrack routed to a different output than the selected Bluetooth route; result=$routeResult",
+        routeResult.preferredDeviceId,
+        routeResult.routedDeviceId,
+      )
     }
 
     val bluetoothInputs = waitForBluetoothInputs(audioRouter)
-    assumeTrue(
+    assertTrue(
       "No connected Bluetooth microphone endpoints were available to verify; reconnect a headset microphone to run the real route probe.",
       bluetoothInputs.isNotEmpty(),
     )
@@ -99,7 +107,19 @@ class BaoTranslateBluetoothAudioRoutingTest {
           inputInfo!!.id,
           recorder.preferredDevice?.id,
         )
+        recorder.startRecording()
+        assertTrue(
+          "AudioRecord did not start for Bluetooth input route probe",
+          recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING,
+        )
+        assertTrue(
+          "AudioRecord routed to a different microphone than the selected Bluetooth input: routed=${recorder.routedDevice?.productName}, selected=${inputInfo.productName}",
+          waitForRecorderRoute(recorder, inputInfo.id),
+        )
       } finally {
+        if (recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+          recorder.stop()
+        }
         recorder.release()
       }
     }
@@ -145,6 +165,15 @@ class BaoTranslateBluetoothAudioRoutingTest {
       AudioFormat.ENCODING_PCM_16BIT,
       bufferSize,
     )
+  }
+
+  private fun waitForRecorderRoute(recorder: AudioRecord, deviceId: Int): Boolean {
+    val deadline = System.currentTimeMillis() + 2_000
+    do {
+      if (recorder.routedDevice?.id == deviceId) return true
+      Thread.sleep(50)
+    } while (System.currentTimeMillis() < deadline)
+    return recorder.routedDevice?.id == deviceId
   }
 }
 
