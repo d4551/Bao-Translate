@@ -26,54 +26,28 @@ internal class VoiceLanguageCoordinator(
 ) {
 
   fun setSourceLanguage(language: String) {
-    uiState.update { state ->
-      val updated = state.copy(sourceLanguage = language, detectedLanguage = null)
-      val participant = updateLocalParticipant(updated)
-      updated.copy(localParticipant = participant)
-    }
+    applyLocalParticipantUpdate { it.copy(sourceLanguage = language, detectedLanguage = null) }
   }
 
   fun setTargetLanguage(language: String) {
     if (language == SupportedLanguages.AUTO.key) return
-    uiState.update { state ->
-      val updated = state.copy(targetLanguage = language)
-      val participant = updateLocalParticipant(updated)
-      updated.copy(localParticipant = participant)
-    }
+    applyLocalParticipantUpdate { it.copy(targetLanguage = language) }
   }
 
   fun onLanguageChanged(source: String, target: String) {
     if (target == SupportedLanguages.AUTO.key) return
-    uiState.update { state ->
-      val updated = state.copy(sourceLanguage = source, targetLanguage = target)
-      val participant = updateLocalParticipant(updated)
-      updated.copy(localParticipant = participant)
-    }
+    applyLocalParticipantUpdate { it.copy(sourceLanguage = source, targetLanguage = target) }
   }
 
   fun swapLanguages() {
     if (uiState.value.sourceLanguage == SupportedLanguages.AUTO.key) return
     val src = uiState.value.sourceLanguage
     val tgt = uiState.value.targetLanguage
-    uiState.update { state ->
-      val updated = state.copy(
-        sourceLanguage = tgt,
-        targetLanguage = src,
-      )
-      val participant = updateLocalParticipant(updated)
-      updated.copy(localParticipant = participant)
-    }
+    applyLocalParticipantUpdate { it.copy(sourceLanguage = tgt, targetLanguage = src) }
   }
 
   fun onVoiceEnrolled(audioPath: String) {
-    uiState.update { state ->
-      val updated = state.copy(
-        voiceProfileEnrolled = true,
-        voiceProfilePath = audioPath,
-      )
-      val participant = updateLocalParticipant(updated)
-      updated.copy(localParticipant = participant)
-    }
+    applyLocalParticipantUpdate { it.copy(voiceProfileEnrolled = true, voiceProfilePath = audioPath) }
 
     viewModelScope.launch(Dispatchers.IO) {
       val file = File(audioPath)
@@ -94,6 +68,7 @@ internal class VoiceLanguageCoordinator(
         val participant = updateLocalParticipant(updated.copy(localParticipant = updated.localParticipant?.copy(id = profile.id)))
         updated.copy(localParticipant = participant)
       }
+      uiState.value.localParticipant?.let { bleManager.setLocalParticipant(it) }
       pipelines.voiceCloneTts?.setReferenceAudio(profile.wavPath)
     }
   }
@@ -111,6 +86,7 @@ internal class VoiceLanguageCoordinator(
         val participant = updateLocalParticipant(updated)
         updated.copy(localParticipant = participant)
       }
+      uiState.value.localParticipant?.let { bleManager.setLocalParticipant(it) }
     }
   }
 
@@ -164,9 +140,22 @@ internal class VoiceLanguageCoordinator(
     reinitializePipeline(key)
   }
 
+  // Updates uiState with a fresh local participant, then broadcasts it to BLE peers exactly once.
+  // The broadcast must run AFTER commit, outside the update{} lambda: MutableStateFlow.update{} may
+  // re-evaluate its transform under CAS contention, so doing the side effect inside it would push
+  // transient/duplicate participant snapshots onto the wire.
+  private fun applyLocalParticipantUpdate(transform: (BaoTranslateUiState) -> BaoTranslateUiState) {
+    uiState.update { state ->
+      val updated = transform(state)
+      updated.copy(localParticipant = updateLocalParticipant(updated))
+    }
+    uiState.value.localParticipant?.let { bleManager.setLocalParticipant(it) }
+  }
+
+  // Pure: builds the participant from the given state. Callers broadcast the committed result.
   fun updateLocalParticipant(state: BaoTranslateUiState): Participant {
     val app = getApp()
-    val participant = (state.localParticipant ?: Participant(
+    return (state.localParticipant ?: Participant(
       id = localParticipantId,
       name = app.getString(R.string.bao_translate_you),
       sourceLanguage = state.sourceLanguage,
@@ -180,7 +169,5 @@ internal class VoiceLanguageCoordinator(
       hasVoiceProfile = state.voiceProfileEnrolled,
       audioDeviceName = state.currentAudioDevice.toString(),
     )
-    bleManager.setLocalParticipant(participant)
-    return participant
   }
 }

@@ -364,10 +364,30 @@ class BleConversationManager(private val context: Context) {
     }
   }
 
+  // With STRATEGY_P2P_WITH_RECONNECTION two devices can only find each other if at least one
+  // advertises while the other scans. Two scanners never pair. Doing both makes discovery symmetric
+  // so a pair of phones reliably finds each other regardless of who taps first. Advertising is
+  // best-effort — it no-ops until the local participant is set (see startAdvertising). Scanning is
+  // started last so the user-facing connection state reads SCANNING.
+  fun startConversationDiscovery() {
+    startAdvertising()
+    startScanning()
+  }
+
+  fun stopConversationDiscovery() {
+    stopScanning()
+    stopAdvertising()
+  }
+
   fun connectToDevice(deviceAddress: String) {
     _connectingPeers.value = _connectingPeers.value + deviceAddress
     val peer = discoveredPeerMap[deviceAddress] ?: peerMap[deviceAddress]
     if (peer != null) {
+      // Reflect the in-progress connect in the top-level status so the UI's CONNECTING branch is
+      // reachable; don't downgrade an already-CONNECTED session.
+      if (_connectionState.value != ConnectionState.CONNECTED) {
+        _connectionState.value = ConnectionState.CONNECTING
+      }
       ensureCommunicator()?.connect(peer)
     } else {
       BaoLog.w(TAG, "No peer found for address: $deviceAddress")

@@ -212,10 +212,20 @@ object BaoTranslateModelManager {
     File(getTranslationDir(context), modelId)
 
   fun refreshStatuses(context: Context) {
-    val statuses = ALL_MODELS.associate { model ->
-      model.id to checkModelStatus(context, model.id)
+    // Merge-preserve transient in-flight statuses. A full replace from on-disk presence would
+    // clobber a model that is actively Downloading/Extracting back to NotDownloaded (the files are
+    // not fully present yet) if refreshStatuses runs during a download, hiding the progress UI even
+    // though the background download is still running.
+    _modelStatuses.update { current ->
+      ALL_MODELS.associate { model ->
+        val existing = current[model.id]
+        model.id to if (existing is ModelStatus.Downloading || existing is ModelStatus.Extracting) {
+          existing
+        } else {
+          checkModelStatus(context, model.id)
+        }
+      }
     }
-    _modelStatuses.value = statuses
   }
 
   fun checkModelStatus(context: Context, modelId: String): ModelStatus {
@@ -294,21 +304,27 @@ object BaoTranslateModelManager {
 
     updateStatus(modelId, ModelStatus.Downloading(0f, 0L, 0L))
 
-    val result = when (modelId) {
-      "kokoro_tts", "pocket_tts" -> {
-        val archive = ARCHIVES.first { it.modelId == modelId }
-        downloadAndExtractArchive(context, archive, modelId)
+    // A mid-stream network drop or disk error during a multi-GB download throws (connect/read/
+    // write/responseCode), which would otherwise escape `withContext`, bypass the fold below, and
+    // crash the app while leaving the status stuck on Downloading. runCatching converts any such
+    // throw into the Result.failure the fold already handles.
+    val result = runCatching {
+      when (modelId) {
+        "kokoro_tts", "pocket_tts" -> {
+          val archive = ARCHIVES.first { it.modelId == modelId }
+          downloadAndExtractArchive(context, archive, modelId)
+        }
+        "silero_vad" -> {
+          val file = FILES.first { it.modelId == modelId }
+          downloadSingleFile(context, file, modelId)
+        }
+        "whisper_base" -> downloadWhisperModel(context, modelId)
+        "qwen25_1b", "gemma4_e2b" -> downloadTranslationModel(context, modelId)
+        else -> Result.failure(
+          IllegalArgumentException(context.getString(R.string.bao_translate_error_unknown_model, modelId))
+        )
       }
-      "silero_vad" -> {
-        val file = FILES.first { it.modelId == modelId }
-        downloadSingleFile(context, file, modelId)
-      }
-      "whisper_base" -> downloadWhisperModel(context, modelId)
-      "qwen25_1b", "gemma4_e2b" -> downloadTranslationModel(context, modelId)
-      else -> Result.failure(
-        IllegalArgumentException(context.getString(R.string.bao_translate_error_unknown_model, modelId))
-      )
-    }
+    }.getOrElse { Result.failure(it) }
 
     result.fold(
       onSuccess = {

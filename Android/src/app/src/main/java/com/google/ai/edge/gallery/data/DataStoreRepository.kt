@@ -82,7 +82,19 @@ interface DataStoreRepository {
   fun hasViewedPromo(promoId: String): Boolean
   suspend fun setHasDismissedBaoTranslateWelcome(dismissed: Boolean)
   fun getHasDismissedBaoTranslateWelcome(): Boolean
+  suspend fun setBaoTranslateSettings(settings: BaoTranslateStoredSettings)
+  /** Returns persisted Bao Translate settings, or null if they have never been saved. */
+  fun getBaoTranslateSettings(): BaoTranslateStoredSettings?
 }
+
+/** Persisted, variable Bao Translate preferences. */
+data class BaoTranslateStoredSettings(
+  val translationModel: String,
+  val ttsEngine: String,
+  val sourceLanguage: String,
+  val targetLanguage: String,
+  val wifiOnlyDownloads: Boolean,
+)
 
 /** Repository for managing data using Proto DataStore. */
 class DefaultDataStoreRepository(
@@ -292,5 +304,35 @@ class DefaultDataStoreRepository(
 
   override fun getHasDismissedBaoTranslateWelcome(): Boolean {
     return runBlocking { dataStore.data.first().hasDismissedBaoTranslateWelcome }
+  }
+
+  override suspend fun setBaoTranslateSettings(settings: BaoTranslateStoredSettings) {
+    dataStore.updateData {
+      it.toBuilder()
+        .setBaoTranslateTranslationModel(settings.translationModel)
+        .setBaoTranslateTtsEngine(settings.ttsEngine)
+        .setBaoTranslateSourceLanguage(settings.sourceLanguage)
+        .setBaoTranslateTargetLanguage(settings.targetLanguage)
+        .setBaoTranslateWifiOnlyDownloads(settings.wifiOnlyDownloads)
+        .setBaoTranslateSettingsInitialized(true)
+        .build()
+    }
+  }
+
+  override fun getBaoTranslateSettings(): BaoTranslateStoredSettings? {
+    return runBlocking {
+      val s = dataStore.data.first()
+      if (!s.baoTranslateSettingsInitialized) {
+        null
+      } else {
+        BaoTranslateStoredSettings(
+          translationModel = s.baoTranslateTranslationModel,
+          ttsEngine = s.baoTranslateTtsEngine,
+          sourceLanguage = s.baoTranslateSourceLanguage,
+          targetLanguage = s.baoTranslateTargetLanguage,
+          wifiOnlyDownloads = s.baoTranslateWifiOnlyDownloads,
+        )
+      }
+    }
   }
 }

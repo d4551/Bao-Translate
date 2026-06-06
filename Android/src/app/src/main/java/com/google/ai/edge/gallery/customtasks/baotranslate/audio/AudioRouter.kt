@@ -56,12 +56,14 @@ class AudioRouter(private val context: Context) {
   private val _routingStatus = MutableStateFlow(RoutingStatus.IDLE)
   val routingStatus: StateFlow<RoutingStatus> = _routingStatus.asStateFlow()
 
-  private var selectedOutputDevice: AudioDevice = AudioDevice.Speaker
-  private var hasUserSelectedOutput = false
-  private var hasUserSelectedInput = false
+  // @Volatile: written on the main/handler thread (device callbacks, user selection) and read from
+  // the playback worker thread in play(); the annotation guarantees cross-thread visibility.
+  @Volatile private var selectedOutputDevice: AudioDevice = AudioDevice.Speaker
+  @Volatile private var hasUserSelectedOutput = false
+  @Volatile private var hasUserSelectedInput = false
   private val handler = Handler(Looper.getMainLooper())
   private val mainExecutor = Executor { command -> handler.post(command) }
-  private var cachedInputDevices: Array<out AudioDeviceInfo> = emptyArray()
+  @Volatile private var cachedInputDevices: Array<out AudioDeviceInfo> = emptyArray()
 
   private val deviceCallback = object : AudioDeviceCallback() {
     override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {

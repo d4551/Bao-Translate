@@ -34,23 +34,20 @@ fun WaveformRenderer(
     val spacing = Dimensions.Waveform.barSpacing.toPx()
     val barCount = (size.width / (barWidth + spacing)).toInt().coerceAtLeast(1)
     val centerY = size.height / 2
+    // Amplitudes arrive already normalized to 0f..1f (RMS with visual gain) from
+    // RecordingController, so render them directly. Re-normalizing by the window peak here would
+    // force the loudest visible bar to full height regardless of absolute loudness, making quiet
+    // and loud speech look identical.
     val recentAmplitudes =
       when {
         amplitudes.size >= barCount -> amplitudes.takeLast(barCount)
         amplitudes.isNotEmpty() -> List(barCount - amplitudes.size) { 0f } + amplitudes
         else -> List(barCount) { amplitudeProvider() }
       }
-    val peakAmplitude = recentAmplitudes.maxOrNull()?.coerceAtLeast(0f) ?: 0f
-    val displayAmplitudes =
-      if (peakAmplitude > 0f) {
-        recentAmplitudes.map { it / peakAmplitude }
-      } else {
-        recentAmplitudes
-      }
 
     for (i in 0 until barCount) {
       val x = i * (barWidth + spacing)
-      val amplitude = displayAmplitudes[i].coerceIn(0f, 1f)
+      val amplitude = recentAmplitudes[i].coerceIn(0f, 1f)
       val barHeight = (centerY * amplitude * if (isActive) 1f else 0.3f)
         .coerceAtLeast(Dimensions.Waveform.minBarHeight.toPx())
 

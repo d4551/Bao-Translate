@@ -21,6 +21,10 @@ class VoiceClonePipeline(private val context: Context) : TtsEngine {
   private var referenceAudioPath: String? = null
   private var cachedReferenceAudio: Pair<Int, FloatArray>? = null
 
+  // Serializes native generateWithConfig() against release() so the OfflineTts handle is never
+  // freed mid-synthesis, and serializes concurrent synth calls on this single shared engine.
+  private val inferenceLock = Any()
+
   override fun initialize(modelDir: String): Boolean {
     val dirFile = File(modelDir)
     if (!dirFile.exists() || !dirFile.isDirectory) {
@@ -80,7 +84,7 @@ class VoiceClonePipeline(private val context: Context) : TtsEngine {
     return synthesizeAudio(text, voiceId, speed)?.samples
   }
 
-  override fun synthesizeAudio(text: String, voiceId: String?, speed: Float): SynthesizedAudio? {
+  override fun synthesizeAudio(text: String, voiceId: String?, speed: Float): SynthesizedAudio? = synchronized(inferenceLock) {
     val engine = tts ?: return null
     if (!isReady) return null
     val refPath = referenceAudioPath ?: return null
@@ -138,10 +142,12 @@ class VoiceClonePipeline(private val context: Context) : TtsEngine {
   }
 
   override fun cleanup() {
-    tts?.release()
-    tts = null
-    isReady = false
-    referenceAudioPath = null
-    cachedReferenceAudio = null
+    synchronized(inferenceLock) {
+      tts?.release()
+      tts = null
+      isReady = false
+      referenceAudioPath = null
+      cachedReferenceAudio = null
+    }
   }
 }

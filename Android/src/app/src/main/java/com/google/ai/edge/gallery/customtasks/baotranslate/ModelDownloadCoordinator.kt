@@ -41,28 +41,33 @@ internal class ModelDownloadCoordinator(
 
     viewModelScope.launch(Dispatchers.IO) {
       val app = getApp()
-      val result = modelManager.downloadModel(
-        context = app,
-        modelId = modelId,
-        wifiOnly = uiState.value.wifiOnlyDownloads,
-      )
+      try {
+        val result = modelManager.downloadModel(
+          context = app,
+          modelId = modelId,
+          wifiOnly = uiState.value.wifiOnlyDownloads,
+        )
 
-      result.fold(
-        onSuccess = {
-          uiState.update { it.copy(storageBreakdown = modelManager.getStorageBreakdown(app)) }
-          initializeIfRequiredDownloadsReady(app)
-        },
-        onFailure = { error ->
-          val message = error.message ?: app.getString(R.string.bao_translate_error_download_unknown)
-          modelManager.updateStatusExternal(modelId, ModelStatus.Error(message))
-          uiState.update { it.copy(
-            modelsReady = false,
-            pipelineStatus = PipelineStatus.ModelsNotReady,
-            errorMessage = message,
-          ) }
-        },
-      )
-      endDownload(modelId)
+        result.fold(
+          onSuccess = {
+            uiState.update { it.copy(storageBreakdown = modelManager.getStorageBreakdown(app)) }
+            initializeIfRequiredDownloadsReady(app)
+          },
+          onFailure = { error ->
+            val message = error.message ?: app.getString(R.string.bao_translate_error_download_unknown)
+            modelManager.updateStatusExternal(modelId, ModelStatus.Error(message))
+            uiState.update { it.copy(
+              modelsReady = false,
+              pipelineStatus = PipelineStatus.ModelsNotReady,
+              errorMessage = message,
+            ) }
+          },
+        )
+      } finally {
+        // Always release the active-download guard so the model can be retried even if anything in
+        // the success/init path throws; otherwise the id would be stuck and re-download blocked.
+        endDownload(modelId)
+      }
     }
   }
 
@@ -71,25 +76,28 @@ internal class ModelDownloadCoordinator(
 
     viewModelScope.launch(Dispatchers.IO) {
       val app = getApp()
-      val result = modelManager.downloadRequiredModels(
-        context = app,
-        wifiOnly = uiState.value.wifiOnlyDownloads,
-      )
+      try {
+        val result = modelManager.downloadRequiredModels(
+          context = app,
+          wifiOnly = uiState.value.wifiOnlyDownloads,
+        )
 
-      result.fold(
-        onSuccess = {
-          uiState.update { it.copy(storageBreakdown = modelManager.getStorageBreakdown(app)) }
-          initializeIfRequiredDownloadsReady(app)
-        },
-        onFailure = { error ->
-          uiState.update { it.copy(
-            modelsReady = false,
-            pipelineStatus = PipelineStatus.ModelsNotReady,
-            errorMessage = error.message ?: app.getString(R.string.bao_translate_error_download_unknown),
-          ) }
-        },
-      )
-      endDownload(ALL_DOWNLOADS)
+        result.fold(
+          onSuccess = {
+            uiState.update { it.copy(storageBreakdown = modelManager.getStorageBreakdown(app)) }
+            initializeIfRequiredDownloadsReady(app)
+          },
+          onFailure = { error ->
+            uiState.update { it.copy(
+              modelsReady = false,
+              pipelineStatus = PipelineStatus.ModelsNotReady,
+              errorMessage = error.message ?: app.getString(R.string.bao_translate_error_download_unknown),
+            ) }
+          },
+        )
+      } finally {
+        endDownload(ALL_DOWNLOADS)
+      }
     }
   }
 

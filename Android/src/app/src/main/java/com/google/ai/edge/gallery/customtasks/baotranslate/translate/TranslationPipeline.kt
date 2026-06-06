@@ -3,6 +3,7 @@ package com.google.ai.edge.gallery.customtasks.baotranslate.translate
 import android.content.Context
 import com.google.ai.edge.gallery.common.BaoLog
 import com.google.ai.edge.gallery.customtasks.baotranslate.config.PipelineConfig
+import com.google.ai.edge.gallery.customtasks.baotranslate.validation.isSourceEcho
 import com.google.ai.edge.gallery.customtasks.baotranslate.validation.isValidTranslation
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.ConversationConfig
@@ -28,6 +29,11 @@ data class TranslationResult(
 class TranslationPipeline(private val context: Context) {
   private var engine: Engine? = null
   private var isReady = false
+
+  // Serializes native generation against close() so the engine is never freed mid-inference
+  // (model delete / switch / onCleared), and serializes concurrent translate calls (the live
+  // recording path and the BLE peer path both translate on this single shared engine).
+  private val inferenceLock = Any()
 
   fun initialize(modelPath: String): Boolean {
     val modelFile = File(modelPath)
@@ -55,7 +61,7 @@ class TranslationPipeline(private val context: Context) {
     sourceText: String,
     sourceLanguage: String,
     targetLanguage: String,
-  ): TranslationOutcome {
+  ): TranslationOutcome = synchronized(inferenceLock) {
     val eng = engine
     if (!isReady || eng == null) {
       return TranslationOutcome.Failure("Translation engine not initialized", sourceLanguage, targetLanguage)
@@ -80,10 +86,23 @@ class TranslationPipeline(private val context: Context) {
     )
 
     val conversation = eng.createConversation(conversationConfig)
-    val response = conversation.sendMessage(prompt)
-    val responseText = extractText(response)
-    val translatedText = cleanTranslation(responseText)
-    conversation.close()
+    val translatedText = try {
+      val response = conversation.sendMessage(prompt)
+      cleanTranslation(extractText(response))
+    } finally {
+      conversation.close()
+    }
+
+    // Guard against the common on-device LLM failure where the model echoes the source verbatim
+    // instead of translating.
+    if (isSourceEcho(translatedText, sourceText, sourceLanguage, targetLanguage)) {
+      BaoLog.w(TAG, "Translation echoed source verbatim")
+      return TranslationOutcome.Failure(
+        "Translation failed: model echoed the input",
+        sourceLanguage,
+        targetLanguage,
+      )
+    }
 
     if (!isValidTranslation(translatedText, sourceText)) {
       BaoLog.w(TAG, "Translation produced invalid output: $translatedText")
@@ -160,8 +179,10 @@ $sourceText""".trimIndent()
   }
 
   fun cleanup() {
-    engine?.close()
-    engine = null
-    isReady = false
+    synchronized(inferenceLock) {
+      engine?.close()
+      engine = null
+      isReady = false
+    }
   }
 }

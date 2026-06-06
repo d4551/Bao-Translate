@@ -12,12 +12,17 @@ import java.io.File
 
 private const val TAG = "KokoroTtsPipeline"
 
-data class KokoroVoice(val id: String, val language: String, val gender: String)
+data class KokoroVoice(val id: String, val language: String, val gender: String, val sid: Int)
 
 class KokoroTtsPipeline(private val context: Context) : TtsEngine {
   private var tts: OfflineTts? = null
   private var isReady = false
   private var currentVoiceId: String = DEFAULT_VOICE
+
+  // Serializes native generate() against release() so the OfflineTts handle is never freed
+  // mid-synthesis (model delete / switch / onCleared), and serializes concurrent synth calls —
+  // the recording path and the BLE peer path both synthesize on this single shared engine.
+  private val inferenceLock = Any()
 
   override fun initialize(modelDir: String): Boolean {
     val dir = File(modelDir)
@@ -71,14 +76,14 @@ class KokoroTtsPipeline(private val context: Context) : TtsEngine {
     return synthesizeAudio(text, voiceId, speed)?.samples
   }
 
-  override fun synthesizeAudio(text: String, voiceId: String?, speed: Float): SynthesizedAudio? {
+  override fun synthesizeAudio(text: String, voiceId: String?, speed: Float): SynthesizedAudio? = synchronized(inferenceLock) {
     val engine = tts ?: return null
     if (!isReady) return null
     val voice = voiceId ?: currentVoiceId
 
     val audio = engine.generate(
       text = text,
-      sid = getVoiceIndex(voice),
+      sid = sidForVoice(voice),
       speed = speed,
     )
 
@@ -98,43 +103,53 @@ class KokoroTtsPipeline(private val context: Context) : TtsEngine {
   }
 
   override fun cleanup() {
-    tts?.release()
-    tts = null
-    isReady = false
+    synchronized(inferenceLock) {
+      tts?.release()
+      tts = null
+      isReady = false
+    }
   }
 
-  private fun getVoiceIndex(voiceId: String): Int {
-    return AVAILABLE_VOICES.indexOfFirst { it.id == voiceId }.coerceAtLeast(0)
+  // The native sid is the speaker index baked into the model's voices.bin, NOT the position in this
+  // list. Resolve to the stored, authoritative sid; fall back to the default voice's sid (never 0,
+  // which would silently substitute af_alloy) if the id is unknown.
+  private fun sidForVoice(voiceId: String): Int {
+    return AVAILABLE_VOICES.firstOrNull { it.id == voiceId }?.sid ?: DEFAULT_SID
   }
 
   companion object {
     private const val DEFAULT_VOICE = "af_heart"
+    private const val DEFAULT_SID = 3 // af_heart in kokoro-multi-lang-v1_0
 
+    // sid values are the authoritative speaker ids for sherpa-onnx kokoro-multi-lang-v1_0 (53
+    // speakers, 0-52), per https://k2-fsa.github.io/sherpa/onnx/tts/pretrained_models/kokoro.html.
+    // Using list position as the sid (the previous behaviour) selected the wrong speaker for nearly
+    // every voice. Pinned by KokoroTtsPipelineTest so future edits can't reintroduce the drift.
     val AVAILABLE_VOICES = listOf(
-      KokoroVoice("af_heart", "en", "female"),
-      KokoroVoice("af_bella", "en", "female"),
-      KokoroVoice("af_nicole", "en", "female"),
-      KokoroVoice("af_sarah", "en", "female"),
-      KokoroVoice("af_sky", "en", "female"),
-      KokoroVoice("am_adam", "en", "male"),
-      KokoroVoice("am_michael", "en", "male"),
-      KokoroVoice("bf_emma", "en-gb", "female"),
-      KokoroVoice("bf_isabella", "en-gb", "female"),
-      KokoroVoice("bm_george", "en-gb", "male"),
-      KokoroVoice("bm_lewis", "en-gb", "male"),
-      KokoroVoice("ef_dora", "es", "female"),
-      KokoroVoice("em_alex", "es", "male"),
-      KokoroVoice("ff_siwis", "fr", "female"),
-      KokoroVoice("hf_alpha", "hi", "female"),
-      KokoroVoice("hm_omega", "hi", "male"),
-      KokoroVoice("if_sara", "it", "female"),
-      KokoroVoice("im_nicola", "it", "male"),
-      KokoroVoice("jf_alpha", "ja", "female"),
-      KokoroVoice("jm_gongitsune", "ja", "male"),
-      KokoroVoice("pf_dora", "pt", "female"),
-      KokoroVoice("pm_alex", "pt", "male"),
-      KokoroVoice("zf_xiaobei", "zh", "female"),
-      KokoroVoice("zm_yunjian", "zh", "male"),
+      KokoroVoice("af_heart", "en", "female", 3),
+      KokoroVoice("af_bella", "en", "female", 2),
+      KokoroVoice("af_nicole", "en", "female", 6),
+      KokoroVoice("af_sarah", "en", "female", 9),
+      KokoroVoice("af_sky", "en", "female", 10),
+      KokoroVoice("am_adam", "en", "male", 11),
+      KokoroVoice("am_michael", "en", "male", 16),
+      KokoroVoice("bf_emma", "en-gb", "female", 21),
+      KokoroVoice("bf_isabella", "en-gb", "female", 22),
+      KokoroVoice("bm_george", "en-gb", "male", 26),
+      KokoroVoice("bm_lewis", "en-gb", "male", 27),
+      KokoroVoice("ef_dora", "es", "female", 28),
+      KokoroVoice("em_alex", "es", "male", 29),
+      KokoroVoice("ff_siwis", "fr", "female", 30),
+      KokoroVoice("hf_alpha", "hi", "female", 31),
+      KokoroVoice("hm_omega", "hi", "male", 33),
+      KokoroVoice("if_sara", "it", "female", 35),
+      KokoroVoice("im_nicola", "it", "male", 36),
+      KokoroVoice("jf_alpha", "ja", "female", 37),
+      KokoroVoice("jm_kumo", "ja", "male", 41),
+      KokoroVoice("pf_dora", "pt", "female", 42),
+      KokoroVoice("pm_alex", "pt", "male", 43),
+      KokoroVoice("zf_xiaobei", "zh", "female", 45),
+      KokoroVoice("zm_yunjian", "zh", "male", 49),
     )
 
     fun getVoiceForLanguage(language: String, gender: String = "female"): String {

@@ -39,7 +39,6 @@ internal class ParticipantStateManager(
         hasVoiceProfile = enrolled,
         audioDeviceName = currentDevice.toString(),
       )
-      bleManager.setLocalParticipant(participant)
       state.copy(
         voiceProfileEnrolled = enrolled,
         voiceProfilePath = profile?.wavPath,
@@ -48,11 +47,15 @@ internal class ParticipantStateManager(
         localParticipant = participant,
       )
     }
+    // Broadcast once on the committed value, outside the CAS retry loop.
+    uiState.value.localParticipant?.let { bleManager.setLocalParticipant(it) }
   }
 
+  // Pure: builds the participant from the given state. Callers broadcast the committed result
+  // once, outside any MutableStateFlow.update{} lambda (which may re-run under CAS contention).
   fun updateLocalParticipant(state: BaoTranslateUiState): Participant {
     val app = getApp()
-    val participant = (state.localParticipant ?: Participant(
+    return (state.localParticipant ?: Participant(
       id = localParticipantId,
       name = app.getString(R.string.bao_translate_you),
       sourceLanguage = state.sourceLanguage,
@@ -66,7 +69,5 @@ internal class ParticipantStateManager(
       hasVoiceProfile = state.voiceProfileEnrolled,
       audioDeviceName = state.currentAudioDevice.toString(),
     )
-    bleManager.setLocalParticipant(participant)
-    return participant
   }
 }

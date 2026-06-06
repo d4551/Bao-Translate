@@ -24,6 +24,11 @@ class VadProcessor(private val context: Context) {
   private var vad: Vad? = null
   private var isReady = false
 
+  // Serializes native inference against release() so the sherpa-onnx handle can never be freed
+  // (cleanup on a model switch / onCleared) while a decode is mid-flight on a captured reference.
+  // Also serializes concurrent decode calls (Vad is not safe for concurrent native use).
+  private val inferenceLock = Any()
+
   fun initialize(): Boolean {
     val modelPath = BaoTranslateModelManager.getVadModelPath(context)
     val modelFile = File(modelPath)
@@ -65,7 +70,7 @@ class VadProcessor(private val context: Context) {
     return true
   }
 
-  fun processAudioSegment(audioSamples: ShortArray): List<List<Short>> {
+  fun processAudioSegment(audioSamples: ShortArray): List<List<Short>> = synchronized(inferenceLock) {
     val v = vad
     if (!isReady || v == null) {
       return fallbackSegmentation(audioSamples)
@@ -116,13 +121,15 @@ class VadProcessor(private val context: Context) {
   }
 
   fun reset() {
-    vad?.reset()
+    synchronized(inferenceLock) { vad?.reset() }
   }
 
   fun cleanup() {
-    vad?.release()
-    vad = null
-    isReady = false
+    synchronized(inferenceLock) {
+      vad?.release()
+      vad = null
+      isReady = false
+    }
   }
 
   private fun fallbackSegmentation(audioSamples: ShortArray): List<List<Short>> {

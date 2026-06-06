@@ -83,6 +83,16 @@ message Settings {
   repeated string viewed_promo_id = 10;
 
   bool has_dismissed_bao_translate_welcome = 11;
+
+  // Persisted Bao Translate preferences. The initialized flag distinguishes "never saved" from a
+  // legitimately-false bool (e.g. wifi-only default is true), so defaults aren't clobbered on first
+  // run.
+  string bao_translate_translation_model = 12;
+  string bao_translate_tts_engine = 13;
+  string bao_translate_source_language = 14;
+  string bao_translate_target_language = 15;
+  bool bao_translate_wifi_only_downloads = 16;
+  bool bao_translate_settings_initialized = 17;
 }
 
 message McpAuth {

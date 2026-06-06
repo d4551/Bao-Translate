@@ -58,6 +58,11 @@ internal class RecordingController(
   var recordingJob: Job? = null
   var audioRecord: AudioRecord? = null
 
+  // Live-window translation segments are launched as independent coroutines. Track them so
+  // stopRecording() can cancel any that are queued-but-unstarted (or mid-flight at a suspension
+  // point), preventing TTS/transcripts from firing after the user has stopped.
+  private val liveSegmentJobs = mutableListOf<Job>()
+
   fun startRecording() {
     if (uiState.value.isRecordingActive) return
     val app = getApp()
@@ -215,6 +220,7 @@ internal class RecordingController(
 
       // `isActive` lets the read loop exit on coroutine cancellation (e.g. ViewModel cleared
       // mid-recording) so the AudioRecord below is released and the mic doesn't stay live.
+      try {
       while (isActive && uiState.value.isRecordingActive) {
         val readCount = recorder.read(buffer, 0, buffer.size, AudioRecord.READ_NON_BLOCKING)
 
@@ -287,7 +293,6 @@ internal class RecordingController(
           }
           readCount < 0 -> {
             BaoLog.e(REC_TAG, "AudioRecord read returned error: $readCount")
-            unlockRecordingIfHeld()
             uiState.update { it.copy(
               pipelineStatus = PipelineStatus.Idle,
               errorMessage = app.getString(R.string.bao_translate_error_microphone_init),
@@ -298,20 +303,15 @@ internal class RecordingController(
         }
       }
 
-      if (recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-        recorder.stop()
-      }
-      recorder.release()
-      audioRecord = null
-
       if (recordingFailed) {
-        unlockRecordingIfHeld()
         return@launch
       }
 
+      // Process the trailing tail regardless of whether live windows already fired. Gating the
+      // final flush on a full stride (4s) silently dropped the last <4s of speech: that tail past
+      // the last window boundary was never part of any emitted window, so use the 1s minimum.
       val finalSampleCount = if (queuedLiveSegment) samplesSinceLastLiveWindow else sampleCount
-      val finalMinimumSamples = if (queuedLiveSegment) liveStrideSamples else minSegmentSamples
-      if (finalSampleCount >= finalMinimumSamples) {
+      if (finalSampleCount >= minSegmentSamples) {
         val finalStart = sampleCount - finalSampleCount
         segmentProcessingMutex.withLock {
           processAudioSegment(
@@ -322,9 +322,14 @@ internal class RecordingController(
           )
         }
       } else if (sampleCount > 0 && !queuedLiveSegment) {
-        if (!queuedLiveSegment) {
-          uiState.update { it.copy(errorMessage = getApp().getString(R.string.bao_translate_error_recording_short)) }
+        uiState.update { it.copy(errorMessage = getApp().getString(R.string.bao_translate_error_recording_short)) }
+      }
+      } finally {
+        if (recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+          recorder.stop()
         }
+        recorder.release()
+        audioRecord = null
       }
       } finally {
         unlockRecordingIfHeld()
@@ -335,6 +340,13 @@ internal class RecordingController(
   fun stopRecording() {
     if (!uiState.value.isRecordingActive) return
     uiState.update { it.copy(pipelineStatus = PipelineStatus.Idle) }
+    // Cancel queued/in-flight live-window segments so their transcribe→translate→TTS does not fire
+    // after the user has stopped. The recordingJob's final-segment flush is intentionally left
+    // running (it is not in this list) so the tail of speech is still translated.
+    synchronized(liveSegmentJobs) {
+      liveSegmentJobs.forEach { it.cancel() }
+      liveSegmentJobs.clear()
+    }
   }
 
   private fun unlockRecordingIfHeld() {
@@ -349,7 +361,7 @@ internal class RecordingController(
       REC_TAG,
       "Queue live segment session=$recordingSessionId ${audioSamples.audioStats()}",
     )
-    viewModelScope.launch(Dispatchers.IO) {
+    val job = viewModelScope.launch(Dispatchers.IO) {
       segmentProcessingMutex.withLock {
         processAudioSegment(
           audioSamples = audioSamples,
@@ -358,6 +370,13 @@ internal class RecordingController(
           reportEmptySpeech = false,
         )
       }
+    }
+    synchronized(liveSegmentJobs) {
+      liveSegmentJobs.removeAll { it.isCompleted }
+      liveSegmentJobs.add(job)
+    }
+    job.invokeOnCompletion {
+      synchronized(liveSegmentJobs) { liveSegmentJobs.remove(job) }
     }
   }
 
@@ -496,6 +515,18 @@ internal class RecordingController(
 	            REC_TAG,
 	            "Translation success preserve=$preserveRecordingStatus source=$sourceLang target=$targetLang translatedChars=${translatedText.length}",
 	          )
+          // Overlapping live windows (8s window / 4s stride) re-translate the shared 4s overlap,
+          // yielding a duplicate of the previous live commit. Skip exact consecutive duplicates so
+          // the same phrase is neither appended nor spoken twice; still refresh the live preview.
+          // Only unique content reaches here, so no speech is lost.
+          if (preserveRecordingStatus) {
+            val lastUserText = uiState.value.transcripts.lastOrNull { it.isUser }?.translatedText
+            if (lastUserText != null && lastUserText.trim().equals(translatedText.trim(), ignoreCase = true)) {
+              uiState.update { it.copy(liveTranslationPreview = translatedText) }
+              continue
+            }
+          }
+
           val messageId = UUID.randomUUID().toString()
           val message = TranslationMessage(
             id = messageId,

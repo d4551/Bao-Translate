@@ -11,6 +11,7 @@ import com.google.ai.edge.gallery.customtasks.baotranslate.data.SupportedLanguag
 import com.google.ai.edge.gallery.customtasks.baotranslate.data.TranslationMessage
 import com.google.ai.edge.gallery.customtasks.baotranslate.data.VoiceProfileManager
 import com.google.ai.edge.gallery.customtasks.baotranslate.translate.TranslationOutcome
+import com.google.ai.edge.gallery.data.BaoTranslateStoredSettings
 import com.google.ai.edge.gallery.data.DataStoreRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.File
@@ -150,7 +151,20 @@ class BaoTranslateViewModel @Inject constructor(
   )
 
   init {
-    _uiState.update { it.copy(welcomeDismissed = dataStoreRepository.getHasDismissedBaoTranslateWelcome(), transcripts = emptyList()) }
+    val storedSettings = dataStoreRepository.getBaoTranslateSettings()
+    _uiState.update {
+      it.copy(
+        welcomeDismissed = dataStoreRepository.getHasDismissedBaoTranslateWelcome(),
+        transcripts = emptyList(),
+        // Restore persisted preferences so model/language/tts choices survive a cold start.
+        // Null => never saved, keep the in-memory defaults.
+        translationModel = storedSettings?.translationModel?.takeIf { m -> m.isNotBlank() } ?: it.translationModel,
+        ttsEngine = storedSettings?.ttsEngine?.takeIf { e -> e.isNotBlank() } ?: it.ttsEngine,
+        sourceLanguage = storedSettings?.sourceLanguage?.takeIf { l -> l.isNotBlank() } ?: it.sourceLanguage,
+        targetLanguage = storedSettings?.targetLanguage?.takeIf { l -> l.isNotBlank() } ?: it.targetLanguage,
+        wifiOnlyDownloads = storedSettings?.wifiOnlyDownloads ?: it.wifiOnlyDownloads,
+      )
+    }
 
     modelManager.refreshStatuses(application)
     _uiState.update { it.copy(storageBreakdown = modelManager.getStorageBreakdown(application)) }
@@ -178,6 +192,8 @@ class BaoTranslateViewModel @Inject constructor(
           val participant = participantStateManager.updateLocalParticipant(updated)
           updated.copy(localParticipant = participant)
         }
+        // Broadcast once on the committed participant, outside the update{} CAS lambda.
+        _uiState.value.localParticipant?.let { bleManager.setLocalParticipant(it) }
       }
     }
 
@@ -383,13 +399,25 @@ class BaoTranslateViewModel @Inject constructor(
 
   fun stopRecording() = recordingController.stopRecording()
 
-  fun setSourceLanguage(language: String) = voiceLanguageCoordinator.setSourceLanguage(language)
+  fun setSourceLanguage(language: String) {
+    voiceLanguageCoordinator.setSourceLanguage(language)
+    persistBaoTranslateSettings()
+  }
 
-  fun setTargetLanguage(language: String) = voiceLanguageCoordinator.setTargetLanguage(language)
+  fun setTargetLanguage(language: String) {
+    voiceLanguageCoordinator.setTargetLanguage(language)
+    persistBaoTranslateSettings()
+  }
 
-  fun onLanguageChanged(source: String, target: String) = voiceLanguageCoordinator.onLanguageChanged(source, target)
+  fun onLanguageChanged(source: String, target: String) {
+    voiceLanguageCoordinator.onLanguageChanged(source, target)
+    persistBaoTranslateSettings()
+  }
 
-  fun swapLanguages() = voiceLanguageCoordinator.swapLanguages()
+  fun swapLanguages() {
+    voiceLanguageCoordinator.swapLanguages()
+    persistBaoTranslateSettings()
+  }
 
   fun onVoiceEnrolled(audioPath: String) = voiceLanguageCoordinator.onVoiceEnrolled(audioPath)
 
@@ -399,11 +427,38 @@ class BaoTranslateViewModel @Inject constructor(
 
   fun setSttModel(model: String) = voiceLanguageCoordinator.setSttModel(model)
 
-  fun setTranslationModel(model: String) = voiceLanguageCoordinator.setTranslationModel(model)
+  fun setTranslationModel(model: String) {
+    voiceLanguageCoordinator.setTranslationModel(model)
+    persistBaoTranslateSettings()
+  }
 
-  fun setTtsEngine(engine: String) = voiceLanguageCoordinator.setTtsEngine(engine)
+  fun setTtsEngine(engine: String) {
+    voiceLanguageCoordinator.setTtsEngine(engine)
+    persistBaoTranslateSettings()
+  }
 
-  fun setWifiOnly(enabled: Boolean) = voiceLanguageCoordinator.setWifiOnly(enabled)
+  fun setWifiOnly(enabled: Boolean) {
+    voiceLanguageCoordinator.setWifiOnly(enabled)
+    persistBaoTranslateSettings()
+  }
+
+  // Persists the committed (post-setter) preferences. The setters update _uiState synchronously, so
+  // reading _uiState.value here captures the value that was just committed (or the unchanged value
+  // if a setter's validation rejected the change — harmless to rewrite).
+  private fun persistBaoTranslateSettings() {
+    val s = _uiState.value
+    viewModelScope.launch(Dispatchers.IO) {
+      dataStoreRepository.setBaoTranslateSettings(
+        BaoTranslateStoredSettings(
+          translationModel = s.translationModel,
+          ttsEngine = s.ttsEngine,
+          sourceLanguage = s.sourceLanguage,
+          targetLanguage = s.targetLanguage,
+          wifiOnlyDownloads = s.wifiOnlyDownloads,
+        )
+      )
+    }
+  }
 
   fun onSettingChanged(key: String) = voiceLanguageCoordinator.onSettingChanged(key)
 

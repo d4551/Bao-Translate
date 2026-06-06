@@ -10,6 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -167,6 +168,10 @@ fun VoiceEnrollmentSheet(
   }
 
 	  fun stopAndEnroll() {
+	    // Idempotency guard: the watchdog and the Stop button can both invoke this. The first call
+	    // consumes audioRecord (set to null below); a second call no-ops instead of launching a
+	    // duplicate enroll coroutine (double onEnrollComplete). Both callers run on the main thread.
+	    if (audioRecord == null) return
 	    audioRecord?.let { recorder ->
 	      if (recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
 	        recorder.stop()
@@ -553,12 +558,14 @@ private fun EnrollmentWaveform(
   amplitude: Float,
   modifier: Modifier = Modifier,
 ) {
-  var animatedAmplitude by remember { mutableFloatStateOf(amplitude) }
+  // Smooth amplitude changes so the waveform animates between mic samples instead of snapping
+  // (the previous LaunchedEffect just copied the value, which animated nothing).
+  val animatedAmplitude by animateFloatAsState(
+    targetValue = amplitude,
+    animationSpec = tween(durationMillis = 80),
+    label = "waveformAmplitude",
+  )
   val waveformColor = MaterialTheme.colorScheme.error
-
-  LaunchedEffect(amplitude) {
-    animatedAmplitude = amplitude
-  }
 
   Canvas(modifier = modifier.padding(vertical = Dimensions.Spacing.xs).clearAndSetSemantics {}) {
     val barWidth = Dimensions.Waveform.barWidth.toPx()

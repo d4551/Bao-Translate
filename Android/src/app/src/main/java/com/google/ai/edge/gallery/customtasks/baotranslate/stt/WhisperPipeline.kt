@@ -27,6 +27,10 @@ class WhisperPipeline(private val context: Context) {
   private var recognizer: OfflineRecognizer? = null
   private var isReady = false
 
+  // Serializes native decode against release() so the recognizer handle is never freed while a
+  // decode runs, and serializes concurrent decodes (OfflineRecognizer is not concurrency-safe).
+  private val inferenceLock = Any()
+
   fun initialize(modelPath: String): Boolean {
     val modelDir = File(modelPath)
     if (!modelDir.exists()) {
@@ -77,7 +81,7 @@ class WhisperPipeline(private val context: Context) {
     return true
   }
 
-  fun transcribeBlocking(audioSamples: ShortArray): Result<TranscriptionResult> {
+  fun transcribeBlocking(audioSamples: ShortArray): Result<TranscriptionResult> = synchronized(inferenceLock) {
     val recog = recognizer
     if (!isReady || recog == null) {
       return Result.failure(IllegalStateException("Whisper not initialized"))
@@ -92,31 +96,35 @@ class WhisperPipeline(private val context: Context) {
     }
 
     val stream = recog.createStream()
-    stream.acceptWaveform(floatSamples, SAMPLE_RATE)
+    try {
+      stream.acceptWaveform(floatSamples, SAMPLE_RATE)
 
-    recog.decode(stream)
+      recog.decode(stream)
 
-    val result = recog.getResult(stream)
-    val text = result.text.trim()
-    val lang = result.lang.ifBlank { "en" }
+      val result = recog.getResult(stream)
+      val text = result.text.trim()
+      val lang = result.lang.ifBlank { "en" }
 
-    stream.release()
-
-    return if (text.isNotBlank()) {
-      Result.success(
-        TranscriptionResult(
-          text = text,
-          language = lang,
+      return if (text.isNotBlank()) {
+        Result.success(
+          TranscriptionResult(
+            text = text,
+            language = lang,
+          )
         )
-      )
-    } else {
-      Result.failure(Exception("Empty transcription"))
+      } else {
+        Result.failure(Exception("Empty transcription"))
+      }
+    } finally {
+      stream.release()
     }
   }
 
   fun cleanup() {
-    recognizer?.release()
-    recognizer = null
-    isReady = false
+    synchronized(inferenceLock) {
+      recognizer?.release()
+      recognizer = null
+      isReady = false
+    }
   }
 }

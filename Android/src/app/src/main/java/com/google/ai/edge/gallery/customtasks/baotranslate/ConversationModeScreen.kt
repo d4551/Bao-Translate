@@ -115,7 +115,11 @@ fun ConversationModeScreen(
       }
     }
 
-    if (discoveredPeers.isNotEmpty()) {
+    // Peers that connected are shown in the Connected section; exclude them here so they don't
+    // appear twice. (Filtering at render avoids a reconnection trap from mutating manager state,
+    // since the library may not re-emit onPeerFound after a disconnect.)
+    val unconnectedPeers = discoveredPeers.filter { peer -> remoteParticipants.none { it.id == peer.id } }
+    if (unconnectedPeers.isNotEmpty()) {
       Text(
         text = stringResource(R.string.bao_translate_discovered_devices_section),
         style = MaterialTheme.typography.labelMedium,
@@ -124,12 +128,11 @@ fun ConversationModeScreen(
       )
 
       Column(verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small)) {
-        discoveredPeers.forEach { peer ->
-          val isConnected = remoteParticipants.any { it.id == peer.id }
+        unconnectedPeers.forEach { peer ->
           val isConnecting = connectingPeers.contains(peer.id)
           DiscoveredPeerCard(
             peer = peer,
-            isConnected = isConnected,
+            isConnected = false,
             isConnecting = isConnecting,
             onConnect = { onConnectDevice(peer.deviceAddress) },
           )

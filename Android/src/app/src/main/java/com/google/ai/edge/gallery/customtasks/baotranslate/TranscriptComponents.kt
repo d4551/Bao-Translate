@@ -44,13 +44,23 @@ internal fun TranscriptList(
   listState: androidx.compose.foundation.lazy.LazyListState = rememberLazyListState(),
   isTablet: Boolean = false,
 ) {
+  val latestId = transcripts.lastOrNull()?.id
   LazyColumn(
-    state = listState, modifier = modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite },
+    state = listState, modifier = modifier,
     contentPadding = PaddingValues(vertical = Dimensions.Spacing.small),
     verticalArrangement = Arrangement.spacedBy(if (isTablet) Dimensions.Spacing.medium else Dimensions.Spacing.small),
   ) {
     items(transcripts, key = { it.id }) { message ->
-      TranslationBubble(message = message, modifier = Modifier.animateItem(), isTablet = isTablet)
+      // Mark only the newest bubble as the live region so TalkBack announces just the latest
+      // translation, instead of re-reading the entire visible list on every change.
+      val itemModifier = Modifier.animateItem().let {
+        if (message.id == latestId) {
+          it.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite }
+        } else {
+          it
+        }
+      }
+      TranslationBubble(message = message, modifier = itemModifier, isTablet = isTablet)
     }
     if (transcripts.isEmpty()) {
       item {

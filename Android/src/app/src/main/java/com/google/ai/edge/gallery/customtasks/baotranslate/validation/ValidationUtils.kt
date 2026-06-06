@@ -72,6 +72,21 @@ internal fun isValidTranscription(text: String): Boolean {
     return true
 }
 
+/**
+ * Detects the common on-device LLM failure where the model echoes the source text verbatim instead
+ * of translating it. Only treats it as an echo when the languages actually differ, so legitimately
+ * unchanged output (proper nouns, numbers, same-language passthrough) is not flagged.
+ */
+internal fun isSourceEcho(
+    translated: String,
+    source: String,
+    sourceLanguage: String,
+    targetLanguage: String,
+): Boolean {
+    if (sourceLanguage.equals(targetLanguage, ignoreCase = true)) return false
+    return translated.trim().equals(source.trim(), ignoreCase = true)
+}
+
 internal fun isValidTranslation(translated: String, source: String): Boolean {
     if (translated.isBlank()) return false
     if (translated.length < 2) return false
