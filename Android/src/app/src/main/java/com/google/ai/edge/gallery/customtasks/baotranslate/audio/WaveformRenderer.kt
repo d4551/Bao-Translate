@@ -12,17 +12,17 @@ import com.google.ai.edge.gallery.ui.theme.Dimensions
 /**
  * Renders a live recording waveform driven by real microphone amplitude.
  *
- * [amplitudeProvider] supplies the latest normalized RMS amplitude (0f..1f) computed by
- * [com.google.ai.edge.gallery.customtasks.baotranslate.RecordingController]; the bars reflect actual
- * captured audio rather than a synthetic animation.
+ * [amplitudes] contains recent normalized RMS values (0f..1f) computed by
+ * [com.google.ai.edge.gallery.customtasks.baotranslate.RecordingController]; each bar maps to a real
+ * captured audio sample rather than a synthetic animation.
  */
 @Composable
 fun WaveformRenderer(
   modifier: Modifier = Modifier,
-  amplitudeProvider: () -> Float = { 0.5f },
+  amplitudes: List<Float> = emptyList(),
+  amplitudeProvider: () -> Float = { 0f },
   isActive: Boolean = true,
 ) {
-  val amplitude = amplitudeProvider()
   val barColor = MaterialTheme.colorScheme.primary
 
   Canvas(
@@ -34,12 +34,24 @@ fun WaveformRenderer(
     val spacing = Dimensions.Waveform.barSpacing.toPx()
     val barCount = (size.width / (barWidth + spacing)).toInt().coerceAtLeast(1)
     val centerY = size.height / 2
+    val recentAmplitudes =
+      when {
+        amplitudes.size >= barCount -> amplitudes.takeLast(barCount)
+        amplitudes.isNotEmpty() -> List(barCount - amplitudes.size) { 0f } + amplitudes
+        else -> List(barCount) { amplitudeProvider() }
+      }
+    val peakAmplitude = recentAmplitudes.maxOrNull()?.coerceAtLeast(0f) ?: 0f
+    val displayAmplitudes =
+      if (peakAmplitude > 0f) {
+        recentAmplitudes.map { it / peakAmplitude }
+      } else {
+        recentAmplitudes
+      }
 
     for (i in 0 until barCount) {
       val x = i * (barWidth + spacing)
-      val progress = i.toFloat() / barCount
-      val waveFactor = kotlin.math.sin(progress * Math.PI.toFloat() * 4) * 0.5f + 0.5f
-      val barHeight = (centerY * amplitude * waveFactor * if (isActive) 1f else 0.3f)
+      val amplitude = displayAmplitudes[i].coerceIn(0f, 1f)
+      val barHeight = (centerY * amplitude * if (isActive) 1f else 0.3f)
         .coerceAtLeast(Dimensions.Waveform.minBarHeight.toPx())
 
       drawLine(

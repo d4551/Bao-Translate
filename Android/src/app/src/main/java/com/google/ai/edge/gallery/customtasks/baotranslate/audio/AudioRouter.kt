@@ -121,9 +121,7 @@ class AudioRouter(private val context: Context) {
     }
 
     if (device != null) {
-      BaoLog.w(TAG, "Communication route changed to unexpected device: ${device.productName}")
-      _routingStatus.value = RoutingStatus.FAILED
-      cancelRoutingTimeoutIfMatches(expected)
+      BaoLog.w(TAG, "Communication route changed to unexpected device while waiting for $expected: ${device.productName}")
     }
   }
 

@@ -10,6 +10,7 @@ import com.google.ai.edge.gallery.customtasks.baotranslate.config.PipelineConfig
 private const val TAG = "AudioPlayback"
 private const val DEFAULT_SAMPLE_RATE = PipelineConfig.TTS_SAMPLE_RATE
 private const val LOW_LATENCY_SAMPLE_RATE = PipelineConfig.STT_SAMPLE_RATE
+private const val PLAYBACK_DRAIN_GRACE_MS = 2_000L
 
 object AudioPlayback {
   data class RouteResult(
@@ -99,42 +100,53 @@ object AudioPlayback {
       )
     }
 
-    val track = ensureTrack(sampleRate, useCommunicationRoute) ?: return RouteResult(
-      preferredDeviceApplied = false,
-      preferredDeviceName = preferredDevice?.productName?.toString(),
-      preferredDeviceId = preferredDevice?.id,
-      routedDeviceName = null,
-      routedDeviceId = null,
-    )
-    val preferredApplied = track.setPreferredDevice(preferredDevice)
+    synchronized(lock) {
+      val track = ensureTrack(sampleRate, useCommunicationRoute) ?: return RouteResult(
+        preferredDeviceApplied = false,
+        preferredDeviceName = preferredDevice?.productName?.toString(),
+        preferredDeviceId = preferredDevice?.id,
+        routedDeviceName = null,
+        routedDeviceId = null,
+      )
+      val preferredApplied = track.setPreferredDevice(preferredDevice)
 
-    track.play()
+      track.flush()
+      val startHeadPosition = track.playbackHeadPosition
+      track.play()
 
-    val chunkSize = sampleRate
-    var offset = 0
-    while (offset < samples.size) {
-      val remaining = samples.size - offset
-      val writeSize = minOf(chunkSize, remaining)
-      val written = track.write(samples, offset, writeSize, AudioTrack.WRITE_BLOCKING)
-      if (written <= 0) {
-        BaoLog.w(TAG, "AudioTrack write failed: $written")
-        break
+      val chunkSize = sampleRate
+      var offset = 0
+      while (offset < samples.size) {
+        val remaining = samples.size - offset
+        val writeSize = minOf(chunkSize, remaining)
+        val written = track.write(samples, offset, writeSize, AudioTrack.WRITE_BLOCKING)
+        if (written <= 0) {
+          BaoLog.w(TAG, "AudioTrack write failed: $written")
+          break
+        }
+        offset += written
       }
-      offset += written
+
+      waitForPlaybackDrain(
+        track = track,
+        startHeadPosition = startHeadPosition,
+        writtenFrames = offset,
+        sampleRate = sampleRate,
+      )
+
+      val routedDevice = track.routedDevice
+      track.stop()
+      track.flush()
+
+      return RouteResult(
+        preferredDeviceApplied =
+          preferredApplied && (preferredDevice == null || routedDevice?.id == preferredDevice.id),
+        preferredDeviceName = preferredDevice?.productName?.toString(),
+        preferredDeviceId = preferredDevice?.id,
+        routedDeviceName = routedDevice?.productName?.toString(),
+        routedDeviceId = routedDevice?.id,
+      )
     }
-
-    val routedDevice = track.routedDevice
-    track.stop()
-    track.flush()
-
-    return RouteResult(
-      preferredDeviceApplied =
-        preferredApplied && (preferredDevice == null || routedDevice?.id == preferredDevice.id),
-      preferredDeviceName = preferredDevice?.productName?.toString(),
-      preferredDeviceId = preferredDevice?.id,
-      routedDeviceName = routedDevice?.productName?.toString(),
-      routedDeviceId = routedDevice?.id,
-    )
   }
 
   fun playPcmShort(samples: ShortArray, sampleRate: Int = LOW_LATENCY_SAMPLE_RATE): RouteResult {
@@ -169,5 +181,38 @@ object AudioPlayback {
     activeTrack = null
     cachedSampleRate = 0
     cachedUsage = 0
+  }
+
+  private fun waitForPlaybackDrain(
+    track: AudioTrack,
+    startHeadPosition: Int,
+    writtenFrames: Int,
+    sampleRate: Int,
+  ) {
+    if (writtenFrames <= 0 || sampleRate <= 0) return
+
+    val timeoutMs = (writtenFrames.toLong() * 1_000L / sampleRate) + PLAYBACK_DRAIN_GRACE_MS
+    val deadline = System.currentTimeMillis() + timeoutMs
+    while (
+      framesAdvanced(startHeadPosition, track.playbackHeadPosition) < writtenFrames &&
+        System.currentTimeMillis() < deadline
+    ) {
+      Thread.sleep(20)
+    }
+
+    val advanced = framesAdvanced(startHeadPosition, track.playbackHeadPosition)
+    if (advanced < writtenFrames) {
+      BaoLog.w(TAG, "AudioTrack playback drain timed out: played=$advanced written=$writtenFrames")
+    }
+  }
+
+  private fun framesAdvanced(start: Int, current: Int): Long {
+    val startLong = start.toLong() and 0xFFFF_FFFFL
+    val currentLong = current.toLong() and 0xFFFF_FFFFL
+    return if (currentLong >= startLong) {
+      currentLong - startLong
+    } else {
+      (0x1_0000_0000L - startLong) + currentLong
+    }
   }
 }

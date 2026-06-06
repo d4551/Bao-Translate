@@ -98,21 +98,6 @@ class BaoTranslateScreenshotHarnessTest {
     pressBack()
     composeRule.waitForContentDescription(audioChipPrefix, substring = true)
 
-    val conversationMode = composeRule.stringResource(R.string.bao_translate_conversation_mode)
-    if (composeRule.hasContentDescription(conversationMode)) {
-      composeRule.onAllNodesWithContentDescription(conversationMode, useUnmergedTree = true)
-        .onFirst()
-        .performClick()
-      composeRule.waitForText(R.string.bao_translate_conversation_mode)
-      composeRule.onNodeWithText(composeRule.stringResource(R.string.bao_translate_connect_subtitle))
-        .assertIsDisplayed()
-      composeRule.captureScreenshot("04_conversation_mode", screenshotRunDir)
-      composeRule.onAllNodesWithContentDescription(conversationMode, useUnmergedTree = true)
-        .onFirst()
-        .performClick()
-      composeRule.waitForContentDescription(audioChipPrefix, substring = true)
-    }
-
     composeRule.openBaoTranslateSettings()
     composeRule.onNodeWithText(composeRule.stringResource(R.string.bao_translate_settings_models))
       .performScrollTo()
@@ -128,7 +113,7 @@ class BaoTranslateScreenshotHarnessTest {
     pressBack()
     composeRule.waitForText(R.string.bao_translate_title)
 
-    ensureEveryBaoTranslateModelReady(context)
+    ensureRequiredBaoTranslateModelsReady(context)
     pressBack()
     composeRule.waitForHomeReady(taskDescriptionPrefix, timeoutMillis = 30_000)
     composeRule.openScreenshotTaskByDescription(taskDescriptionPrefix)
@@ -136,13 +121,14 @@ class BaoTranslateScreenshotHarnessTest {
     composeRule.waitForBaoTranslateReadyForRecording(timeoutMillis = 180_000)
     composeRule.captureScreenshot("07_bao_translate_ready_state", screenshotRunDir)
 
+    composeRule.captureConversationModeScreenshot(audioChipPrefix, screenshotRunDir)
     composeRule.captureRecordingStateScreenshot(context, screenshotRunDir)
 
     composeRule.openBaoTranslateSettings()
     composeRule.onNodeWithText(composeRule.stringResource(R.string.bao_translate_settings_models))
       .performScrollTo()
       .assertIsDisplayed()
-    composeRule.captureScreenshot("09_settings_after_all_models_ready", screenshotRunDir)
+    composeRule.captureScreenshot("09_settings_after_required_models_ready", screenshotRunDir)
 
     Log.i(TAG, "BaoTranslate screenshot run saved to $screenshotRunDir")
   }
@@ -155,21 +141,21 @@ class BaoTranslateScreenshotHarnessTest {
     runScreenshotShell("cmd statusbar collapse")
   }
 
-  private fun ensureEveryBaoTranslateModelReady(context: Context) {
-    BaoTranslateModelManager.ALL_MODELS.forEach { model ->
-      if (BaoTranslateModelManager.checkModelStatus(context, model.id) != ModelStatus.Ready) {
+  private fun ensureRequiredBaoTranslateModelsReady(context: Context) {
+    BaoTranslateModelManager.REQUIRED_MODEL_IDS.forEach { modelId ->
+      if (BaoTranslateModelManager.checkModelStatus(context, modelId) != ModelStatus.Ready) {
         val result = runBlocking {
-          BaoTranslateModelManager.downloadModel(context, model.id, wifiOnly = false)
+          BaoTranslateModelManager.downloadModel(context, modelId, wifiOnly = false)
         }
         assertTrue(
-          "Failed to download ${model.id}: ${result.exceptionOrNull()?.message}",
+          "Failed to download $modelId: ${result.exceptionOrNull()?.message}",
           result.isSuccess,
         )
       }
 
-      val status = BaoTranslateModelManager.checkModelStatus(context, model.id)
+      val status = BaoTranslateModelManager.checkModelStatus(context, modelId)
       assertTrue(
-        "${model.id} is not ready after visual harness provisioning; statuses=${statusSummary(context)}",
+        "$modelId is not ready after visual harness provisioning; statuses=${statusSummary(context)}",
         status == ModelStatus.Ready,
       )
     }
@@ -322,7 +308,7 @@ private fun MainActivityScreenshotRule.captureRecordingStateScreenshot(
   onNodeWithContentDescription(stringResource(R.string.cd_bao_translate_stop))
     .assertIsDisplayed()
 
-  Thread.sleep(1_500)
+  Thread.sleep(5_500)
   val audioMonitorBlock = currentAudioMonitorBlock()
   assertTrue(
     "Bao Translate did not expose an active recorder while the screenshot harness was recording: $audioMonitorBlock",
@@ -333,15 +319,38 @@ private fun MainActivityScreenshotRule.captureRecordingStateScreenshot(
     audioMonitorBlock.contains(context.applicationInfo.uid.toString()),
   )
 
-  captureScreenshot("08_recording_default_mic_state", screenshotRunDir)
+  captureScreenshot(
+    "08_recording_default_mic_state",
+    screenshotRunDir,
+    waitForIdleBeforeCapture = false,
+  )
 
-  onNodeWithContentDescription(stringResource(R.string.cd_bao_translate_stop))
-    .assertIsDisplayed()
-    .performClick()
+  tapBottomEndFab()
   waitForContentDescription(
     stringResource(R.string.cd_bao_translate_start),
     timeoutMillis = 20_000,
   )
+}
+
+private fun MainActivityScreenshotRule.captureConversationModeScreenshot(
+  audioChipPrefix: String,
+  screenshotRunDir: String,
+) {
+  val conversationMode = stringResource(R.string.bao_translate_conversation_mode)
+  waitForContentDescription(conversationMode, timeoutMillis = 30_000)
+  onAllNodesWithContentDescription(conversationMode, useUnmergedTree = true)
+    .onFirst()
+    .assertIsDisplayed()
+    .performClick()
+  waitForText(R.string.bao_translate_conversation_mode)
+  onNodeWithText(stringResource(R.string.bao_translate_connect_subtitle))
+    .assertIsDisplayed()
+  captureScreenshot("04_conversation_mode", screenshotRunDir)
+  onAllNodesWithContentDescription(conversationMode, useUnmergedTree = true)
+    .onFirst()
+    .assertIsDisplayed()
+    .performClick()
+  waitForContentDescription(audioChipPrefix, timeoutMillis = 30_000, substring = true)
 }
 
 private fun MainActivityScreenshotRule.waitForText(
@@ -446,8 +455,11 @@ private fun MainActivityScreenshotRule.assertNoLocalPhoneBluetoothRoute() {
 private fun MainActivityScreenshotRule.captureScreenshot(
   name: String,
   screenshotRunDir: String,
+  waitForIdleBeforeCapture: Boolean = true,
 ) {
-  waitForIdle()
+  if (waitForIdleBeforeCapture) {
+    waitForIdle()
+  }
   Thread.sleep(1_000)
   val path = "$screenshotRunDir/$name.png"
   runScreenshotShell("screencap -p $path")
@@ -459,6 +471,12 @@ private fun MainActivityScreenshotRule.captureScreenshot(
     size >= MIN_SCREENSHOT_BYTES,
   )
   Log.i(TAG, "Captured screenshot $path ($size bytes)")
+}
+
+private fun tapBottomEndFab() {
+  val (width, height) = currentScreenSize()
+  runScreenshotShell("input tap ${(width * 0.84f).toInt()} ${(height * 0.92f).toInt()}")
+  Thread.sleep(500)
 }
 
 private fun parseRemoteFileSize(listing: String): Long {
@@ -473,6 +491,14 @@ private fun currentAudioMonitorBlock(): String {
   if (start < 0) return audioDump
   val end = audioDump.indexOf("Events log: ZAudio service playbck & record monitor", start)
   return if (end > start) audioDump.substring(start, end) else audioDump.substring(start)
+}
+
+private fun currentScreenSize(): Pair<Int, Int> {
+  val output = runScreenshotShell("wm size")
+  val sizeText = output.substringAfter("Physical size:", output).trim().lineSequence().firstOrNull().orEmpty()
+  val width = sizeText.substringBefore("x").trim().toIntOrNull() ?: 1080
+  val height = sizeText.substringAfter("x", "").trim().toIntOrNull() ?: 2340
+  return width to height
 }
 
 private fun runScreenshotShell(command: String): String {

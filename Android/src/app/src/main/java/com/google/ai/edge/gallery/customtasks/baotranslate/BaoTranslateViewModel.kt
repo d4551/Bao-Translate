@@ -31,6 +31,7 @@ private const val ALL_DOWNLOADS = "__all_downloads__"
 sealed interface PipelineStatus {
   data object Idle : PipelineStatus
   data object Initializing : PipelineStatus
+  data object StartingRecording : PipelineStatus
   data object Recording : PipelineStatus
   data object Processing : PipelineStatus
   data object Speaking : PipelineStatus
@@ -50,6 +51,7 @@ data class BaoTranslateUiState(
   val modelStatuses: Map<String, ModelStatus> = emptyMap(),
   val amplitudes: List<Float> = emptyList(),
   val elapsedSeconds: Float = 0f,
+  val liveTranslationPreview: String? = null,
   val currentAudioDevice: AudioDevice = AudioDevice.Speaker,
   val availableAudioDevices: List<AudioDevice> = emptyList(),
   val availableInputDevices: List<com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioInputOption> = emptyList(),
@@ -65,6 +67,7 @@ data class BaoTranslateUiState(
   val welcomeDismissed: Boolean = false,
 ) {
   val isRecording: Boolean get() = pipelineStatus == PipelineStatus.Recording
+  val isStartingRecording: Boolean get() = pipelineStatus == PipelineStatus.StartingRecording
   val isProcessing: Boolean get() = pipelineStatus == PipelineStatus.Processing
   val isSpeaking: Boolean get() = pipelineStatus == PipelineStatus.Speaking
   val isInitializing: Boolean get() = pipelineStatus == PipelineStatus.Initializing

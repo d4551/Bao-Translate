@@ -77,6 +77,10 @@ class VoiceClonePipeline(private val context: Context) : TtsEngine {
   }
 
   override fun synthesize(text: String, voiceId: String?, speed: Float): FloatArray? {
+    return synthesizeAudio(text, voiceId, speed)?.samples
+  }
+
+  override fun synthesizeAudio(text: String, voiceId: String?, speed: Float): SynthesizedAudio? {
     val engine = tts ?: return null
     if (!isReady) return null
     val refPath = referenceAudioPath ?: return null
@@ -126,7 +130,7 @@ class VoiceClonePipeline(private val context: Context) : TtsEngine {
       return null
     }
 
-    return audio.samples
+    return SynthesizedAudio(samples = audio.samples, sampleRate = audio.sampleRate)
   }
 
   override fun play(samples: FloatArray, sampleRate: Int) {

@@ -284,8 +284,8 @@ fun BaoTranslateScreen(
   }
 
   Scaffold(
-	    topBar = {
-	      TopAppBar(
+    topBar = {
+      TopAppBar(
         title = {
           Text(
             stringResource(R.string.bao_translate_title),
@@ -333,16 +333,18 @@ fun BaoTranslateScreen(
         },
         modifier = Modifier.widthIn(max = maxWidth),
       )
-	    },
+    },
     floatingActionButton = {
       if (!showConversationMode && uiState.modelsReady) {
         val startDesc = stringResource(R.string.cd_bao_translate_start)
         val stopDesc = stringResource(R.string.cd_bao_translate_stop)
         val canUseMic = uiState.modelsReady &&
           !uiState.isInitializing &&
+          !uiState.isStartingRecording &&
           !uiState.isProcessing &&
           !uiState.isSpeaking &&
           uiState.pipelineStatus !is PipelineStatus.ModelsNotReady
+        val recordingControlActive = uiState.isRecording || uiState.isStartingRecording
         val tooltipState = rememberTooltipState(isPersistent = true)
         val tooltipScope = rememberCoroutineScope()
         TooltipBox(
@@ -356,7 +358,7 @@ fun BaoTranslateScreen(
               .clip(CircleShape)
               .background(
                 when {
-                  uiState.isRecording -> MaterialTheme.customColors.recordButtonBgColor
+                  recordingControlActive -> MaterialTheme.customColors.recordButtonBgColor
                   canUseMic -> MaterialTheme.colorScheme.primary
                   else -> MaterialTheme.colorScheme.surfaceVariant
                 }
@@ -364,7 +366,7 @@ fun BaoTranslateScreen(
               .combinedClickable(
                 onClick = {
                   when {
-                    uiState.isRecording -> viewModel.stopRecording()
+                    recordingControlActive -> viewModel.stopRecording()
                     canUseMic -> startRecordingWithPermission()
                   }
                 },
@@ -378,16 +380,16 @@ fun BaoTranslateScreen(
                 }
               }
               .semantics {
-                contentDescription = if (uiState.isRecording) stopDesc else startDesc
+                contentDescription = if (recordingControlActive) stopDesc else startDesc
               },
             contentAlignment = Alignment.Center,
           ) {
             Icon(
-              imageVector = if (uiState.isRecording) Icons.Default.Stop else Icons.Default.Mic,
+              imageVector = if (recordingControlActive) Icons.Default.Stop else Icons.Default.Mic,
               contentDescription = null,
               modifier = Modifier.size(Dimensions.Icon.large),
               tint = when {
-                uiState.isRecording -> MaterialTheme.colorScheme.onPrimary
+                recordingControlActive -> MaterialTheme.colorScheme.onPrimary
                 canUseMic -> MaterialTheme.colorScheme.onPrimary
                 else -> MaterialTheme.colorScheme.onSurfaceVariant
               },
@@ -431,14 +433,14 @@ fun BaoTranslateScreen(
           }
         }
 
-	        if (!uiState.modelsReady || uiState.pipelineStatus is PipelineStatus.ModelsNotReady) {
-	          RequiredModelsPanel(
-	            uiState = uiState,
-	            onDownloadModel = viewModel::downloadModel,
-	            onDownloadAll = viewModel::downloadRequiredModels,
-	            onInitializeModels = viewModel::initializeModels,
-	            modifier = Modifier.weight(1f).fillMaxWidth(),
-	          )
+        if (!uiState.modelsReady || uiState.pipelineStatus is PipelineStatus.ModelsNotReady) {
+          RequiredModelsPanel(
+            uiState = uiState,
+            onDownloadModel = viewModel::downloadModel,
+            onDownloadAll = viewModel::downloadRequiredModels,
+            onInitializeModels = viewModel::initializeModels,
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+          )
         } else if (showConversationMode) {
           ConversationModeScreen(
             localParticipant = uiState.localParticipant,
@@ -455,27 +457,27 @@ fun BaoTranslateScreen(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             isTablet = isTablet,
           )
-	        } else {
-	          if (uiState.pipelineStatus is PipelineStatus.Error) {
-	            val errorMsg = (uiState.pipelineStatus as PipelineStatus.Error).message
-	            ErrorCard(
-	              message = errorMsg,
-	              onDismiss = viewModel::clearError,
-	              dismissLabel = stringResource(R.string.bao_translate_dismiss),
-	            )
-	          }
+        } else {
+          if (uiState.pipelineStatus is PipelineStatus.Error) {
+            val errorMsg = (uiState.pipelineStatus as PipelineStatus.Error).message
+            ErrorCard(
+              message = errorMsg,
+              onDismiss = viewModel::clearError,
+              dismissLabel = stringResource(R.string.bao_translate_dismiss),
+            )
+          }
 
-	          LanguageSelectionBar(
-	          sourceLanguage = uiState.sourceLanguage,
-	          targetLanguage = uiState.targetLanguage,
-	          onSourceLanguageChange = viewModel::setSourceLanguage,
-	          onTargetLanguageChange = viewModel::setTargetLanguage,
-	          onSwapLanguages = viewModel::swapLanguages,
-	          detectedLanguage = uiState.detectedLanguage,
-	          voiceProfileEnrolled = uiState.voiceProfileEnrolled,
-	          onEnrollVoice = { showEnrollment = true; enrollmentState = EnrollmentState.READY },
-	          isTablet = isTablet,
-	          )
+          LanguageSelectionBar(
+            sourceLanguage = uiState.sourceLanguage,
+            targetLanguage = uiState.targetLanguage,
+            onSourceLanguageChange = viewModel::setSourceLanguage,
+            onTargetLanguageChange = viewModel::setTargetLanguage,
+            onSwapLanguages = viewModel::swapLanguages,
+            detectedLanguage = uiState.detectedLanguage,
+            voiceProfileEnrolled = uiState.voiceProfileEnrolled,
+            onEnrollVoice = { showEnrollment = true; enrollmentState = EnrollmentState.READY },
+            isTablet = isTablet,
+          )
 
           TranscriptList(transcripts = uiState.transcripts, modifier = Modifier.weight(1f).fillMaxWidth(), listState = listState, isTablet = isTablet)
           StatusBar(isProcessing = uiState.isProcessing, isSpeaking = uiState.isSpeaking, isTablet = isTablet)
@@ -486,10 +488,11 @@ fun BaoTranslateScreen(
         RecordingOverlay(
           amplitudes = uiState.amplitudes,
           elapsedSeconds = uiState.elapsedSeconds,
+          liveTranslationPreview = uiState.liveTranslationPreview,
           isTablet = isTablet,
           modifier = Modifier.fillMaxSize(),
         )
       }
     }
   }
-	}
+}

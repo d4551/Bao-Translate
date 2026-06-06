@@ -23,6 +23,25 @@ internal fun isValidTranscription(text: String): Boolean {
         return false
     }
 
+    val soundWords = "music|applause|laughter|silence|noise|whoosh|chirp|breath|inaudible|background|bell|buzz|static|crying|soft music"
+    val soundCaptionPattern = Regex(
+        "^\\([^)]*($soundWords)[^)]*\\)(\\s+\\([^)]*\\))*$",
+        RegexOption.IGNORE_CASE,
+    )
+    if (soundCaptionPattern.matches(trimmed)) {
+        BaoLog.d(TAG, "Filtered: hallucinated sound caption '$trimmed'")
+        return false
+    }
+
+    val bracketedSoundCaptionPattern = Regex(
+        "^\\[[^]]*($soundWords)[^]]*\\]$",
+        RegexOption.IGNORE_CASE,
+    )
+    if (bracketedSoundCaptionPattern.matches(trimmed)) {
+        BaoLog.d(TAG, "Filtered: hallucinated bracket caption '$trimmed'")
+        return false
+    }
+
     val words = trimmed.split("\\s+".toRegex())
     val uniqueWords = words.toSet()
     val repetitionRatio = uniqueWords.size.toFloat() / words.size.toFloat()

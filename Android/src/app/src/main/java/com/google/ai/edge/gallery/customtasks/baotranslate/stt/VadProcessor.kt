@@ -16,6 +16,9 @@ private const val MIN_SPEECH_DURATION_SEC = 0.25f
 private const val MIN_SILENCE_DURATION_SEC = 0.25f
 private const val MAX_SPEECH_DURATION_SEC = 20.0f
 private const val WINDOW_SIZE = 512
+private const val MIN_STT_SEGMENT_SAMPLES = SAMPLE_RATE
+private const val FALLBACK_RMS_THRESHOLD = 0.015f
+private const val FALLBACK_PEAK_THRESHOLD = 1_000
 
 class VadProcessor(private val context: Context) {
   private var vad: Vad? = null
@@ -76,6 +79,7 @@ class VadProcessor(private val context: Context) {
       audioSamples[i].toFloat() / 32768f
     }
 
+    v.reset()
     v.acceptWaveform(floatSamples)
     v.flush()
 
@@ -96,14 +100,19 @@ class VadProcessor(private val context: Context) {
       v.pop()
     }
 
-    if (segments.isEmpty() && audioSamples.isNotEmpty()) {
-      val hasVoiceEnergy = audioSamples.any { kotlin.math.abs(it.toInt()) > 300 }
-      if (hasVoiceEnergy) {
-        segments.add(audioSamples.toList())
-      }
+    val usableSegments = segments.filter { it.size >= MIN_STT_SEGMENT_SAMPLES }
+    if (usableSegments.isNotEmpty()) {
+      v.reset()
+      return usableSegments
     }
 
-    return segments
+    if (audioSamples.hasFallbackSpeechEnergy()) {
+      v.reset()
+      return listOf(audioSamples.toList())
+    }
+
+    v.reset()
+    return emptyList()
   }
 
   fun reset() {
@@ -119,7 +128,7 @@ class VadProcessor(private val context: Context) {
   private fun fallbackSegmentation(audioSamples: ShortArray): List<List<Short>> {
     val minSegmentSamples = SAMPLE_RATE
     val silenceThreshold = 500
-    if (audioSamples.none { kotlin.math.abs(it.toInt()) >= silenceThreshold }) {
+    if (!audioSamples.hasFallbackSpeechEnergy()) {
       return emptyList()
     }
 
@@ -153,5 +162,18 @@ class VadProcessor(private val context: Context) {
     }
 
     return segments
+  }
+
+  private fun ShortArray.hasFallbackSpeechEnergy(): Boolean {
+    if (isEmpty()) return false
+    var peak = 0
+    var sumSquares = 0.0
+    forEach { sample ->
+      val value = sample.toInt()
+      peak = maxOf(peak, kotlin.math.abs(value))
+      sumSquares += value.toDouble() * value.toDouble()
+    }
+    val rms = kotlin.math.sqrt(sumSquares / size) / 32768.0
+    return peak >= FALLBACK_PEAK_THRESHOLD && rms >= FALLBACK_RMS_THRESHOLD
   }
 }

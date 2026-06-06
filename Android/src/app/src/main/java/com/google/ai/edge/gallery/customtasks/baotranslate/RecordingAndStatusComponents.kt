@@ -52,6 +52,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.WaveformRenderer
@@ -88,6 +89,7 @@ internal fun RecordingInfoColumn(
   elapsedSeconds: Float,
   isTablet: Boolean,
   amplitudes: List<Float>,
+  liveTranslationPreview: String?,
 ) {
   Column(
     horizontalAlignment = Alignment.CenterHorizontally,
@@ -114,9 +116,27 @@ internal fun RecordingInfoColumn(
         .fillMaxWidth()
         .padding(horizontal = if (isTablet) Dimensions.Spacing.xxl else Dimensions.Spacing.large)
         .height(if (isTablet) Dimensions.Component.waveformHeightTablet else Dimensions.Component.waveformHeight),
-      amplitudeProvider = { amplitudes.lastOrNull() ?: 0f },
+      amplitudes = amplitudes,
       isActive = true,
     )
+
+    if (!liveTranslationPreview.isNullOrBlank()) {
+      Card(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(horizontal = if (isTablet) Dimensions.Spacing.xxl else Dimensions.Spacing.large),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+      ) {
+        Text(
+          text = liveTranslationPreview,
+          modifier = Modifier.padding(Dimensions.Spacing.medium),
+          style = MaterialTheme.typography.bodyLarge,
+          color = MaterialTheme.colorScheme.onSurface,
+          maxLines = 3,
+          overflow = TextOverflow.Ellipsis,
+        )
+      }
+    }
 
     Text(
       text = stringResource(R.string.bao_translate_tap_to_stop),
@@ -130,6 +150,7 @@ internal fun RecordingInfoColumn(
 internal fun RecordingOverlay(
   amplitudes: List<Float>,
   elapsedSeconds: Float,
+  liveTranslationPreview: String?,
   isTablet: Boolean,
   modifier: Modifier = Modifier,
 ) {
@@ -171,7 +192,12 @@ internal fun RecordingOverlay(
         horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.large),
       ) {
         RecordingPulseCircle(pulseScale = pulseScale, pulseAlpha = pulseAlpha, isTablet = isTablet)
-        RecordingInfoColumn(elapsedSeconds = elapsedSeconds, isTablet = isTablet, amplitudes = amplitudes)
+        RecordingInfoColumn(
+          elapsedSeconds = elapsedSeconds,
+          isTablet = isTablet,
+          amplitudes = amplitudes,
+          liveTranslationPreview = liveTranslationPreview,
+        )
       }
     } else {
       Column(
@@ -179,7 +205,12 @@ internal fun RecordingOverlay(
         verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.large),
       ) {
         RecordingPulseCircle(pulseScale = pulseScale, pulseAlpha = pulseAlpha, isTablet = isTablet)
-        RecordingInfoColumn(elapsedSeconds = elapsedSeconds, isTablet = isTablet, amplitudes = amplitudes)
+        RecordingInfoColumn(
+          elapsedSeconds = elapsedSeconds,
+          isTablet = isTablet,
+          amplitudes = amplitudes,
+          liveTranslationPreview = liveTranslationPreview,
+        )
       }
     }
   }

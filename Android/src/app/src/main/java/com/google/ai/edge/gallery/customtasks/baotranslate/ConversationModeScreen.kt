@@ -1,9 +1,12 @@
 package com.google.ai.edge.gallery.customtasks.baotranslate
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,6 +18,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothConnected
 import androidx.compose.material.icons.filled.Check
@@ -43,7 +47,6 @@ import com.google.ai.edge.gallery.customtasks.baotranslate.bluetooth.ConnectionS
 import com.google.ai.edge.gallery.customtasks.baotranslate.bluetooth.DiscoveredPeer
 import com.google.ai.edge.gallery.customtasks.baotranslate.data.Participant
 import com.google.ai.edge.gallery.customtasks.baotranslate.data.SupportedLanguages
-import com.google.ai.edge.gallery.ui.common.EmptyState
 import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.customColors
 
@@ -65,11 +68,12 @@ fun ConversationModeScreen(
   isTablet: Boolean = false,
 ) {
   val maxWidth = if (isTablet) Dimensions.Component.maxContentWidthTablet else Dimensions.Component.maxContentWidth
-  
+
   Column(
     modifier = modifier
-      .fillMaxWidth()
+      .fillMaxSize()
       .widthIn(max = maxWidth)
+      .verticalScroll(rememberScrollState())
       .padding(Dimensions.Spacing.medium),
     verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.medium),
   ) {
@@ -142,18 +146,7 @@ fun ConversationModeScreen(
     )
 
     if (!isScanning && discoveredPeers.isEmpty() && remoteParticipants.isEmpty()) {
-      Box(
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(vertical = Dimensions.Spacing.xl),
-        contentAlignment = Alignment.Center,
-      ) {
-        EmptyState(
-          icon = Icons.Default.Search,
-          titleResId = R.string.bao_translate_no_devices_found,
-          descriptionResId = R.string.bao_translate_devices_hint,
-        )
-      }
+      NoDevicesState()
     }
 
     val connectedCount = remoteParticipants.count { it.isConnected }
@@ -164,7 +157,7 @@ fun ConversationModeScreen(
     ) {
       Icon(
         imageVector = Icons.Default.Bluetooth,
-        contentDescription = stringResource(R.string.bao_translate_conversation_mode),
+        contentDescription = null,
       )
       Spacer(modifier = Modifier.width(Dimensions.Spacing.small))
       Text(
@@ -318,9 +311,7 @@ private fun ParticipantCard(
       },
     ),
   ) {
-    Column(
-      modifier = Modifier.padding(Dimensions.Spacing.medium),
-    ) {
+    Column(modifier = Modifier.padding(Dimensions.Spacing.medium)) {
       Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -330,16 +321,22 @@ private fun ParticipantCard(
             .size(Dimensions.Icon.xl)
             .clip(CircleShape)
             .background(
-              if (isLocal) MaterialTheme.colorScheme.primary
-              else MaterialTheme.colorScheme.surfaceVariant
+              if (isLocal) {
+                MaterialTheme.colorScheme.primary
+              } else {
+                MaterialTheme.colorScheme.surfaceVariant
+              }
             ),
           contentAlignment = Alignment.Center,
         ) {
           Icon(
             imageVector = Icons.Default.Person,
             contentDescription = null,
-            tint = if (isLocal) MaterialTheme.colorScheme.onPrimary
-            else MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = if (isLocal) {
+              MaterialTheme.colorScheme.onPrimary
+            } else {
+              MaterialTheme.colorScheme.onSurfaceVariant
+            },
           )
         }
 
@@ -348,7 +345,11 @@ private fun ParticipantCard(
         Column(modifier = Modifier.weight(1f)) {
           Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-              text = if (isLocal) stringResource(R.string.bao_translate_you_suffix, participant.name) else participant.name,
+              text = if (isLocal) {
+                stringResource(R.string.bao_translate_you_suffix, participant.name)
+              } else {
+                participant.name
+              },
               style = MaterialTheme.typography.titleSmall,
               fontWeight = FontWeight.Bold,
             )
@@ -371,15 +372,15 @@ private fun ParticipantCard(
             }
           }
 
-	          Text(
-	            text = stringResource(
-	              R.string.bao_translate_lang_pair_format,
-	              participantLanguageDisplayName(participant.sourceLanguage),
-	              participantLanguageDisplayName(participant.targetLanguage),
-	            ),
-	            style = MaterialTheme.typography.bodySmall,
-	            color = MaterialTheme.colorScheme.onSurfaceVariant,
-	          )
+          Text(
+            text = stringResource(
+              R.string.bao_translate_lang_pair_format,
+              participantLanguageDisplayName(participant.sourceLanguage),
+              participantLanguageDisplayName(participant.targetLanguage),
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
         }
       }
 
@@ -395,9 +396,14 @@ private fun ParticipantCard(
             is AudioDevice.WiredHeadset -> audioDevice.name
             AudioDevice.Speaker -> stringResource(R.string.bao_translate_phone_speaker)
           }
+          val routeIcon = when (audioDevice) {
+            is AudioDevice.BluetoothHeadset -> Icons.Default.BluetoothConnected
+            is AudioDevice.WiredHeadset -> Icons.AutoMirrored.Filled.VolumeUp
+            AudioDevice.Speaker -> Icons.AutoMirrored.Filled.VolumeUp
+          }
           Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
-              imageVector = Icons.Default.BluetoothConnected,
+              imageVector = routeIcon,
               contentDescription = null,
               modifier = Modifier.size(Dimensions.Icon.small),
               tint = MaterialTheme.colorScheme.primary,
@@ -428,7 +434,42 @@ private fun ParticipantCard(
         }
       }
     }
-	}
+  }
+}
+
+@Composable
+private fun NoDevicesState() {
+  Card(
+    modifier = Modifier.fillMaxWidth(),
+    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+  ) {
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(Dimensions.Spacing.medium),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
+    ) {
+      Icon(
+        imageVector = Icons.Default.Search,
+        contentDescription = null,
+        modifier = Modifier.size(Dimensions.Icon.large),
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+      Column(modifier = Modifier.weight(1f)) {
+        Text(
+          text = stringResource(R.string.bao_translate_no_devices_found),
+          style = MaterialTheme.typography.titleSmall,
+          fontWeight = FontWeight.Bold,
+        )
+        Text(
+          text = stringResource(R.string.bao_translate_devices_hint),
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      }
+    }
+  }
 }
 
 @Composable
@@ -466,11 +507,11 @@ private fun ScanSection(
           )
           if (discoveredCount > 0) {
             Spacer(modifier = Modifier.width(Dimensions.Spacing.small))
-          Text(
-            text = stringResource(R.string.bao_translate_devices_found_format, discoveredCount),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.primary,
-          )
+            Text(
+              text = stringResource(R.string.bao_translate_devices_found_format, discoveredCount),
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.primary,
+            )
           }
         }
 

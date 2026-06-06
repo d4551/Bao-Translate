@@ -58,7 +58,11 @@ class SmokeE2eTest {
 
     composeRule.clickTextIfPresent(R.string.bao_translate_welcome_get_started)
     composeRule.waitForText(R.string.bao_translate_title)
-    composeRule.onNodeWithText(composeRule.stringResource(R.string.bao_translate_title))
+    composeRule.onAllNodesWithText(
+        composeRule.stringResource(R.string.bao_translate_title),
+        useUnmergedTree = true,
+      )
+      .onFirst()
       .assertIsDisplayed()
     composeRule.waitForBaoTranslateReadyOrSetup()
     val audioChipPrefix = composeRule.audioChipContentDescriptionPrefix()

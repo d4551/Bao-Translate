@@ -32,9 +32,16 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.util.UUID
+import kotlin.math.sqrt
 
 private const val REC_TAG = "BaoTranslateRec"
 private const val INPUT_ROUTE_TIMEOUT_MS = 2_000L
+private const val LIVE_TRANSLATION_WINDOW_SECONDS = 8
+private const val LIVE_TRANSLATION_STRIDE_SECONDS = 4
+private const val MIN_TRANSLATION_SEGMENT_SECONDS = 1
+private const val WAVEFORM_VISUAL_GAIN = 2.5f
+private const val AUDIO_READ_EMPTY_SLEEP_MS = 20L
+private const val AUDIO_READ_STALL_TIMEOUT_MS = 3_000L
 
 internal class RecordingController(
   private val pipelines: PipelineLifecycleManager,
@@ -45,12 +52,14 @@ internal class RecordingController(
   private val getApp: () -> Application,
 ) {
   private val recordingMutex = Mutex()
+  private val segmentProcessingMutex = Mutex()
   @Volatile private var holdsRecordingLock = false
+  @Volatile private var currentRecordingSessionId = 0L
   var recordingJob: Job? = null
   var audioRecord: AudioRecord? = null
 
   fun startRecording() {
-    if (uiState.value.isRecording) return
+    if (uiState.value.isRecordingActive) return
     val app = getApp()
     if (!pipelines.requiredPipelinesReady()) {
       uiState.update { it.copy(
@@ -62,10 +71,21 @@ internal class RecordingController(
 
     if (!recordingMutex.tryLock()) return
     holdsRecordingLock = true
+    val recordingSessionId = currentRecordingSessionId + 1
+    currentRecordingSessionId = recordingSessionId
 
-    uiState.update { it.copy(pipelineStatus = PipelineStatus.Recording, errorMessage = null) }
+    uiState.update {
+      it.copy(
+        pipelineStatus = PipelineStatus.StartingRecording,
+        errorMessage = null,
+        liveTranslationPreview = null,
+        amplitudes = emptyList(),
+        elapsedSeconds = 0f,
+      )
+    }
 
     recordingJob = viewModelScope.launch(Dispatchers.IO) {
+      try {
       if (ContextCompat.checkSelfPermission(app, Manifest.permission.RECORD_AUDIO) !=
         PackageManager.PERMISSION_GRANTED
       ) {
@@ -145,12 +165,17 @@ internal class RecordingController(
 
       audioRecord = recorder
       val buffer = ShortArray((bufferSize / 2).coerceAtLeast(sampleRate / 10))
-
       val startTime = System.currentTimeMillis()
-      val maxSamples = sampleRate * 60
-      val allSamples = ShortArray(maxSamples)
+      val liveWindowSamples = sampleRate * LIVE_TRANSLATION_WINDOW_SECONDS
+      val liveStrideSamples = sampleRate * LIVE_TRANSLATION_STRIDE_SECONDS
+      val minSegmentSamples = sampleRate * MIN_TRANSLATION_SEGMENT_SECONDS
+      val pendingSamples = ShortArray(liveWindowSamples)
       var sampleCount = 0
+      var samplesSinceLastLiveWindow = 0
+      var queuedLiveSegment = false
       var recordingFailed = false
+      var publishedRecordingState = false
+      var lastPositiveReadAt = System.currentTimeMillis()
 
       recorder.startRecording()
 
@@ -165,6 +190,10 @@ internal class RecordingController(
         ) }
         return@launch
       }
+      BaoLog.i(
+        REC_TAG,
+        "AudioRecord started session=$recordingSessionId source=$audioSource bufferBytes=$bufferSize preferredInputId=${preferredInputInfo?.id}",
+      )
 
       if (preferredInputInfo != null && !recorder.waitForPreferredInputRoute(preferredInputInfo.id)) {
         BaoLog.e(
@@ -184,17 +213,30 @@ internal class RecordingController(
         return@launch
       }
 
-      // `isActive` lets the blocking read loop exit on coroutine cancellation (e.g. ViewModel
-      // cleared mid-recording) so the AudioRecord below is released and the mic doesn't stay live.
-      while (isActive && uiState.value.isRecording) {
-        val readCount = recorder.read(buffer, 0, buffer.size)
+      // `isActive` lets the read loop exit on coroutine cancellation (e.g. ViewModel cleared
+      // mid-recording) so the AudioRecord below is released and the mic doesn't stay live.
+      while (isActive && uiState.value.isRecordingActive) {
+        val readCount = recorder.read(buffer, 0, buffer.size, AudioRecord.READ_NON_BLOCKING)
 
         when {
           readCount > 0 -> {
-            val copyCount = minOf(readCount, maxSamples - sampleCount)
-            if (copyCount > 0) {
-              System.arraycopy(buffer, 0, allSamples, sampleCount, copyCount)
+            lastPositiveReadAt = System.currentTimeMillis()
+            var bufferOffset = 0
+            while (bufferOffset < readCount) {
+              val copyCount = minOf(readCount - bufferOffset, liveWindowSamples - sampleCount)
+              System.arraycopy(buffer, bufferOffset, pendingSamples, sampleCount, copyCount)
               sampleCount += copyCount
+              samplesSinceLastLiveWindow += copyCount
+              bufferOffset += copyCount
+
+              if (sampleCount == liveWindowSamples) {
+                queueRealtimeTranslationSegment(recordingSessionId, pendingSamples.copyOf(sampleCount))
+                queuedLiveSegment = true
+                val overlapSamples = liveWindowSamples - liveStrideSamples
+                System.arraycopy(pendingSamples, liveStrideSamples, pendingSamples, 0, overlapSamples)
+                sampleCount = overlapSamples
+                samplesSinceLastLiveWindow = 0
+              }
             }
 
             val elapsed = (System.currentTimeMillis() - startTime) / 1000f
@@ -203,13 +245,45 @@ internal class RecordingController(
               val sample = buffer[i].toLong()
               sumSquares += sample * sample
             }
-            val amplitude = (sumSquares.toFloat() / readCount) / (32768f * 32768f)
+            val rms = sqrt(sumSquares.toDouble() / readCount) / 32768.0
+            val amplitude = (sqrt(rms).toFloat() * WAVEFORM_VISUAL_GAIN).coerceIn(0f, 1f)
             val newAmplitudes = (uiState.value.amplitudes + amplitude).takeLast(50)
+            if (!publishedRecordingState) {
+              val stats = buffer.copyOf(readCount).audioStats()
+              BaoLog.i(
+                REC_TAG,
+                "First mic frame session=$recordingSessionId read=$readCount rms=${stats.rms} peak=${stats.peak}",
+              )
+              publishedRecordingState = true
+            }
 
-            uiState.update { it.copy(
-              elapsedSeconds = elapsed,
-              amplitudes = newAmplitudes,
-            ) }
+            uiState.update { state ->
+              if (!state.isRecordingActive) {
+                state
+              } else {
+                state.copy(
+                  pipelineStatus = PipelineStatus.Recording,
+                  elapsedSeconds = elapsed,
+                  amplitudes = newAmplitudes,
+                )
+              }
+            }
+          }
+          readCount == 0 -> {
+            val now = System.currentTimeMillis()
+            if (now - lastPositiveReadAt >= AUDIO_READ_STALL_TIMEOUT_MS) {
+              BaoLog.e(
+                REC_TAG,
+                "AudioRecord produced no mic frames for ${now - lastPositiveReadAt}ms session=$recordingSessionId",
+              )
+              uiState.update { it.copy(
+                pipelineStatus = PipelineStatus.Idle,
+                errorMessage = app.getString(R.string.bao_translate_error_microphone_init),
+              ) }
+              recordingFailed = true
+              break
+            }
+            Thread.sleep(AUDIO_READ_EMPTY_SLEEP_MS)
           }
           readCount < 0 -> {
             BaoLog.e(REC_TAG, "AudioRecord read returned error: $readCount")
@@ -235,18 +309,32 @@ internal class RecordingController(
         return@launch
       }
 
-      if (sampleCount > sampleRate) {
-        processAudioSegment(allSamples.copyOf(sampleCount))
-      } else if (sampleCount > 0) {
-        uiState.update { it.copy(errorMessage = getApp().getString(R.string.bao_translate_error_recording_short)) }
+      val finalSampleCount = if (queuedLiveSegment) samplesSinceLastLiveWindow else sampleCount
+      val finalMinimumSamples = if (queuedLiveSegment) liveStrideSamples else minSegmentSamples
+      if (finalSampleCount >= finalMinimumSamples) {
+        val finalStart = sampleCount - finalSampleCount
+        segmentProcessingMutex.withLock {
+          processAudioSegment(
+            pendingSamples.copyOfRange(finalStart, sampleCount),
+            recordingSessionId = recordingSessionId,
+            preserveRecordingStatus = false,
+            reportEmptySpeech = !queuedLiveSegment,
+          )
+        }
+      } else if (sampleCount > 0 && !queuedLiveSegment) {
+        if (!queuedLiveSegment) {
+          uiState.update { it.copy(errorMessage = getApp().getString(R.string.bao_translate_error_recording_short)) }
+        }
+      }
+      } finally {
+        unlockRecordingIfHeld()
       }
     }
   }
 
   fun stopRecording() {
-    if (!uiState.value.isRecording) return
+    if (!uiState.value.isRecordingActive) return
     uiState.update { it.copy(pipelineStatus = PipelineStatus.Idle) }
-    unlockRecordingIfHeld()
   }
 
   private fun unlockRecordingIfHeld() {
@@ -256,8 +344,49 @@ internal class RecordingController(
     }
   }
 
-  private suspend fun processAudioSegment(audioSamples: ShortArray) {
-    uiState.update { it.copy(pipelineStatus = PipelineStatus.Processing) }
+  private fun queueRealtimeTranslationSegment(recordingSessionId: Long, audioSamples: ShortArray) {
+    BaoLog.i(
+      REC_TAG,
+      "Queue live segment session=$recordingSessionId ${audioSamples.audioStats()}",
+    )
+    viewModelScope.launch(Dispatchers.IO) {
+      segmentProcessingMutex.withLock {
+        processAudioSegment(
+          audioSamples = audioSamples,
+          recordingSessionId = recordingSessionId,
+          preserveRecordingStatus = true,
+          reportEmptySpeech = false,
+        )
+      }
+    }
+  }
+
+  private fun statusAfterSegment(preserveRecordingStatus: Boolean): PipelineStatus =
+    if (preserveRecordingStatus && uiState.value.isRecording) {
+      PipelineStatus.Recording
+    } else {
+      PipelineStatus.Idle
+    }
+
+  private fun isStaleRecordingSegment(recordingSessionId: Long?): Boolean =
+    recordingSessionId != null && recordingSessionId != currentRecordingSessionId
+
+	  private suspend fun processAudioSegment(
+    audioSamples: ShortArray,
+    recordingSessionId: Long? = null,
+    preserveRecordingStatus: Boolean = false,
+    reportEmptySpeech: Boolean = true,
+	  ) {
+	    if (isStaleRecordingSegment(recordingSessionId)) return
+	    val inputStats = audioSamples.audioStats()
+	    BaoLog.i(
+	      REC_TAG,
+	      "Process audio segment preserve=$preserveRecordingStatus reportEmpty=$reportEmptySpeech $inputStats",
+	    )
+
+    if (!preserveRecordingStatus) {
+      uiState.update { it.copy(pipelineStatus = PipelineStatus.Processing) }
+    }
 
     val (whisper, translation, vad) = pipelines.pipelineMutex.withLock {
       Triple(pipelines.whisperPipeline, pipelines.translationPipeline, pipelines.vadProcessor)
@@ -265,7 +394,7 @@ internal class RecordingController(
 
     if (whisper == null) {
       uiState.update { it.copy(
-        pipelineStatus = PipelineStatus.Idle,
+        pipelineStatus = statusAfterSegment(preserveRecordingStatus),
         errorMessage = getApp().getString(R.string.bao_translate_error_stt_not_init),
       ) }
       return
@@ -273,7 +402,7 @@ internal class RecordingController(
 
     if (translation == null) {
       uiState.update { it.copy(
-        pipelineStatus = PipelineStatus.Idle,
+        pipelineStatus = statusAfterSegment(preserveRecordingStatus),
         errorMessage = getApp().getString(R.string.bao_translate_error_translation_not_init),
       ) }
       return
@@ -286,37 +415,49 @@ internal class RecordingController(
         newVad
       } else {
         uiState.update { it.copy(
-          pipelineStatus = PipelineStatus.Idle,
+          pipelineStatus = statusAfterSegment(preserveRecordingStatus),
           errorMessage = getApp().getString(R.string.bao_translate_error_vad_init),
         ) }
         return
       }
     }
 
-    val speechSegments = vadProcessor.processAudioSegment(audioSamples)
+	    val speechSegments = vadProcessor.processAudioSegment(audioSamples)
+	    BaoLog.i(
+	      REC_TAG,
+	      "VAD returned segments=${speechSegments.size} preserve=$preserveRecordingStatus inputSamples=${audioSamples.size}",
+	    )
+	    if (isStaleRecordingSegment(recordingSessionId)) return
+
     if (speechSegments.isEmpty()) {
-      uiState.update { it.copy(
-        pipelineStatus = PipelineStatus.Idle,
-        errorMessage = getApp().getString(R.string.bao_translate_error_no_speech_detected),
-      ) }
+      if (reportEmptySpeech) {
+        uiState.update { it.copy(
+          pipelineStatus = statusAfterSegment(preserveRecordingStatus),
+          errorMessage = getApp().getString(R.string.bao_translate_error_no_speech_detected),
+        ) }
+      }
       return
     }
 
     for (segment in speechSegments) {
       val transcriptionResult = whisper.transcribeBlocking(segment.toShortArray())
+      if (isStaleRecordingSegment(recordingSessionId)) return
 
       val transcription = transcriptionResult.fold(
         onSuccess = { it },
         onFailure = { error ->
           BaoLog.w(REC_TAG, "Transcription failed: ${error.message}")
-          uiState.update { it.copy(errorMessage = getApp().getString(R.string.bao_error_transcription_failed, error.message)) }
+          if (!isStaleRecordingSegment(recordingSessionId)) {
+            uiState.update { it.copy(errorMessage = getApp().getString(R.string.bao_error_transcription_failed, error.message)) }
+          }
           null
         },
       ) ?: continue
 
       if (!isValidTranscription(transcription.text)) {
-        BaoLog.d(REC_TAG, "Filtered invalid transcription: '${transcription.text}'")
-        uiState.update { it.copy(errorMessage = getApp().getString(R.string.bao_translate_error_no_clear_speech)) }
+        if (reportEmptySpeech) {
+          uiState.update { it.copy(errorMessage = getApp().getString(R.string.bao_translate_error_no_clear_speech)) }
+        }
         continue
       }
 
@@ -331,6 +472,7 @@ internal class RecordingController(
       val targetLang = SupportedLanguages.codeFor(uiState.value.targetLanguage)
 
       if (uiState.value.sourceLanguage == SupportedLanguages.AUTO.key) {
+        if (isStaleRecordingSegment(recordingSessionId)) return
         uiState.update {
           it.copy(
             detectedLanguage = SupportedLanguages.keyForCode(sourceLang)
@@ -344,10 +486,16 @@ internal class RecordingController(
         sourceLanguage = sourceLang,
         targetLanguage = targetLang,
       )
+      if (isStaleRecordingSegment(recordingSessionId)) return
 
       when (translationOutcome) {
-        is TranslationOutcome.Success -> {
-          val translatedText = translationOutcome.result.translatedText
+	        is TranslationOutcome.Success -> {
+          if (isStaleRecordingSegment(recordingSessionId)) return
+	          val translatedText = translationOutcome.result.translatedText
+	          BaoLog.i(
+	            REC_TAG,
+	            "Translation success preserve=$preserveRecordingStatus source=$sourceLang target=$targetLang translatedChars=${translatedText.length}",
+	          )
           val messageId = UUID.randomUUID().toString()
           val message = TranslationMessage(
             id = messageId,
@@ -361,11 +509,26 @@ internal class RecordingController(
             translationError = null,
           )
 
-          uiState.update { it.copy(
-            transcripts = it.transcripts + message,
-          ) }
+          uiState.update {
+            it.copy(
+              transcripts = it.transcripts + message,
+              liveTranslationPreview = if (preserveRecordingStatus) translatedText else it.liveTranslationPreview,
+            )
+          }
 
-          val audioPlayed = synthesizeSpeech(translatedText, targetLang)
+          val shouldPlayNow =
+            !preserveRecordingStatus || uiState.value.currentAudioDevice !is AudioDevice.Speaker
+          val audioPlayed = if (shouldPlayNow) {
+            synthesizeSpeech(
+              text = translatedText,
+              language = targetLang,
+              recordingSessionId = recordingSessionId,
+              preserveRecordingStatus = preserveRecordingStatus,
+            )
+          } else {
+            false
+          }
+          if (isStaleRecordingSegment(recordingSessionId)) return
           uiState.update { state ->
             state.copy(
               transcripts = state.transcripts.map { existing ->
@@ -378,7 +541,12 @@ internal class RecordingController(
             bleManager.sendTranscript(transcription.text, sourceLang, targetLang)
           }
         }
-        is TranslationOutcome.Failure -> {
+	        is TranslationOutcome.Failure -> {
+	          BaoLog.w(
+	            REC_TAG,
+	            "Translation failed preserve=$preserveRecordingStatus source=$sourceLang target=$targetLang reasonChars=${translationOutcome.reason.length}",
+	          )
+          if (isStaleRecordingSegment(recordingSessionId)) return
           val message = TranslationMessage(
             id = UUID.randomUUID().toString(),
             originalText = transcription.text,
@@ -398,13 +566,24 @@ internal class RecordingController(
       }
     }
 
-    uiState.update { it.copy(pipelineStatus = PipelineStatus.Idle) }
+    if (!preserveRecordingStatus && !isStaleRecordingSegment(recordingSessionId)) {
+      uiState.update { it.copy(pipelineStatus = PipelineStatus.Idle) }
+    }
   }
 
   // `internal` so the conversation receive path (BaoTranslateViewModel) can speak peer messages
   // through the same engine-selection + playback logic, instead of duplicating it.
-  internal suspend fun synthesizeSpeech(text: String, language: String): Boolean {
-    uiState.update { it.copy(pipelineStatus = PipelineStatus.Speaking) }
+  internal suspend fun synthesizeSpeech(
+    text: String,
+    language: String,
+    recordingSessionId: Long? = null,
+    preserveRecordingStatus: Boolean = false,
+  ): Boolean {
+    if (isStaleRecordingSegment(recordingSessionId)) return false
+
+    if (!preserveRecordingStatus) {
+      uiState.update { it.copy(pipelineStatus = PipelineStatus.Speaking) }
+    }
 
     val state = uiState.value
     val engine: TtsEngine? = when {
@@ -418,20 +597,27 @@ internal class RecordingController(
       val voiceId = if (engine == pipelines.kokoroTts) {
         KokoroTtsPipeline.getVoiceForLanguage(language)
       } else null
-      val audioSamples = engine.synthesize(text, voiceId)
-      if (audioSamples != null) {
+      val audio = engine.synthesizeAudio(text, voiceId)
+      if (audio != null) {
+        if (isStaleRecordingSegment(recordingSessionId)) return false
         withContext(Dispatchers.Default) {
-          audioRouter.play(audioSamples)
+          audioRouter.play(audio.samples, sampleRate = audio.sampleRate)
         }
         played = true
       } else {
-        uiState.update { it.copy(errorMessage = getApp().getString(R.string.bao_translate_error_tts_synthesis_failed)) }
+        if (!isStaleRecordingSegment(recordingSessionId)) {
+          uiState.update { it.copy(errorMessage = getApp().getString(R.string.bao_translate_error_tts_synthesis_failed)) }
+        }
       }
     } else {
-      uiState.update { it.copy(errorMessage = getApp().getString(R.string.bao_translate_error_tts_engine_not_ready)) }
+      if (!isStaleRecordingSegment(recordingSessionId)) {
+        uiState.update { it.copy(errorMessage = getApp().getString(R.string.bao_translate_error_tts_engine_not_ready)) }
+      }
     }
 
-    uiState.update { it.copy(pipelineStatus = PipelineStatus.Idle) }
+    if (!preserveRecordingStatus && !isStaleRecordingSegment(recordingSessionId)) {
+      uiState.update { it.copy(pipelineStatus = PipelineStatus.Idle) }
+    }
     return played
   }
 
@@ -443,4 +629,34 @@ internal class RecordingController(
     } while (System.currentTimeMillis() < deadline)
     return routedDevice?.id == deviceId
   }
+
+}
+
+private val BaoTranslateUiState.isRecordingActive: Boolean
+  get() = isRecording || isStartingRecording
+
+private data class AudioStats(
+  val samples: Int,
+  val rms: String,
+  val peak: Int,
+)
+
+private fun ShortArray.audioStats(): AudioStats {
+  if (isEmpty()) {
+    return AudioStats(samples = 0, rms = "0.000000", peak = 0)
+  }
+
+  var peak = 0
+  var sumSquares = 0.0
+  forEach { sample ->
+    val value = sample.toInt()
+    peak = maxOf(peak, kotlin.math.abs(value))
+    sumSquares += value.toDouble() * value.toDouble()
+  }
+  val rms = sqrt(sumSquares / size) / 32768.0
+  return AudioStats(
+    samples = size,
+    rms = "%.6f".format(java.util.Locale.US, rms),
+    peak = peak,
+  )
 }
