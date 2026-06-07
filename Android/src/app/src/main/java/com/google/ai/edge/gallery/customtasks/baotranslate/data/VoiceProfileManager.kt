@@ -81,6 +81,22 @@ class VoiceProfileManager(
 
   fun deleteProfile(profileId: String = DEFAULT_PROFILE_ID) {
     File(profilesDir, "$profileId.wav").delete()
+    File(profilesDir, "$profileId.se").delete()
+  }
+
+  /** Persists the OpenVoice speaker embedding (256 floats) derived from the enrollment clip. */
+  fun saveSpeakerEmbedding(embedding: FloatArray, profileId: String = DEFAULT_PROFILE_ID) {
+    val buf = java.nio.ByteBuffer.allocate(embedding.size * 4).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+    embedding.forEach { buf.putFloat(it) }
+    File(profilesDir, "$profileId.se").writeBytes(buf.array())
+  }
+
+  fun loadSpeakerEmbedding(profileId: String = DEFAULT_PROFILE_ID): FloatArray? {
+    val file = File(profilesDir, "$profileId.se")
+    if (!file.exists()) return null
+    val bytes = file.readBytes()
+    val buf = java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+    return FloatArray(bytes.size / 4) { buf.getFloat() }
   }
 
   fun getVoicePath(profileId: String): String? {

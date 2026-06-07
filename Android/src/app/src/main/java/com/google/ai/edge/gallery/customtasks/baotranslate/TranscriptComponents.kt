@@ -78,13 +78,41 @@ internal fun TranscriptList(
 
 @Composable
 internal fun TranslationBubble(message: TranslationMessage, modifier: Modifier = Modifier, isTablet: Boolean = false) {
+  val bubbleContainerColor =
+    if (message.isUser) {
+      MaterialTheme.customColors.userBubbleBgColor
+    } else {
+      MaterialTheme.customColors.agentBubbleBgColor
+    }
+  val bubbleContentColor =
+    if (message.isUser) {
+      MaterialTheme.customColors.userBubbleContentColor
+    } else {
+      MaterialTheme.colorScheme.onSurface
+    }
+  val bubbleSecondaryContentColor =
+    if (message.isUser) {
+      MaterialTheme.customColors.userBubbleSecondaryContentColor
+    } else {
+      MaterialTheme.colorScheme.onSurfaceVariant
+    }
+  val bubbleTertiaryContentColor =
+    if (message.isUser) {
+      MaterialTheme.customColors.userBubbleTertiaryContentColor
+    } else {
+      MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
   Row(
     modifier = modifier.fillMaxWidth(),
     horizontalArrangement = if (message.isUser) Arrangement.End else Arrangement.Start,
   ) {
     Card(
       modifier = Modifier.widthIn(max = if (isTablet) Dimensions.Component.bubbleMaxWidthTablet else Dimensions.Component.bubbleMaxWidth).fillMaxWidth(if (isTablet) 0.82f else 0.9f),
-      colors = CardDefaults.cardColors(containerColor = if (message.isUser) MaterialTheme.customColors.userBubbleBgColor else MaterialTheme.customColors.agentBubbleBgColor),
+      colors = CardDefaults.cardColors(
+        containerColor = bubbleContainerColor,
+        contentColor = bubbleContentColor,
+      ),
     ) {
       Column(modifier = Modifier.padding(if (isTablet) Dimensions.Spacing.large else Dimensions.Spacing.medium), verticalArrangement = Arrangement.spacedBy(if (isTablet) Dimensions.Spacing.small else Dimensions.Spacing.small)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -96,15 +124,19 @@ internal fun TranslationBubble(message: TranslationMessage, modifier: Modifier =
             },
             style = if (isTablet) MaterialTheme.typography.labelLarge else MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
-            color = if (message.isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+            color = bubbleContentColor,
           )
           Text(
             text = stringResource(R.string.bao_translate_arrow_format, languageDisplayName(message.targetLanguage)),
             style = if (isTablet) MaterialTheme.typography.labelLarge else MaterialTheme.typography.labelMedium,
-            color = if (message.isUser) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = bubbleSecondaryContentColor,
           )
         }
-        Text(message.originalText, style = if (isTablet) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium, color = if (message.isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
+        Text(
+          message.originalText,
+          style = if (isTablet) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium,
+          color = bubbleContentColor,
+        )
         
         if (message.translationError != null) {
           Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs)) {
@@ -116,14 +148,24 @@ internal fun TranslationBubble(message: TranslationMessage, modifier: Modifier =
             )
           }
         } else {
-          Text(message.translatedText, style = if (isTablet) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall, fontStyle = FontStyle.Italic, color = if (message.isUser) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant)
+          Text(
+            message.translatedText,
+            style = if (isTablet) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
+            fontStyle = FontStyle.Italic,
+            color = bubbleSecondaryContentColor,
+          )
           if (message.audioPlayed != null) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs)) {
-              Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = stringResource(R.string.cd_bao_translate_playback), modifier = Modifier.size(if (isTablet) Dimensions.Icon.medium else Dimensions.Icon.small), tint = if (message.isUser) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant)
+              Icon(
+                Icons.AutoMirrored.Filled.VolumeUp,
+                contentDescription = stringResource(R.string.cd_bao_translate_playback),
+                modifier = Modifier.size(if (isTablet) Dimensions.Icon.medium else Dimensions.Icon.small),
+                tint = bubbleTertiaryContentColor,
+              )
               Text(
                 stringResource(if (message.audioPlayed) R.string.bao_translate_played else R.string.bao_translate_audio_unavailable),
                 style = MaterialTheme.typography.labelSmall,
-                color = if (message.isUser) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = bubbleTertiaryContentColor,
               )
             }
           }

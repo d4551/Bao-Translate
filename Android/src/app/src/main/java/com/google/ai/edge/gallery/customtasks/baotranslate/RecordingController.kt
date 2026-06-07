@@ -24,6 +24,7 @@ import com.google.ai.edge.gallery.customtasks.baotranslate.bluetooth.BleConversa
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -31,6 +32,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.coroutineContext
 import java.util.UUID
 import kotlin.math.sqrt
 
@@ -63,6 +65,16 @@ internal class RecordingController(
   // point), preventing TTS/transcripts from firing after the user has stopped.
   private val liveSegmentJobs = mutableListOf<Job>()
 
+  internal companion object {
+    // Test-only injection point. When non-null, the next startRecording() sources audio from this
+    // 16 kHz mono PCM instead of the microphone, then clears it. Set only by instrumentation tests
+    // (the device echo canceller makes acoustic speaker->own-mic loopback unusable for STT).
+    @JvmStatic
+    @androidx.annotation.VisibleForTesting(otherwise = androidx.annotation.VisibleForTesting.NONE)
+    @Volatile
+    internal var testPcmSource: ShortArray? = null
+  }
+
   fun startRecording() {
     if (uiState.value.isRecordingActive) return
     val app = getApp()
@@ -87,6 +99,19 @@ internal class RecordingController(
         amplitudes = emptyList(),
         elapsedSeconds = 0f,
       )
+    }
+
+    // Test-only seam: drive the live-translation pipeline from injected PCM instead of the mic.
+    // A device's echo canceller cancels its own speaker output captured by its own mic, so an
+    // automated speaker->mic self-loopback cannot feed STT; this routes clean PCM through the SAME
+    // VAD -> Whisper -> translate -> UI path. Never set outside instrumentation tests.
+    val injectedPcm = testPcmSource
+    if (injectedPcm != null) {
+      testPcmSource = null
+      recordingJob = viewModelScope.launch(Dispatchers.IO) {
+        runInjectedLiveTranslationForTest(recordingSessionId, injectedPcm)
+      }
+      return
     }
 
     recordingJob = viewModelScope.launch(Dispatchers.IO) {
@@ -337,6 +362,47 @@ internal class RecordingController(
     }
   }
 
+  // Mirrors the mic read-loop's lifecycle (publish Recording, window the audio into live segments,
+  // flush the tail, stay "recording" until stop) but sources audio from injected PCM. Reuses the
+  // real queueRealtimeTranslationSegment / processAudioSegment path so STT, translation, and UI
+  // markers behave exactly as in production.
+  private suspend fun runInjectedLiveTranslationForTest(recordingSessionId: Long, pcm: ShortArray) {
+    try {
+      val sampleRate = PipelineConfig.STT_SAMPLE_RATE
+      val liveWindowSamples = sampleRate * LIVE_TRANSLATION_WINDOW_SECONDS
+      val liveStrideSamples = sampleRate * LIVE_TRANSLATION_STRIDE_SECONDS
+      val minSegmentSamples = sampleRate * MIN_TRANSLATION_SEGMENT_SECONDS
+      uiState.update { it.copy(pipelineStatus = PipelineStatus.Recording, errorMessage = null) }
+      BaoLog.i(REC_TAG, "Injected live translation session=$recordingSessionId samples=${pcm.size} (TEST)")
+
+      var queuedLiveSegment = false
+      var offset = 0
+      while (offset + liveWindowSamples <= pcm.size && coroutineContext.isActive) {
+        queueRealtimeTranslationSegment(recordingSessionId, pcm.copyOfRange(offset, offset + liveWindowSamples))
+        queuedLiveSegment = true
+        offset += liveStrideSamples
+      }
+      val tailStart = if (queuedLiveSegment) offset else 0
+      if (pcm.size - tailStart >= minSegmentSamples) {
+        segmentProcessingMutex.withLock {
+          processAudioSegment(
+            pcm.copyOfRange(tailStart, pcm.size),
+            recordingSessionId = recordingSessionId,
+            preserveRecordingStatus = true,
+            reportEmptySpeech = !queuedLiveSegment,
+          )
+        }
+      }
+
+      // Stay "recording" until the test presses stop, exactly like the mic loop.
+      while (coroutineContext.isActive && uiState.value.isRecordingActive) {
+        delay(100)
+      }
+    } finally {
+      unlockRecordingIfHeld()
+    }
+  }
+
   fun stopRecording() {
     if (!uiState.value.isRecordingActive) return
     uiState.update { it.copy(pipelineStatus = PipelineStatus.Idle) }
@@ -460,6 +526,7 @@ internal class RecordingController(
 
     for (segment in speechSegments) {
       val transcriptionResult = whisper.transcribeBlocking(segment.toShortArray())
+      BaoLog.i(REC_TAG, "STT done success=${transcriptionResult.isSuccess} chars=${transcriptionResult.getOrNull()?.text?.length ?: 0}")
       if (isStaleRecordingSegment(recordingSessionId)) return
 
       val transcription = transcriptionResult.fold(
@@ -617,29 +684,36 @@ internal class RecordingController(
     }
 
     val state = uiState.value
-    val engine: TtsEngine? = when {
-      state.ttsEngine == "pocket_tts" && state.voiceProfileEnrolled && pipelines.voiceCloneTts != null -> pipelines.voiceCloneTts
-      state.ttsEngine == "pocket_tts" && pipelines.kokoroTts != null -> pipelines.kokoroTts
-      else -> pipelines.kokoroTts
+    val kokoro = pipelines.kokoroTts
+    val ovConverter = pipelines.openVoiceConverter
+    val ovTargetSe = pipelines.openVoiceTargetSe
+
+    // Languages Kokoro can't voice (de/ko/ru/ar/...) MUST use the platform-TTS fallback — otherwise
+    // they'd be spoken with an English Kokoro voice (wrong-language gibberish). No clone for these
+    // (the converter only re-times Kokoro output), but a correct generic voice beats wrong audio.
+    val nativeToKokoro = KokoroTtsPipeline.supportsLanguage(language)
+
+    // Preferred (Kokoro languages): OpenVoice cross-lingual clone — Kokoro supplies correct
+    // pronunciation, then the converter re-times it into the enrolled user's timbre. Falls back to
+    // generic Kokoro if conversion fails or the user hasn't enrolled a voice.
+    val audio = when {
+      !nativeToKokoro -> pipelines.platformTts?.synthesizeAudio(text, language)
+      state.voiceProfileEnrolled && ovConverter != null && ovTargetSe != null && kokoro != null -> {
+        val base = kokoro.synthesizeAudio(text, KokoroTtsPipeline.getVoiceForLanguage(language))
+        base?.let { ovConverter.convert(it, ovTargetSe) } ?: base
+      }
+      kokoro != null ->
+        kokoro.synthesizeAudio(text, KokoroTtsPipeline.getVoiceForLanguage(language))
+      else -> null
     }
 
     var played = false
-    if (engine != null) {
-      val voiceId = if (engine == pipelines.kokoroTts) {
-        KokoroTtsPipeline.getVoiceForLanguage(language)
-      } else null
-      val audio = engine.synthesizeAudio(text, voiceId)
-      if (audio != null) {
-        if (isStaleRecordingSegment(recordingSessionId)) return false
-        withContext(Dispatchers.Default) {
-          audioRouter.play(audio.samples, sampleRate = audio.sampleRate)
-        }
-        played = true
-      } else {
-        if (!isStaleRecordingSegment(recordingSessionId)) {
-          uiState.update { it.copy(errorMessage = getApp().getString(R.string.bao_translate_error_tts_synthesis_failed)) }
-        }
+    if (audio != null) {
+      if (isStaleRecordingSegment(recordingSessionId)) return false
+      withContext(Dispatchers.Default) {
+        audioRouter.play(audio.samples, sampleRate = audio.sampleRate)
       }
+      played = true
     } else {
       if (!isStaleRecordingSegment(recordingSessionId)) {
         uiState.update { it.copy(errorMessage = getApp().getString(R.string.bao_translate_error_tts_engine_not_ready)) }

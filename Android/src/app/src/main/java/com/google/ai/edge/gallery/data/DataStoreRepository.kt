@@ -90,7 +90,6 @@ interface DataStoreRepository {
 /** Persisted, variable Bao Translate preferences. */
 data class BaoTranslateStoredSettings(
   val translationModel: String,
-  val ttsEngine: String,
   val sourceLanguage: String,
   val targetLanguage: String,
   val wifiOnlyDownloads: Boolean,
@@ -310,7 +309,6 @@ class DefaultDataStoreRepository(
     dataStore.updateData {
       it.toBuilder()
         .setBaoTranslateTranslationModel(settings.translationModel)
-        .setBaoTranslateTtsEngine(settings.ttsEngine)
         .setBaoTranslateSourceLanguage(settings.sourceLanguage)
         .setBaoTranslateTargetLanguage(settings.targetLanguage)
         .setBaoTranslateWifiOnlyDownloads(settings.wifiOnlyDownloads)
@@ -327,7 +325,6 @@ class DefaultDataStoreRepository(
       } else {
         BaoTranslateStoredSettings(
           translationModel = s.baoTranslateTranslationModel,
-          ttsEngine = s.baoTranslateTtsEngine,
           sourceLanguage = s.baoTranslateSourceLanguage,
           targetLanguage = s.baoTranslateTargetLanguage,
           wifiOnlyDownloads = s.baoTranslateWifiOnlyDownloads,

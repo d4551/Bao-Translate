@@ -25,10 +25,6 @@ internal class ParticipantStateManager(
     val enrolled = voiceProfileManager.hasProfile()
     val profile = voiceProfileManager.loadProfile()
 
-    if (enrolled && profile != null && pipelines.voiceCloneTts != null) {
-      pipelines.voiceCloneTts?.setReferenceAudio(profile.wavPath)
-    }
-
     uiState.update { state ->
       val participant = Participant(
         id = profile?.id ?: state.localParticipant?.id ?: localParticipantId,

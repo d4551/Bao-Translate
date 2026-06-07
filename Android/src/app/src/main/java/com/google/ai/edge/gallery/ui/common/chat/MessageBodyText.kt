@@ -22,7 +22,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
@@ -33,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.ui.common.BufferedFadingMarkdownText
 import com.google.ai.edge.gallery.ui.common.MarkdownText
+import com.google.ai.edge.gallery.ui.theme.customColors
 
 /** Composable function to display the text content of a ChatMessageText. */
 @Composable
@@ -43,12 +43,13 @@ fun MessageBodyText(
   onCopyClicked: (String) -> Unit = {},
 ) {
   if (message.side == ChatSide.USER) {
+    val userBubbleContentColor = MaterialTheme.customColors.userBubbleContentColor
     LongPressCopyContainer(copyText = message.content, onCopyClicked = onCopyClicked) {
       MarkdownText(
         text = message.content,
         modifier = Modifier.padding(vertical = 12.dp).padding(horizontal = horizontalPadding),
-        textColor = Color.White,
-        linkColor = Color.White,
+        textColor = userBubbleContentColor,
+        linkColor = userBubbleContentColor,
       )
     }
   } else if (message.side == ChatSide.AGENT) {

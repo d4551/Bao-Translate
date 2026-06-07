@@ -5,8 +5,12 @@ import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.customtasks.baotranslate.stt.VadProcessor
 import com.google.ai.edge.gallery.customtasks.baotranslate.stt.WhisperPipeline
 import com.google.ai.edge.gallery.customtasks.baotranslate.translate.TranslationPipeline
+import com.google.ai.edge.gallery.customtasks.baotranslate.audio.WavUtils
+import com.google.ai.edge.gallery.customtasks.baotranslate.data.VoiceProfileManager
 import com.google.ai.edge.gallery.customtasks.baotranslate.tts.KokoroTtsPipeline
-import com.google.ai.edge.gallery.customtasks.baotranslate.tts.VoiceClonePipeline
+import com.google.ai.edge.gallery.customtasks.baotranslate.tts.OpenVoiceVoiceConverter
+import com.google.ai.edge.gallery.customtasks.baotranslate.tts.PlatformTtsPipeline
+import java.io.File
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -16,23 +20,61 @@ internal class PipelineLifecycleManager {
   @Volatile var whisperPipeline: WhisperPipeline? = null
   @Volatile var translationPipeline: TranslationPipeline? = null
   @Volatile var kokoroTts: KokoroTtsPipeline? = null
-  @Volatile var voiceCloneTts: VoiceClonePipeline? = null
+  // Fallback TTS for languages Kokoro can't voice (de/ko/ru/ar/...). Lazily initializes the device
+  // engine on first use; created alongside Kokoro so the synth path can route non-native languages.
+  @Volatile var platformTts: PlatformTtsPipeline? = null
   @Volatile var vadProcessor: VadProcessor? = null
 
-  suspend fun initializePipelines(app: Application, translationModel: String) {
+  // OpenVoice cross-lingual clone: converts Kokoro output into the enrolled user's timbre.
+  @Volatile var openVoiceConverter: OpenVoiceVoiceConverter? = null
+  @Volatile var openVoiceTargetSe: FloatArray? = null
+
+  private fun initOpenVoiceLocked(app: Application) {
+    if (!BaoTranslateModelManager.isOpenVoiceCloneAvailable(app)) return
+    val conv = OpenVoiceVoiceConverter(app)
+    if (!conv.initialize(
+        BaoTranslateModelManager.getOpenVoiceConverterFile(app),
+        BaoTranslateModelManager.getOpenVoiceRefEncFile(app),
+      )
+    ) {
+      return
+    }
+    openVoiceConverter = conv
+    val vpm = VoiceProfileManager(app)
+    var se = vpm.loadSpeakerEmbedding()
+    if (se == null) {
+      // Migrate: derive the embedding from an existing enrollment clip and cache it.
+      val profile = vpm.loadProfile()
+      if (profile != null) {
+        val bytes = File(profile.wavPath).takeIf { it.exists() }?.readBytes()
+        if (bytes != null && WavUtils.isValidWav(bytes)) {
+          val rate = WavUtils.extractSampleRateFromWav(bytes) ?: 16000
+          se = conv.computeSpeakerEmbedding(WavUtils.extractSamplesFromWav(bytes), rate)
+            ?.also { vpm.saveSpeakerEmbedding(it) }
+        }
+      }
+    }
+    openVoiceTargetSe = se
+  }
+
+  // [sttLanguage] is the Whisper decode language ("" = auto-detect). Forcing the user's chosen
+  // source language is essential: Whisper-base auto-detect mis-identifies several languages (e.g.
+  // Spanish/Italian/Portuguese -> "Latin"), which corrupts the transcript. Honoring the selected
+  // language fixes recognition. Verified on device in BaoTranslateLanguageMatrixE2eTest.
+  suspend fun initializePipelines(app: Application, translationModel: String, sttLanguage: String = "") {
     pipelineMutex.withLock {
       cleanupPipelinesLocked()
-      initializeAllPipelines(app, translationModel)
+      initializeAllPipelines(app, translationModel, sttLanguage)
     }
   }
 
-  private suspend fun initializeAllPipelines(app: Application, translationModel: String) {
+  private suspend fun initializeAllPipelines(app: Application, translationModel: String, sttLanguage: String) {
     val modelManager = BaoTranslateModelManager
 
     val whisperDir = modelManager.getWhisperModelDir(app)
     if (whisperDir.exists()) {
       val whisper = WhisperPipeline(app)
-      if (whisper.initialize(whisperDir.absolutePath)) {
+      if (whisper.initialize(whisperDir.absolutePath, sttLanguage)) {
         whisperPipeline = whisper
       }
     }
@@ -53,22 +95,17 @@ internal class PipelineLifecycleManager {
         kokoroTts = kokoro
       }
     }
-
-    val pocketDir = modelManager.getPocketTtsModelDir(app)
-    if (pocketDir.exists()) {
-      val clone = VoiceClonePipeline(app)
-      if (clone.initialize(pocketDir.absolutePath)) {
-        voiceCloneTts = clone
-      }
-    }
+    platformTts = PlatformTtsPipeline(app)
 
     val vad = VadProcessor(app)
     if (vad.initialize()) {
       vadProcessor = vad
     }
+
+    initOpenVoiceLocked(app)
   }
 
-  private suspend fun initializeComponent(app: Application, component: String, translationModel: String) {
+  private suspend fun initializeComponent(app: Application, component: String, translationModel: String, sttLanguage: String) {
     val modelManager = BaoTranslateModelManager
 
     when (component) {
@@ -76,7 +113,7 @@ internal class PipelineLifecycleManager {
         val whisperDir = modelManager.getWhisperModelDir(app)
         if (whisperDir.exists()) {
           val whisper = WhisperPipeline(app)
-          if (whisper.initialize(whisperDir.absolutePath)) {
+          if (whisper.initialize(whisperDir.absolutePath, sttLanguage)) {
             whisperPipeline = whisper
           }
         }
@@ -104,14 +141,8 @@ internal class PipelineLifecycleManager {
             kokoroTts = kokoro
           }
         }
-
-        val pocketDir = modelManager.getPocketTtsModelDir(app)
-        if (pocketDir.exists()) {
-          val clone = VoiceClonePipeline(app)
-          if (clone.initialize(pocketDir.absolutePath)) {
-            voiceCloneTts = clone
-          }
-        }
+        platformTts = PlatformTtsPipeline(app)
+        initOpenVoiceLocked(app)
       }
     }
   }
@@ -129,13 +160,16 @@ internal class PipelineLifecycleManager {
     translationPipeline = null
     kokoroTts?.cleanup()
     kokoroTts = null
-    voiceCloneTts?.cleanup()
-    voiceCloneTts = null
+    platformTts?.cleanup()
+    platformTts = null
+    openVoiceConverter?.cleanup()
+    openVoiceConverter = null
+    openVoiceTargetSe = null
     vadProcessor?.cleanup()
     vadProcessor = null
   }
 
-  suspend fun reinitializePipeline(app: Application, component: String, translationModel: String) {
+  suspend fun reinitializePipeline(app: Application, component: String, translationModel: String, sttLanguage: String = "") {
     pipelineMutex.withLock {
       when (component) {
         "stt" -> {
@@ -151,12 +185,14 @@ internal class PipelineLifecycleManager {
         "tts" -> {
           kokoroTts?.cleanup()
           kokoroTts = null
-          voiceCloneTts?.cleanup()
-          voiceCloneTts = null
+          platformTts?.cleanup()
+          platformTts = null
+          openVoiceConverter?.cleanup()
+          openVoiceConverter = null
         }
       }
 
-      initializeComponent(app, component, translationModel)
+      initializeComponent(app, component, translationModel, sttLanguage)
     }
   }
 

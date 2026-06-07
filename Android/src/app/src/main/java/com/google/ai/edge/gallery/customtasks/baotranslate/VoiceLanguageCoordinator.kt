@@ -26,7 +26,11 @@ internal class VoiceLanguageCoordinator(
 ) {
 
   fun setSourceLanguage(language: String) {
+    if (uiState.value.sourceLanguage == language) return
     applyLocalParticipantUpdate { it.copy(sourceLanguage = language, detectedLanguage = null) }
+    // Re-init STT so Whisper decodes in the newly-selected language. Auto-detect mis-IDs several
+    // languages (es/it/pt -> "Latin"); forcing the chosen one fixes recognition.
+    reinitializePipeline("stt")
   }
 
   fun setTargetLanguage(language: String) {
@@ -36,25 +40,23 @@ internal class VoiceLanguageCoordinator(
 
   fun onLanguageChanged(source: String, target: String) {
     if (target == SupportedLanguages.AUTO.key) return
+    val sourceChanged = uiState.value.sourceLanguage != source
     applyLocalParticipantUpdate { it.copy(sourceLanguage = source, targetLanguage = target) }
+    if (sourceChanged) reinitializePipeline("stt")
   }
 
   fun swapLanguages() {
     if (uiState.value.sourceLanguage == SupportedLanguages.AUTO.key) return
     val src = uiState.value.sourceLanguage
     val tgt = uiState.value.targetLanguage
+    if (src == tgt) return
     applyLocalParticipantUpdate { it.copy(sourceLanguage = tgt, targetLanguage = src) }
+    // Source language changed -> STT must re-init for the new language.
+    reinitializePipeline("stt")
   }
 
   fun onVoiceEnrolled(audioPath: String) {
     applyLocalParticipantUpdate { it.copy(voiceProfileEnrolled = true, voiceProfilePath = audioPath) }
-
-    viewModelScope.launch(Dispatchers.IO) {
-      val file = File(audioPath)
-      if (file.exists()) {
-        pipelines.voiceCloneTts?.setReferenceAudio(audioPath)
-      }
-    }
   }
 
   fun startEnrollmentRecording(audioPcm: ShortArray, sampleRate: Int) {
@@ -69,19 +71,27 @@ internal class VoiceLanguageCoordinator(
         updated.copy(localParticipant = participant)
       }
       uiState.value.localParticipant?.let { bleManager.setLocalParticipant(it) }
-      pipelines.voiceCloneTts?.setReferenceAudio(profile.wavPath)
+
+      // OpenVoice cross-lingual clone: derive + persist the speaker embedding from the enrollment
+      // clip so the synth path can speak any target language in the user's timbre.
+      pipelines.openVoiceConverter?.let { converter ->
+        val floats = FloatArray(audioPcm.size) { audioPcm[it] / 32768f }
+        converter.computeSpeakerEmbedding(floats, sampleRate)?.let { embedding ->
+          voiceProfileManager.saveSpeakerEmbedding(embedding)
+          pipelines.openVoiceTargetSe = embedding
+        }
+      }
     }
   }
 
   fun deleteVoiceProfile() {
     viewModelScope.launch(Dispatchers.IO) {
       voiceProfileManager.deleteProfile()
-      pipelines.voiceCloneTts?.clearReferenceAudio()
+      pipelines.openVoiceTargetSe = null
       uiState.update { state ->
         val updated = state.copy(
           voiceProfileEnrolled = false,
           voiceProfilePath = null,
-          ttsEngine = if (state.ttsEngine == "pocket_tts") "kokoro" else state.ttsEngine,
         )
         val participant = updateLocalParticipant(updated)
         updated.copy(localParticipant = participant)
@@ -114,22 +124,6 @@ internal class VoiceLanguageCoordinator(
     }
     uiState.update { it.copy(translationModel = model) }
     reinitializePipeline("translation")
-  }
-
-  fun setTtsEngine(engine: String) {
-    val supported = setOf("kokoro", "pocket_tts")
-    if (engine !in supported) return
-    if (engine == "pocket_tts") {
-      val state = uiState.value
-      val pocketReady = state.modelStatuses["pocket_tts"] == ModelStatus.Ready && pipelines.voiceCloneTts != null
-      if (!pocketReady || !state.voiceProfileEnrolled) {
-        uiState.update {
-          it.copy(errorMessage = getApp().getString(R.string.bao_translate_error_voice_clone_not_ready))
-        }
-        return
-      }
-    }
-    uiState.update { it.copy(ttsEngine = engine) }
   }
 
   fun setWifiOnly(enabled: Boolean) {

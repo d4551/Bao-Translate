@@ -1,0 +1,20 @@
+ID: OOS-001
+FINDING: OpenVoiceVoiceConverter has no internal inferenceLock. convert() (line 60-83) and
+  computeSpeakerEmbedding() (line 53-57) call native ONNX handles (conv.run / re.run) on captured
+  locals, while cleanup() (line 85-89) closes those same handles (converter?.close(), refEnc?.close()).
+  Only @Volatile ready guards them. The class doc says "Not thread-safe; callers serialize," but
+  RecordingController.synthesizeSpeech reads pipelines.openVoiceConverter (RecordingController.kt:621)
+  and calls ovConverter.convert(...) (RecordingController.kt:631) OUTSIDE pipelineMutex and outside any
+  lock. Concurrent deleteVoiceProfile / model delete / pipeline cleanup during an in-flight convert() is
+  the SAME native use-after-free class as the (already-fixed) translation/whisper/vad paths.
+PATHS:
+  - Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/baotranslate/tts/OpenVoiceVoiceConverter.kt:60,85
+  - Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/baotranslate/RecordingController.kt:619-631
+RISK: Native SIGSEGV (use-after-free) on the TTS/voice-clone synthesis path under concurrent cleanup.
+PROPOSED_LADDER_SLOT: Belongs to the SEPARATELY-OWNED TTS synthesis fix
+  (RecordingController.synthesizeSpeech must take pipelineMutex around engine selection + synthesis).
+  That wrap MUST enclose the OpenVoice convert() call (RecordingController.kt:631), not just Kokoro's
+  synthesizeAudio() — otherwise OpenVoiceVoiceConverter remains exposed. Alternatively, give
+  OpenVoiceVoiceConverter its own inferenceLock that convert()/computeSpeakerEmbedding()/cleanup()
+  all acquire, mirroring TranslationPipeline/WhisperPipeline/VadProcessor/KokoroTtsPipeline.
+STATUS: OPEN — out of scope for this task (translation + whisper/vad paths). Flagged for TTS owner.

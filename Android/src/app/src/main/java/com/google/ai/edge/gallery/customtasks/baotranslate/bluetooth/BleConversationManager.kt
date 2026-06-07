@@ -85,6 +85,16 @@ class BleConversationManager(private val context: Context) {
   private val _messages = MutableSharedFlow<BleTranscriptMessage>(replay = 0)
   val messages: SharedFlow<BleTranscriptMessage> = _messages
 
+  /**
+   * Test-only: deliver an incoming peer transcript through the exact same flow a real BLE message
+   * would, so instrumentation can verify multi-speaker receive routing (translate peer language ->
+   * local target, attribute to the speaker, speak) without a second physical device. Suspends until
+   * the collector (the ViewModel) receives it.
+   */
+  internal suspend fun simulateIncomingTranscriptForTest(message: BleTranscriptMessage) {
+    _messages.emit(message)
+  }
+
   private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
   val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
 

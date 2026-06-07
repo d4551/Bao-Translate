@@ -152,6 +152,19 @@ class KokoroTtsPipeline(private val context: Context) : TtsEngine {
       KokoroVoice("zm_yunjian", "zh", "male", 49),
     )
 
+    // Languages Kokoro can natively voice. Others must use a platform-TTS fallback rather than
+    // silently speaking foreign text with an English voice.
+    private val NATIVE_LANGUAGES = setOf("en", "es", "fr", "hi", "it", "ja", "pt", "zh")
+
+    fun supportsLanguage(language: String): Boolean {
+      val code = when (language.lowercase()) {
+        "english" -> "en"; "spanish" -> "es"; "french" -> "fr"; "hindi" -> "hi"; "italian" -> "it"
+        "japanese" -> "ja"; "portuguese" -> "pt"; "chinese" -> "zh"
+        else -> language.lowercase().substringBefore('-')
+      }
+      return code in NATIVE_LANGUAGES
+    }
+
     fun getVoiceForLanguage(language: String, gender: String = "female"): String {
       val normalizedLang = when (language.lowercase()) {
         "en", "english" -> "en"

@@ -43,6 +43,7 @@ mlkit-genai-prompt = "1.0.0-beta2"  # Ref: https://developers.google.com/ml-kit/
 mcp = "0.8.0"
 ktor = "3.4.3"
 sherpaOnnx = "1.13.2"
+onnxruntimeAndroid = "1.24.3"
 bluetoothCommunicator = "1.0.6"
 commonsCompress = "1.26.1"
 mockitoKotlin = "5.4.0"
@@ -104,6 +105,7 @@ mcp-kotlin-sdk = { group = "io.modelcontextprotocol", name = "kotlin-sdk", versi
 ktor-client-android = { group = "io.ktor", name = "ktor-client-android", version.ref = "ktor" }
 ktor-client-core = { group = "io.ktor", name = "ktor-client-core", version.ref = "ktor" }
 sherpa-onnx = { module = "com.k2fsa.sherpa:onnx", version.ref = "sherpaOnnx" }
+onnxruntime-android = { module = "com.microsoft.onnxruntime:onnxruntime-android", version.ref = "onnxruntimeAndroid" }
 bluetooth-communicator = { group = "com.github.niedev", name = "BluetoothCommunicator", version.ref = "bluetoothCommunicator" }
 commons-compress = { group = "org.apache.commons", name = "commons-compress", version.ref = "commonsCompress" }
 mockito-kotlin = { group = "org.mockito.kotlin", name = "mockito-kotlin", version.ref = "mockitoKotlin" }

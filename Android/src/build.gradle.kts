@@ -15,6 +15,24 @@
  */
 
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+// com.google.protobuf:protobuf-gradle-plugin:0.9.5 transitively pulls com.android.tools.build:gradle
+// 7.1.0 onto the buildscript classpath. Its pre-8.0 CommonExtension shadows AGP 8.8.2's and breaks
+// the Kotlin-DSL `android { packaging { ... } }` accessor (unresolved reference / cross-classloader
+// cast). Pin the build tools to this project's AGP so a single, correct CommonExtension is used.
+buildscript {
+  configurations.classpath {
+    resolutionStrategy.eachDependency {
+      if (requested.group == "com.android.tools.build" &&
+        (requested.name == "gradle" || requested.name == "gradle-api")
+      ) {
+        useVersion(libs.versions.agp.get())
+        because("protobuf-gradle-plugin drags AGP 7.1.0; force this project's AGP for a single DSL")
+      }
+    }
+  }
+}
+
 plugins {
   alias(libs.plugins.android.application) apply false
   alias(libs.plugins.google.services) apply false

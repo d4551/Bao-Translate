@@ -61,13 +61,11 @@ fun BaoTranslateSettingsSheet(
   preferredInputDevice: AudioDevice.BluetoothHeadset?,
   sttModel: String,
   translationModel: String,
-  ttsEngine: String,
   wifiOnlyDownloads: Boolean,
   storageBreakdown: Map<String, Long>,
   modelStatuses: Map<String, ModelStatus>,
   onSttModelChange: (String) -> Unit,
   onTranslationModelChange: (String) -> Unit,
-  onTtsEngineChange: (String) -> Unit,
   onWifiOnlyChange: (Boolean) -> Unit,
   onReRecordVoice: () -> Unit,
   onDeleteVoiceProfile: () -> Unit,
@@ -269,29 +267,6 @@ fun BaoTranslateSettingsSheet(
               }
             }
           }
-
-          HorizontalDivider()
-
-          val pocketTtsReady = modelStatuses["pocket_tts"] == ModelStatus.Ready && voiceProfile != null
-          SettingsRadioGroup(
-            label = stringResource(R.string.bao_translate_tts_engine),
-            options = listOf(
-              stringResource(R.string.bao_translate_tts_option_kokoro) to "kokoro",
-              stringResource(R.string.bao_translate_tts_option_pocket_tts) to "pocket_tts",
-            ),
-            selectedOption = ttsEngine,
-            onOptionSelected = onTtsEngineChange,
-            enabledOptions = if (pocketTtsReady) {
-              setOf("kokoro", "pocket_tts")
-            } else {
-              setOf("kokoro")
-            },
-            optionDescriptions = if (pocketTtsReady) {
-              emptyMap()
-            } else {
-              mapOf("pocket_tts" to stringResource(R.string.bao_translate_voice_clone_requires_setup))
-            },
-          )
         }
       }
 

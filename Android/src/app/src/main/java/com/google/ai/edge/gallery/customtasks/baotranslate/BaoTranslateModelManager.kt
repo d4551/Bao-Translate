@@ -37,7 +37,7 @@ data class ModelInfo(
 )
 
 enum class ModelCategory {
-  STT, TRANSLATION, TTS, VAD, VOICE_CLONE
+  STT, TRANSLATION, TTS, VAD
 }
 
 /**
@@ -76,12 +76,6 @@ object BaoTranslateModelManager {
       displayNameRes = R.string.bao_model_kokoro_tts,
       category = ModelCategory.TTS,
       estimatedSizeMb = 142,
-    ),
-    ModelInfo(
-      id = "pocket_tts",
-      displayNameRes = R.string.bao_model_pocket_tts,
-      category = ModelCategory.VOICE_CLONE,
-      estimatedSizeMb = 198,
     ),
     ModelInfo(
       id = "silero_vad",
@@ -148,22 +142,6 @@ object BaoTranslateModelManager {
       ),
       extractDir = "kokoro-multi-lang-v1_0",
     ),
-    ArchiveSpec(
-      modelId = "pocket_tts",
-      archiveFileName = "sherpa-onnx-pocket-tts-int8-2026-01-26.tar.bz2",
-      downloadUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/sherpa-onnx-pocket-tts-int8-2026-01-26.tar.bz2",
-      sizeBytes = 100_000_000L,
-      requiredFiles = listOf(
-        "sherpa-onnx-pocket-tts-int8-2026-01-26/lm_flow.int8.onnx",
-        "sherpa-onnx-pocket-tts-int8-2026-01-26/lm_main.int8.onnx",
-        "sherpa-onnx-pocket-tts-int8-2026-01-26/encoder.onnx",
-        "sherpa-onnx-pocket-tts-int8-2026-01-26/decoder.int8.onnx",
-        "sherpa-onnx-pocket-tts-int8-2026-01-26/text_conditioner.onnx",
-        "sherpa-onnx-pocket-tts-int8-2026-01-26/vocab.json",
-        "sherpa-onnx-pocket-tts-int8-2026-01-26/token_scores.json",
-      ),
-      extractDir = "sherpa-onnx-pocket-tts-int8-2026-01-26",
-    ),
   )
 
   private val FILES = listOf(
@@ -199,14 +177,25 @@ object BaoTranslateModelManager {
   fun getKokoroModelDir(context: Context): File =
     File(getSherpaOnnxDir(context), "kokoro-multi-lang-v1_0")
 
-  fun getPocketTtsModelDir(context: Context): File =
-    File(getSherpaOnnxDir(context), "sherpa-onnx-pocket-tts-int8-2026-01-26")
-
   fun getVadModelPath(context: Context): String =
     File(getSherpaOnnxDir(context), "silero_vad.onnx").absolutePath
 
   fun getWhisperModelDir(context: Context): File =
     File(getSherpaOnnxDir(context), "sherpa-onnx-whisper-base")
+
+  // OpenVoice cross-lingual voice-clone ONNX artifacts (cloned voice in the target language),
+  // run at exact length on ONNX Runtime for crisp output.
+  fun getOpenVoiceDir(context: Context): File =
+    File(context.filesDir, "openvoice").also { it.mkdirs() }
+
+  fun getOpenVoiceConverterFile(context: Context): File =
+    File(getOpenVoiceDir(context), "ov_converter.onnx")
+
+  fun getOpenVoiceRefEncFile(context: Context): File =
+    File(getOpenVoiceDir(context), "ov_refenc.onnx")
+
+  fun isOpenVoiceCloneAvailable(context: Context): Boolean =
+    getOpenVoiceConverterFile(context).exists() && getOpenVoiceRefEncFile(context).exists()
 
   fun getTranslationModelDir(context: Context, modelId: String = "qwen25_1b"): File =
     File(getTranslationDir(context), modelId)
@@ -231,11 +220,6 @@ object BaoTranslateModelManager {
   fun checkModelStatus(context: Context, modelId: String): ModelStatus {
     return when (modelId) {
       "kokoro_tts" -> {
-        val archive = ARCHIVES.first { it.modelId == modelId }
-        if (isArchiveExtracted(context, archive)) ModelStatus.Ready
-        else ModelStatus.NotDownloaded
-      }
-      "pocket_tts" -> {
         val archive = ARCHIVES.first { it.modelId == modelId }
         if (isArchiveExtracted(context, archive)) ModelStatus.Ready
         else ModelStatus.NotDownloaded
@@ -278,7 +262,6 @@ object BaoTranslateModelManager {
     return ALL_MODELS.associate { model ->
       val size = when (model.id) {
         "kokoro_tts" -> dirSize(File(baseDir, "kokoro-multi-lang-v1_0"))
-        "pocket_tts" -> dirSize(File(baseDir, "sherpa-onnx-pocket-tts-int8-2026-01-26"))
         "silero_vad" -> File(baseDir, "silero_vad.onnx").takeIf { it.exists() }?.length() ?: 0L
         "whisper_base" -> dirSize(getWhisperModelDir(context))
         "qwen25_1b", "gemma4_e2b" -> dirSize(getTranslationModelDir(context, model.id))
@@ -310,7 +293,7 @@ object BaoTranslateModelManager {
     // throw into the Result.failure the fold already handles.
     val result = runCatching {
       when (modelId) {
-        "kokoro_tts", "pocket_tts" -> {
+        "kokoro_tts" -> {
           val archive = ARCHIVES.first { it.modelId == modelId }
           downloadAndExtractArchive(context, archive, modelId)
         }
@@ -354,7 +337,6 @@ object BaoTranslateModelManager {
   fun deleteModel(context: Context, modelId: String) {
     when (modelId) {
       "kokoro_tts" -> File(getSherpaOnnxDir(context), "kokoro-multi-lang-v1_0").deleteRecursively()
-      "pocket_tts" -> File(getSherpaOnnxDir(context), "sherpa-onnx-pocket-tts-int8-2026-01-26").deleteRecursively()
       "silero_vad" -> File(getSherpaOnnxDir(context), "silero_vad.onnx").delete()
       "whisper_base" -> getWhisperModelDir(context).deleteRecursively()
       "qwen25_1b", "gemma4_e2b" -> getTranslationModelDir(context, modelId).deleteRecursively()

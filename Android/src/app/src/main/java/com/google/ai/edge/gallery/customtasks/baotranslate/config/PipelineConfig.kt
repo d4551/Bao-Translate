@@ -34,10 +34,4 @@ object PipelineConfig {
   // Whisper STT
   const val WHISPER_TAIL_PADDINGS = 1000
 
-  // Voice cloning (PocketTTS)
-  const val VOICE_EMBEDDING_CACHE_CAPACITY = 10
-  const val VOICE_CLONE_NUM_STEPS = 2
-  const val VOICE_CLONE_SILENCE_SCALE = 1.0f
-  const val VOICE_CLONE_SID = 0
-
 }

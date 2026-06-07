@@ -69,6 +69,7 @@ android {
     compose = true
     buildConfig = true
   }
+  // PACKAGING_BLOCK_PLACEHOLDER
 }
 
 dependencies {
@@ -128,6 +129,13 @@ dependencies {
   implementation(libs.ktor.client.android)
   implementation(libs.ktor.client.core)
   implementation(files("libs/sherpa-onnx-v1.13.2.aar"))
+  // ONNX Runtime (Microsoft) — runs the OpenVoice converter + ref_enc ONNX graphs at EXACT
+  // utterance length (dynamic time dim), which litert-torch cannot export. Validated 99 dB vs
+  // PyTorch; exact length keeps the dilated WaveNet output crisp (fixed-length TFLite smeared it).
+  // Pinned to 1.24.3: sherpa's JNI imports the ELF-versioned symbol OrtGetApiBase@VERS_1.24.3, and
+  // 1.24.3 is the exact (byte-identical) ORT build sherpa-onnx 1.13.2 bundles — so the packaging
+  // pickFirst on libonnxruntime.so (see android{}) leaves one runtime that satisfies both.
+  implementation(libs.onnxruntime.android)
   implementation(libs.bluetooth.communicator)
   implementation(libs.commons.compress)
 }

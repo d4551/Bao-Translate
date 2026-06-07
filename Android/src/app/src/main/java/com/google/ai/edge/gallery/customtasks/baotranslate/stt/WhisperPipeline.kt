@@ -31,7 +31,7 @@ class WhisperPipeline(private val context: Context) {
   // decode runs, and serializes concurrent decodes (OfflineRecognizer is not concurrency-safe).
   private val inferenceLock = Any()
 
-  fun initialize(modelPath: String): Boolean {
+  fun initialize(modelPath: String, language: String = ""): Boolean {
     val modelDir = File(modelPath)
     if (!modelDir.exists()) {
       BaoLog.w(TAG, "Whisper model dir not found: $modelPath")
@@ -56,7 +56,7 @@ class WhisperPipeline(private val context: Context) {
     val whisperConfig = OfflineWhisperModelConfig(
       encoder = encoderFile.absolutePath,
       decoder = decoderFile.absolutePath,
-      language = "",
+      language = language,
       task = "transcribe",
       tailPaddings = PipelineConfig.WHISPER_TAIL_PADDINGS,
       enableTokenTimestamps = false,

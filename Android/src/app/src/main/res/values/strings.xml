@@ -710,7 +710,6 @@
   <string name="bao_translate_optional_models">Optional voice clone and upgrades</string>
   <string name="bao_translate_stt_model">STT Model</string>
   <string name="bao_translate_translation_model">Translation Model</string>
-  <string name="bao_translate_tts_engine">TTS Engine</string>
   <string name="bao_translate_voice_enrolled_label">Enrolled</string>
   <string name="bao_translate_voice_not_enrolled">Not enrolled</string>
   <string name="bao_translate_your_voice_profile">Your voice profile</string>
@@ -733,16 +732,12 @@
   <string name="bao_translate_stt_model_option_parakeet">Parakeet TDT 0.6B (2.4 GB)</string>
   <string name="bao_translate_translation_model_option_qwen25">Qwen2.5 1.5B compact (1.5 GB)</string>
   <string name="bao_translate_translation_model_option_gemma4_e2b">Gemma 4 E2B LiteRT-LM upgrade (2.5 GB)</string>
-  <string name="bao_translate_tts_option_kokoro">Kokoro 82M (preset voices)</string>
-  <string name="bao_translate_tts_option_pocket_tts">PocketTTS (voice clone)</string>
   <string name="bao_translate_loading_models">Loading models…</string>
   <string name="bao_translate_hint_detail">Use the translate control to start real-time voice translation</string>
   <string name="bao_translate_re_record_voice">Re-record voice</string>
   <string name="bao_translate_unenroll_voice">Un-enroll</string>
   <string name="bao_translate_voice_profile_saved">Saved on this device</string>
   <string name="bao_translate_voice_profile_empty">No voice profile saved</string>
-  <string name="bao_translate_voice_clone_requires_setup">Requires PocketTTS download and an enrolled voice.</string>
-  <string name="bao_translate_error_voice_clone_not_ready">Download PocketTTS and enroll a voice before selecting voice clone.</string>
   <string name="bao_translate_error_translation_model_not_ready">Download this translation model before selecting it.</string>
   <string name="bao_translate_model_download_first">Download from the Models section first.</string>
   <string name="bao_translate_download_busy">Wait for the current model download to finish.</string>
@@ -871,7 +866,6 @@
 
   <!-- Model display names -->
   <string name="bao_model_kokoro_tts">Kokoro Multi-Lang TTS</string>
-  <string name="bao_model_pocket_tts">PocketTTS Voice Cloning</string>
   <string name="bao_model_silero_vad">Silero VAD</string>
   <string name="bao_model_whisper_base">Whisper Base STT (Sherpa-ONNX)</string>
   <string name="bao_model_qwen25_1b">Qwen2.5 1.5B Translation (LiteRT-LM compact)</string>

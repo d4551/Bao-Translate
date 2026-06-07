@@ -1,6 +1,7 @@
 package com.google.ai.edge.gallery.customtasks.baotranslate
 
 import android.app.Application
+import androidx.annotation.VisibleForTesting
 import androidx.lifecycle.AndroidViewModel
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioDevice
@@ -60,7 +61,6 @@ data class BaoTranslateUiState(
   val routingStatus: com.google.ai.edge.gallery.customtasks.baotranslate.audio.RoutingStatus = com.google.ai.edge.gallery.customtasks.baotranslate.audio.RoutingStatus.IDLE,
   val sttModel: String = "whisper_base",
   val translationModel: String = "qwen25_1b",
-  val ttsEngine: String = "kokoro",
   val wifiOnlyDownloads: Boolean = true,
   val storageBreakdown: Map<String, Long> = emptyMap(),
   val localParticipant: Participant? = null,
@@ -150,7 +150,21 @@ class BaoTranslateViewModel @Inject constructor(
     refreshLocalRuntimeState = participantStateManager::refreshLocalRuntimeState,
   )
 
+  internal companion object {
+    // Test-only overrides: when set, the ViewModel ignores the corresponding persisted setting.
+    // Lets instrumentation pin a deterministic, fast config (qwen25_1b + English->Spanish)
+    // regardless of whatever a prior session persisted. Never set in production.
+    @Volatile @VisibleForTesting(otherwise = VisibleForTesting.NONE) internal var testForcedTranslationModel: String? = null
+    @Volatile @VisibleForTesting(otherwise = VisibleForTesting.NONE) internal var testForcedSourceLanguage: String? = null
+    @Volatile @VisibleForTesting(otherwise = VisibleForTesting.NONE) internal var testForcedTargetLanguage: String? = null
+
+    // Test-only: the most recently created instance, so instrumentation can reach the live
+    // bleManager + uiState to verify multi-speaker receive routing. Cleared in onCleared.
+    @Volatile @VisibleForTesting(otherwise = VisibleForTesting.NONE) internal var testInstance: BaoTranslateViewModel? = null
+  }
+
   init {
+    testInstance = this
     val storedSettings = dataStoreRepository.getBaoTranslateSettings()
     _uiState.update {
       it.copy(
@@ -158,10 +172,12 @@ class BaoTranslateViewModel @Inject constructor(
         transcripts = emptyList(),
         // Restore persisted preferences so model/language/tts choices survive a cold start.
         // Null => never saved, keep the in-memory defaults.
-        translationModel = storedSettings?.translationModel?.takeIf { m -> m.isNotBlank() } ?: it.translationModel,
-        ttsEngine = storedSettings?.ttsEngine?.takeIf { e -> e.isNotBlank() } ?: it.ttsEngine,
-        sourceLanguage = storedSettings?.sourceLanguage?.takeIf { l -> l.isNotBlank() } ?: it.sourceLanguage,
-        targetLanguage = storedSettings?.targetLanguage?.takeIf { l -> l.isNotBlank() } ?: it.targetLanguage,
+        translationModel = testForcedTranslationModel
+          ?: storedSettings?.translationModel?.takeIf { m -> m.isNotBlank() } ?: it.translationModel,
+        sourceLanguage = testForcedSourceLanguage
+          ?: storedSettings?.sourceLanguage?.takeIf { l -> l.isNotBlank() } ?: it.sourceLanguage,
+        targetLanguage = testForcedTargetLanguage
+          ?: storedSettings?.targetLanguage?.takeIf { l -> l.isNotBlank() } ?: it.targetLanguage,
         wifiOnlyDownloads = storedSettings?.wifiOnlyDownloads ?: it.wifiOnlyDownloads,
       )
     }
@@ -292,7 +308,7 @@ class BaoTranslateViewModel @Inject constructor(
         return@launch
       }
 
-      pipelines.initializePipelines(app, _uiState.value.translationModel)
+      pipelines.initializePipelines(app, _uiState.value.translationModel, sttLanguageCode())
       if (!pipelines.requiredPipelinesReady()) {
         val missing = pipelines.missingPipelineComponents(app)
         pipelines.cleanupPipelines()
@@ -359,15 +375,6 @@ class BaoTranslateViewModel @Inject constructor(
             pipelines.kokoroTts = null
           }
         }
-        "pocket_tts" -> {
-          pipelines.pipelineMutex.withLock {
-            pipelines.voiceCloneTts?.cleanup()
-            pipelines.voiceCloneTts = null
-          }
-          if (_uiState.value.ttsEngine == "pocket_tts") {
-            _uiState.update { it.copy(ttsEngine = "kokoro") }
-          }
-        }
       }
       modelManager.deleteModel(app, modelId)
       val requiredReady = modelManager.areRequiredModelsReady(app)
@@ -390,7 +397,6 @@ class BaoTranslateViewModel @Inject constructor(
         storageBreakdown = emptyMap(),
         modelsReady = false,
         pipelineStatus = PipelineStatus.ModelsNotReady,
-        ttsEngine = "kokoro",
       ) }
     }
   }
@@ -432,11 +438,6 @@ class BaoTranslateViewModel @Inject constructor(
     persistBaoTranslateSettings()
   }
 
-  fun setTtsEngine(engine: String) {
-    voiceLanguageCoordinator.setTtsEngine(engine)
-    persistBaoTranslateSettings()
-  }
-
   fun setWifiOnly(enabled: Boolean) {
     voiceLanguageCoordinator.setWifiOnly(enabled)
     persistBaoTranslateSettings()
@@ -451,7 +452,6 @@ class BaoTranslateViewModel @Inject constructor(
       dataStoreRepository.setBaoTranslateSettings(
         BaoTranslateStoredSettings(
           translationModel = s.translationModel,
-          ttsEngine = s.ttsEngine,
           sourceLanguage = s.sourceLanguage,
           targetLanguage = s.targetLanguage,
           wifiOnlyDownloads = s.wifiOnlyDownloads,
@@ -462,12 +462,18 @@ class BaoTranslateViewModel @Inject constructor(
 
   fun onSettingChanged(key: String) = voiceLanguageCoordinator.onSettingChanged(key)
 
+  // Whisper decode language for the chosen source: "" (auto-detect) only when the user picks Auto;
+  // otherwise force the selected language so recognition isn't corrupted by mis-detection.
+  private fun sttLanguageCode(): String =
+    if (_uiState.value.sourceLanguage == SupportedLanguages.AUTO.key) ""
+    else SupportedLanguages.codeFor(_uiState.value.sourceLanguage)
+
   private fun reinitializePipeline(component: String) {
     viewModelScope.launch(Dispatchers.IO) {
       val app = getApplication<Application>()
       _uiState.update { it.copy(pipelineStatus = PipelineStatus.Initializing) }
 
-      pipelines.reinitializePipeline(app, component, _uiState.value.translationModel)
+      pipelines.reinitializePipeline(app, component, _uiState.value.translationModel, sttLanguageCode())
 
       if (pipelines.requiredPipelinesReady()) {
         participantStateManager.refreshLocalRuntimeState(app)
@@ -535,6 +541,7 @@ class BaoTranslateViewModel @Inject constructor(
 
   override fun onCleared() {
     super.onCleared()
+    if (testInstance === this) testInstance = null
     recordingController.recordingJob?.cancel()
     viewModelJob.cancel()
     val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
