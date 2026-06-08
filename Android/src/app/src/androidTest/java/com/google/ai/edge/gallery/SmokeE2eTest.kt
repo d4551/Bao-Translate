@@ -157,6 +157,59 @@ class SmokeE2eTest {
       "No rendered non-Bao capability task cards were available to smoke",
       exercisedLabels.isNotEmpty(),
     )
+    // HARDENED: was `exercisedLabels.isNotEmpty()` (1/7 passes). New: at least 3 cards
+    // must be exercised — the test is meant to catch UI regressions, not "any one of them
+    // happens to render". 1 of 7 is too lax.
+    assertTrue(
+      "Only ${exercisedLabels.size} of 7 capability cards were exercised (need >= 3). " +
+        "Either cards are missing or the test is too narrow.",
+      exercisedLabels.size >= 3,
+    )
+  }
+
+  // ----- BRUTALISATION: split the mega-test into focused, isolate-able tests.
+  // The original `launchesHomeAndOpensBaoTranslateSetupSurfaces` test does everything
+  // in one transaction, which makes triage hard. Splitting is more maintainable AND
+  // exercises the same code paths in a more focused way.
+
+  @Test
+  fun exerciseHomeDrawerRoutes_settingsRoute() {
+    val context = InstrumentationRegistry.getInstrumentation().targetContext
+    composeRule.prepareHome()
+    composeRule.openHomeDrawer()
+    composeRule.onNodeWithText(composeRule.stringResource(R.string.drawer_settings_label))
+      .performClick()
+    composeRule.waitForText(R.string.settings_title)
+    composeRule.onNodeWithText(composeRule.stringResource(R.string.settings_theme))
+      .assertIsDisplayed()
+    composeRule.onNodeWithText(composeRule.stringResource(R.string.settings_close))
+      .performClick()
+  }
+
+  @Test
+  fun exerciseHomeDrawerRoutes_modelsRoute() {
+    composeRule.prepareHome()
+    composeRule.openHomeDrawer()
+    composeRule.onNodeWithText(composeRule.stringResource(R.string.drawer_models_label))
+      .performClick()
+    composeRule.waitForContentDescription(R.string.cd_import_model_button)
+    composeRule.onNodeWithContentDescription(composeRule.stringResource(R.string.cd_import_model_button))
+      .assertIsDisplayed()
+    composeRule.onNodeWithContentDescription(composeRule.stringResource(R.string.cd_close_icon))
+      .performClick()
+  }
+
+  @Test
+  fun exerciseHomeDrawerRoutes_notificationsRoute() {
+    composeRule.prepareHome()
+    composeRule.openHomeDrawer()
+    composeRule.onNodeWithText(composeRule.stringResource(R.string.drawer_notifications_label))
+      .performClick()
+    composeRule.waitForText(R.string.notifications_title, substring = true)
+    composeRule.onNodeWithText(composeRule.stringResource(R.string.notifications_empty_state))
+      .assertIsDisplayed()
+    composeRule.onNodeWithContentDescription(composeRule.stringResource(R.string.cd_close_icon))
+      .performClick()
   }
 
   private fun exerciseHomeDrawerRoutes() {

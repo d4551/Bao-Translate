@@ -118,7 +118,8 @@ class TranslationPipeline(private val context: Context) {
     }
 
     if (!isValidTranslation(translatedText, sourceText)) {
-      BaoLog.w(TAG, "Translation produced invalid output: $translatedText")
+      // Log length only — the translated text is user speech content (PII), not diagnostics.
+      BaoLog.w(TAG, "Translation produced invalid output (${translatedText.length} chars)")
       return TranslationOutcome.Failure(
         "Translation failed: model produced invalid output",
         sourceLanguage,

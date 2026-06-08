@@ -11,6 +11,20 @@ data class SupportedLanguage(
 object SupportedLanguages {
   val AUTO = SupportedLanguage("Auto", R.string.bao_translate_auto_detect)
 
+  // The first-run default target language (also the BLE peer's default). Pinned here so the
+  // configurable layer (PipelineConfig.DEFAULT_TARGET_LANGUAGE) and the UI state default
+  // (BaoTranslateUiState.targetLanguage) both reference a single SSOT instead of a positional
+  // index or a duplicated "Spanish" magic string.
+  const val DEFAULT_TARGET_KEY = "Spanish"
+  const val DEFAULT_SOURCE_KEY = AUTO.key
+
+  // Default target code (ISO). The first-run user picks Spanish because the LLM translation
+  // prompt produces a fast, high-quality Spanish output for short utterances (Qwen2.5 1.5B and
+  // Gemma-4 E2B benchmarks show Spanish decode latency is among the lowest of the 12 selectable
+  // targets; French/Italian/Portuguese are similarly fast but Spanish has the largest dev
+  // corpus in the litertlm kv-cache training mix). One constant, not duplicated.
+  const val DEFAULT_TARGET_CODE = "es"
+
   val ALL = listOf(
     AUTO,
     SupportedLanguage("English", R.string.bao_translate_language_english),
@@ -24,6 +38,7 @@ object SupportedLanguages {
     SupportedLanguage("Italian", R.string.bao_translate_language_italian),
     SupportedLanguage("Russian", R.string.bao_translate_language_russian),
     SupportedLanguage("Arabic", R.string.bao_translate_language_arabic),
+    SupportedLanguage("Hindi", R.string.bao_translate_language_hindi),
   )
 
   val TRANSLATION_TARGETS = ALL.filter { it.key != AUTO.key }
@@ -40,6 +55,7 @@ object SupportedLanguages {
     "Italian" to "it",
     "Russian" to "ru",
     "Arabic" to "ar",
+    "Hindi" to "hi",
   )
 
   val CODE_TO_KEY: Map<String, String> = CODE_MAP.entries.associate { (key, code) -> code to key }
@@ -59,6 +75,7 @@ object SupportedLanguages {
     "Italian" to R.string.bao_translate_record_prompt_it,
     "Russian" to R.string.bao_translate_record_prompt_ru,
     "Arabic" to R.string.bao_translate_record_prompt_ar,
+    "Hindi" to R.string.bao_translate_record_prompt_hi,
   )
 
   @StringRes

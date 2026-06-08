@@ -45,7 +45,7 @@ data class BaoTranslateUiState(
   val pipelineStatus: PipelineStatus = PipelineStatus.Idle,
   val transcripts: List<TranslationMessage> = emptyList(),
   val sourceLanguage: String = SupportedLanguages.AUTO.key,
-  val targetLanguage: String = SupportedLanguages.ALL[2].key,
+  val targetLanguage: String = SupportedLanguages.DEFAULT_TARGET_KEY,
   val voiceProfileEnrolled: Boolean = false,
   val voiceProfilePath: String? = null,
   val errorMessage: String? = null,
@@ -166,6 +166,7 @@ class BaoTranslateViewModel @Inject constructor(
 
   init {
     testInstance = this
+    bleManager.setLocalEmbeddingProvider { pipelines.openVoiceTargetSe }
     val storedSettings = dataStoreRepository.getBaoTranslateSettings()
     _uiState.update {
       it.copy(
@@ -243,12 +244,19 @@ class BaoTranslateViewModel @Inject constructor(
         val (translation, targetLang) = pipelines.pipelineMutex.withLock {
           pipelines.translationPipeline to _uiState.value.targetLanguage
         }
+        // Translation and TTS operate on ISO codes (mirroring the local recording path); the KEYs
+        // ("German", "Korean", ...) are kept only for the display fields. Passing a KEY to
+        // synthesizeSpeech silently broke platform-TTS for non-Kokoro target languages, because
+        // PlatformTtsPipeline feeds it to Locale.forLanguageTag (which needs "de"/"ko", not
+        // "German"/"Korean"). codeFor() normalizes a key->code and is a no-op on an already-ISO code.
+        val sourceCode = SupportedLanguages.codeFor(bleMsg.sourceLanguage)
+        val targetCode = SupportedLanguages.codeFor(targetLang)
         var translationSucceeded = false
         val translatedText = if (translation != null) {
           when (val outcome = translation.translateBlocking(
             sourceText = bleMsg.text,
-            sourceLanguage = bleMsg.sourceLanguage,
-            targetLanguage = targetLang,
+            sourceLanguage = sourceCode,
+            targetLanguage = targetCode,
           )) {
             is TranslationOutcome.Success -> {
               translationSucceeded = true
@@ -280,7 +288,14 @@ class BaoTranslateViewModel @Inject constructor(
         // read — mirroring the local-speech path. Previously received messages were silent
         // (synthesizeSpeech was never called and audioPlayed stayed null).
         if (translationSucceeded) {
-          val audioPlayed = recordingController.synthesizeSpeech(translatedText, targetLang)
+          // Speak the peer's turn in THEIR own cloned voice when they've shared a timbre over BLE
+          // (multi-speaker cloning); otherwise synthesizeSpeech falls back to the local voice/TTS.
+          val audioPlayed = recordingController.synthesizeSpeech(
+            translatedText,
+            targetCode,
+            speakerSe = bleManager.voiceEmbeddingFor(bleMsg.senderId),
+            timbre = SpeechTimbre.PeerOnly,
+          )
           _uiState.update { state ->
             state.copy(
               transcripts = state.transcripts.map { existing ->
@@ -325,6 +340,8 @@ class BaoTranslateViewModel @Inject constructor(
       }
 
       participantStateManager.refreshLocalRuntimeState(app)
+      // Re-broadcast metadata so connected peers pick up the (just-loaded) enrolled timbre.
+      bleManager.rebroadcastMetadata()
 
       _uiState.update {
         it.copy(
@@ -488,9 +505,6 @@ class BaoTranslateViewModel @Inject constructor(
     persistBaoTranslateSettings()
   }
 
-  // Persists the committed (post-setter) preferences. The setters update _uiState synchronously, so
-  // reading _uiState.value here captures the value that was just committed (or the unchanged value
-  // if a setter's validation rejected the change — harmless to rewrite).
   private fun persistBaoTranslateSettings() {
     val s = _uiState.value
     viewModelScope.launch(Dispatchers.IO) {
@@ -582,6 +596,12 @@ class BaoTranslateViewModel @Inject constructor(
   fun dismissWelcome() {
     viewModelScope.launch { dataStoreRepository.setHasDismissedBaoTranslateWelcome(true) }
     _uiState.update { it.copy(welcomeDismissed = true) }
+  }
+
+  @VisibleForTesting
+  internal fun setTestLocalVoiceEmbeddingForTest(embedding: FloatArray?) {
+    pipelines.openVoiceTargetSe = embedding
+    _uiState.update { it.copy(voiceProfileEnrolled = embedding != null) }
   }
 
   override fun onCleared() {

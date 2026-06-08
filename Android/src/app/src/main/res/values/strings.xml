@@ -63,6 +63,7 @@
   <string name="bao_translate_language_italian">Italian</string>
   <string name="bao_translate_language_russian">Russian</string>
   <string name="bao_translate_language_arabic">Arabic</string>
+  <string name="bao_translate_language_hindi">Hindi</string>
   <string name="askimage_emptystate_title">Ask Image</string>
   <string name="askimage_emptystate_content">To get started, tap the + below to add an image (max 10 images per chat) and type a prompt to ask a question about it!</string>
   <string name="askimage_emptystate_content_aicore">To get started, tap the + below to add an image (max 1 image per chat) and type a prompt to ask a question about it!</string>
@@ -155,7 +156,7 @@
   <string name="promo_gm4_title">Bao Translate</string>
   <string name="promo_gm4_description">Real-time speech translation with optional voice clone and nearby-device conversations — all running locally on your device.</string>
   <string name="promo_banner_gm4_title">Bao Translate: now available</string>
-  <string name="promo_banner_gm4_description">Real-time on-device voice translation with Sherpa-ONNX Whisper STT, LiteRT-LM translation, Kokoro TTS, and optional PocketTTS voice cloning.</string>
+  <string name="promo_banner_gm4_description">Real-time on-device voice translation with Sherpa-ONNX Whisper STT, LiteRT-LM translation, Kokoro TTS, and optional OpenVoice voice cloning.</string>
   <string name="done">Done</string>
   <string name="hide_password">Hide password</string>
   <string name="show_password">Show password</string>
@@ -668,7 +669,7 @@
   <!-- Bao Translate additional strings -->
   <string name="bao_translate_title">Bao Translate</string>
   <string name="bao_translate_record_voice_title">Record Your Voice</string>
-  <string name="bao_translate_record_voice_desc">Record a local voice profile for PocketTTS voice clone. You can un-enroll anytime in Settings.</string>
+  <string name="bao_translate_record_voice_desc">Record a local voice profile for OpenVoice voice clone. You can un-enroll anytime in Settings.</string>
   <string name="bao_translate_record_prompt">The quick brown fox jumps over the lazy dog.</string>
   <!-- Voice-enrollment read-aloud sentence per source language (authored natively, not auto-localized). -->
   <string name="bao_translate_record_prompt_es">El veloz zorro marrón salta sobre el perro perezoso al amanecer.</string>
@@ -681,6 +682,7 @@
   <string name="bao_translate_record_prompt_it">La rapida volpe marrone salta sopra il cane pigro al mattino.</string>
   <string name="bao_translate_record_prompt_ru">Быстрая коричневая лиса утром прыгает через ленивую собаку.</string>
   <string name="bao_translate_record_prompt_ar">الثعلب البني السريع يقفز فوق الكلب الكسول في الصباح.</string>
+  <string name="bao_translate_record_prompt_hi">तेज़ भूरी लोमड़ी सुबह के समय आलसी कुत्ते के ऊपर से कूद जाती है।</string>
   <string name="bao_translate_tap_to_record">Tap to Record</string>
   <string name="bao_translate_tap_to_stop">Tap to Stop</string>
   <string name="bao_translate_min_record">Minimum 3 seconds. Works best with 5-10 seconds of clear speech.</string>
@@ -881,6 +883,7 @@
   <string name="bao_model_whisper_base">Whisper Base STT (Sherpa-ONNX)</string>
   <string name="bao_model_qwen25_1b">Qwen2.5 1.5B Translation (LiteRT-LM compact)</string>
   <string name="bao_model_gemma4_e2b">Gemma 4 E2B Translation (LiteRT-LM upgrade)</string>
+  <string name="bao_model_openvoice">OpenVoice Cross-Lingual Voice Clone (ONNX)</string>
 
   <!-- Component names for error messages -->
   <string name="bao_component_whisper_stt">Whisper STT</string>

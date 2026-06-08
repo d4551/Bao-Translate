@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.google.ai.edge.gallery
 
 import android.content.Context
@@ -37,6 +36,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.sqrt
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -47,11 +47,11 @@ import org.junit.runner.RunWith
  *   reference voice (platform TTS) -> ref_enc -> target embedding;
  *   Kokoro speaks Spanish -> OpenVoice converter re-times it into the target timbre.
  *
- * Asserts (1) the converter runs on the app's TFLite runtime and emits real audio; (2) the timbre
+ * Asserts (1) the converter runs on the app's ONNX Runtime and emits real audio; (2) the timbre
  * actually shifted toward the enrolled voice — the converted audio's speaker embedding is closer
  * (cosine) to the target than to Kokoro's generic voice; (3) the output is still intelligible
- * Spanish (Whisper round-trip recovers Spanish content words). The .tflite weights must be present
- * at the app's openvoice dir (pushed via adb before the run).
+ * Spanish (Whisper round-trip recovers Spanish content words). The OpenVoice ONNX models are
+ * downloaded on demand from HuggingFace by the test's [ensure] step (the production path).
  */
 @RunWith(AndroidJUnit4::class)
 class BaoTranslateOpenVoiceCloneE2eTest {
@@ -59,12 +59,14 @@ class BaoTranslateOpenVoiceCloneE2eTest {
   @Test
   fun openVoiceClonesKokoroSpanishIntoEnrolledTimbre() {
     val ctx = InstrumentationRegistry.getInstrumentation().targetContext
-    ensure(ctx, listOf("whisper_base", "kokoro_tts"))
+    // Exercises the real production download path (HuggingFace -> filesDir/openvoice) for the
+    // OpenVoice clone models, proving downloadable + compatible + runs on-device in one test.
+    ensure(ctx, listOf("whisper_base", "kokoro_tts", "openvoice"))
     val convFile = BaoTranslateModelManager.getOpenVoiceConverterFile(ctx)
     val refEncFile = BaoTranslateModelManager.getOpenVoiceRefEncFile(ctx)
-    assertTrue("OpenVoice tflites not provisioned at ${convFile.parent}", convFile.exists() && refEncFile.exists())
+    assertTrue("OpenVoice not provisioned after download at ${convFile.parent}", convFile.length() > 0 && refEncFile.length() > 0)
 
-    val converter = OpenVoiceVoiceConverter(ctx)
+    val converter = OpenVoiceVoiceConverter()
     val kokoro = KokoroTtsPipeline(ctx)
     val whisper = WhisperPipeline(ctx)
     try {
@@ -109,9 +111,12 @@ class BaoTranslateOpenVoiceCloneE2eTest {
       val cosToTarget = cosine(clonedSe!!, tgtSe)
       val cosToSource = cosine(clonedSe, srcSe!!)
       Log.i(TAG, "speaker-similarity: cos(cloned,target)=$cosToTarget cos(cloned,source)=$cosToSource")
+      // HARDENED: was `cosToTarget > cosToSource` (raw >, lets near-equal pass).
+      // New: 5% margin — clone must measurably pull toward target, not just barely beat source.
       assertTrue(
-        "timbre did NOT shift toward enrolled voice: cos(target)=$cosToTarget <= cos(source)=$cosToSource",
-        cosToTarget > cosToSource,
+        "timbre did NOT shift measurably toward enrolled voice: cos(target)=$cosToTarget vs cos(source)=$cosToSource " +
+          "(delta=${cosToTarget - cosToSource}, need > 0.05)",
+        cosToTarget - cosToSource > 0.05,
       )
 
       // Control: transcribe the RAW Kokoro source (pre-conversion) through the identical
@@ -137,21 +142,300 @@ class BaoTranslateOpenVoiceCloneE2eTest {
       val overlap = expected.intersect(got)
       val srcOverlap = expected.intersect(normWords(srcBack.text))
       Log.i(TAG, "intelligibility overlap=$overlap (cloned) vs $srcOverlap (raw Kokoro source)")
-      // Soft floor: at least one Spanish content word survives (the clone is recognizable, not
-      // silent gibberish). The cloned voice is borderline-intelligible by design (timbre-converted
-      // Kokoro), and Whisper-small transcription of it varies run-to-run, so an absolute >=2 was
-      // flaky around the threshold.
-      assertTrue("cloned Spanish unrecognizable; expected=$expected heard=$got", overlap.isNotEmpty())
+      // HARDENED: was `overlap.isNotEmpty()` (any Spanish word passes). New: must contain at
+      // least one high-precision content word (length >= 5 chars, NOT just a stopword).
+      val highPrecisionOverlap = overlap.filter { it.length >= 5 }
+      assertTrue(
+        "cloned Spanish unrecognizable (no high-precision content word): expected=$expected heard=$got",
+        highPrecisionOverlap.isNotEmpty(),
+      )
       // The real product invariant: tone conversion must PRESERVE content — the cloned output must
-      // be ~as intelligible as the raw Kokoro source (residual STT errors like cómo->Camo appear in
-      // BOTH; they're Whisper-small on fast TTS, not the converter). This is the meaningful, stable
-      // gate; allow a 1-word slack for transcription jitter.
+      // be ~as intelligible as the raw Kokoro source. Allow a 1-word slack for transcription jitter.
       assertTrue(
         "converter degraded intelligibility vs source: cloned=$overlap source=$srcOverlap",
         overlap.size >= srcOverlap.size - 1,
       )
     } finally {
       converter.cleanup(); kokoro.cleanup(); whisper.cleanup()
+    }
+  }
+
+  /**
+   * Decisive on-device gate that needs NO large model download: proves the public seasonstudio
+   * OpenVoice ONNX (downloaded via [ensure]/[BaoTranslateModelManager] or adb-provisioned) loads and
+   * runs on Android ONNX Runtime 1.24.3 AND actually shifts timbre toward a DISTINCT enrolled voice.
+   * Source = the device platform TTS voice; target = a pushed real human reference
+   * (files/ov_target_ref.wav). Mirrors the host clone proof on the device itself.
+   */
+  @Test
+  fun openVoiceClonesToReferenceVoiceOnDeviceOrt() {
+    val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+    ensure(ctx, listOf("openvoice"))
+    val convFile = BaoTranslateModelManager.getOpenVoiceConverterFile(ctx)
+    val refEncFile = BaoTranslateModelManager.getOpenVoiceRefEncFile(ctx)
+    assertTrue("OpenVoice not provisioned", convFile.length() > 0 && refEncFile.length() > 0)
+
+    val targetWav = File(ctx.filesDir, "ov_target_ref.wav")
+    assertTrue("target reference wav not provisioned at ${targetWav.absolutePath}", targetWav.exists())
+    val tBytes = targetWav.readBytes()
+    assertTrue("target ref wav invalid", WavUtils.isValidWav(tBytes))
+    val tSamples = WavUtils.extractSamplesFromWav(tBytes)
+    val tRate = WavUtils.extractSampleRateFromWav(tBytes) ?: 16000
+
+    val converter = OpenVoiceVoiceConverter()
+    try {
+      assertTrue("converter init (Android ORT load of seasonstudio graphs)", converter.initialize(convFile, refEncFile))
+      val tgtSe = converter.computeSpeakerEmbedding(tSamples, tRate)
+      assertNotNull("target embedding null", tgtSe)
+      assertEquals("embedding dim", OpenVoiceVoiceConverter.SE_DIM, tgtSe!!.size)
+
+      val src = platformTts(ctx, "The weather is bright and clear across the whole country today.")
+      val base = com.google.ai.edge.gallery.customtasks.baotranslate.tts.SynthesizedAudio(src.first, src.second)
+      val srcSe = converter.computeSpeakerEmbedding(base.samples, base.sampleRate)
+      assertNotNull("source embedding null", srcSe)
+
+      val cloned = converter.convert(base, tgtSe)
+      assertNotNull("converter produced no audio on device ORT", cloned)
+      val s = cloned!!.samples
+      val peak = s.maxOfOrNull { abs(it) } ?: 0f
+      val finite = s.all { it.isFinite() }
+      val dur = s.size.toFloat() / cloned.sampleRate
+      Log.i(TAG, "device-ORT convert: out=${s.size}@${cloned.sampleRate} dur=${dur}s peak=$peak finite=$finite")
+      assertTrue("output silent/short/non-finite: dur=$dur peak=$peak finite=$finite", finite && dur >= 0.3f && peak > 0.02f)
+
+      val clonedSe = converter.computeSpeakerEmbedding(s, cloned.sampleRate)
+      assertNotNull("cloned embedding null", clonedSe)
+      val cosToTarget = cosine(clonedSe!!, tgtSe)
+      val cosToSource = cosine(clonedSe, srcSe!!)
+      Log.i(TAG, "device clone: cos(cloned,target)=$cosToTarget cos(cloned,source)=$cosToSource")
+      // HARDENED: 5% margin like the main test.
+      assertTrue(
+        "on-device timbre did NOT shift measurably toward enrolled voice: target=$cosToTarget source=$cosToSource " +
+          "(delta=${cosToTarget - cosToSource}, need > 0.05)",
+        cosToTarget - cosToSource > 0.05,
+      )
+    } finally {
+      converter.cleanup()
+    }
+  }
+
+  /**
+   * Proves cloning works for the PLATFORM-TTS fallback languages (de/ko/ru/ar) — the ones Kokoro
+   * can't voice. The OpenVoice converter is source-agnostic, so device-TTS German audio re-times
+   * into the enrolled timbre exactly like Kokoro output. Before the fix these languages returned
+   * raw device audio (no clone). Skips if the device has no German voice (a device limitation, not
+   * a code defect).
+   */
+  @Test
+  fun openVoiceClonesPlatformTtsFallbackLanguage() {
+    val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+    ensure(ctx, listOf("openvoice"))
+    val convFile = BaoTranslateModelManager.getOpenVoiceConverterFile(ctx)
+    val refEncFile = BaoTranslateModelManager.getOpenVoiceRefEncFile(ctx)
+    assertTrue("OpenVoice not provisioned after download", convFile.length() > 0 && refEncFile.length() > 0)
+
+    val converter = OpenVoiceVoiceConverter()
+    try {
+      assertTrue("converter init", converter.initialize(convFile, refEncFile))
+
+      val refWav = platformTts(ctx, "Hello, my name is Alex and this is my natural speaking voice.")
+      val tgtSe = converter.computeSpeakerEmbedding(refWav.first, refWav.second)
+      assertNotNull("target embedding null", tgtSe)
+
+      // German via the device platform TTS — a language Kokoro cannot voice (KokoroTtsPipeline
+      // .supportsLanguage("de") == false), so this is the fallback path that must now also clone.
+      assertTrue("test premise: de is a non-Kokoro fallback language", !KokoroTtsPipeline.supportsLanguage("de"))
+      val deWav = platformTtsForLocale(ctx, Locale.GERMANY, "Guten Morgen, wie geht es dir heute?")
+      org.junit.Assume.assumeTrue("device has no German TTS voice; skipping fallback-clone check", deWav != null)
+
+      val base = com.google.ai.edge.gallery.customtasks.baotranslate.tts.SynthesizedAudio(deWav!!.first, deWav.second)
+      val srcSe = converter.computeSpeakerEmbedding(base.samples, base.sampleRate)
+      assertNotNull("source (device-de) embedding null", srcSe)
+
+      val cloned = converter.convert(base, tgtSe!!)
+      assertNotNull("converter produced no audio for platform-TTS German", cloned)
+      val s = cloned!!.samples
+      val peak = s.maxOfOrNull { abs(it) } ?: 0f
+      val dur = s.size.toFloat() / cloned.sampleRate
+      assertTrue("cloned German audio silent/short: dur=$dur peak=$peak", dur >= 0.4f && peak > 0.02f)
+
+      val clonedSe = converter.computeSpeakerEmbedding(s, cloned.sampleRate)
+      assertNotNull("cloned embedding null", clonedSe)
+      val cosToTarget = cosine(clonedSe!!, tgtSe)
+      val cosToSource = cosine(clonedSe, srcSe!!)
+      Log.i(TAG, "fallback-clone(de): cos(cloned,target)=$cosToTarget cos(cloned,source)=$cosToSource")
+      // HARDENED: 5% margin.
+      assertTrue(
+        "platform-TTS German clone timbre did NOT shift measurably toward enrolled voice: target=$cosToTarget source=$cosToSource " +
+          "(delta=${cosToTarget - cosToSource}, need > 0.05)",
+        cosToTarget - cosToSource > 0.05,
+      )
+    } finally {
+      converter.cleanup()
+    }
+  }
+
+  // ----- BRUTALISATION -----
+
+  // ----- computeSpeakerEmbedding: silent input must NOT produce a strong embedding.
+  // A 0.5s all-zero input has no signal; the embedding should be near zero or the call
+  // should return null.
+  @Test
+  fun computeSpeakerEmbedding_silentInput_weakOrNull() {
+    val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+    ensure(ctx, listOf("openvoice"))
+    val convFile = BaoTranslateModelManager.getOpenVoiceConverterFile(ctx)
+    val refEncFile = BaoTranslateModelManager.getOpenVoiceRefEncFile(ctx)
+    val converter = OpenVoiceVoiceConverter()
+    try {
+      assertTrue(converter.initialize(convFile, refEncFile))
+      val silent = FloatArray(8000) { 0f }  // 0.5s at 16kHz
+      val emb = converter.computeSpeakerEmbedding(silent, 16000)
+      if (emb != null) {
+        val l2 = sqrt(emb.map { it.toDouble() * it.toDouble() }.sum())
+        assertTrue("silent input should not produce a strong embedding (l2=$l2)", l2 < 0.5f)
+      }
+      // If prod returns null for silent, that's also valid.
+    } finally {
+      converter.cleanup()
+    }
+  }
+
+  // ----- Non-finite (NaN) input: documented behavior.
+  @Test
+  fun convert_nonFiniteInput_handled() {
+    val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+    ensure(ctx, listOf("openvoice"))
+    val convFile = BaoTranslateModelManager.getOpenVoiceConverterFile(ctx)
+    val refEncFile = BaoTranslateModelManager.getOpenVoiceRefEncFile(ctx)
+    val converter = OpenVoiceVoiceConverter()
+    try {
+      assertTrue(converter.initialize(convFile, refEncFile))
+      val nanSamples = FloatArray(16000) { Float.NaN }
+      val base = com.google.ai.edge.gallery.customtasks.baotranslate.tts.SynthesizedAudio(nanSamples, 16000)
+      val tgtSe = converter.computeSpeakerEmbedding(platformTts(ctx, "Hello.").first, 22050)
+      try {
+        val cloned = converter.convert(base, tgtSe!!)
+        // If returned, it must not be all-NaN.
+        if (cloned != null) {
+          assertTrue("NaN input -> NaN output: regressed", cloned.samples.none { it.isNaN() })
+        }
+        // If null, that's also acceptable hardening.
+      } catch (e: Exception) {
+        // Throwing is also acceptable hardening; just don't crash the test.
+        Log.i(TAG, "NaN input caused: ${e.javaClass.simpleName}: ${e.message}")
+      }
+    } finally {
+      converter.cleanup()
+    }
+  }
+
+  // ----- initialize with corrupt ONNX file: must return false, not throw.
+  @Test
+  fun initialize_corruptOnnxFile_returnsFalse() {
+    val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+    val tmp = File(ctx.cacheDir, "corrupt.onnx").apply { writeBytes(ByteArray(64) { it.toByte() }) }
+    val tmpRef = File(ctx.cacheDir, "corrupt_ref.onnx").apply { writeBytes(ByteArray(64) { it.toByte() }) }
+    val converter = OpenVoiceVoiceConverter()
+    try {
+      val ok = converter.initialize(tmp, tmpRef)
+      // HARDENED: must return false, not throw. The prod code currently catches the
+      // ORT init failure. Pin.
+      assertTrue("corrupt ONNX must return false (not throw)", !ok)
+    } catch (e: Exception) {
+      // Throwing is NOT acceptable — the production code's caller (BaoTranslateViewModel)
+      // does not expect an exception from initialize.
+      assertTrue("corrupt ONNX threw ${e.javaClass.simpleName} — must return false", false)
+    } finally {
+      tmp.delete()
+      tmpRef.delete()
+    }
+  }
+
+  // ----- initialize with one of two files missing: must return false.
+  @Test
+  fun initialize_oneOfTwoFilesMissing_returnsFalse() {
+    val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+    val present = File(ctx.cacheDir, "present.onnx").apply { writeBytes(ByteArray(16)) }
+    val missing = File(ctx.cacheDir, "definitely_missing.onnx")
+    val converter = OpenVoiceVoiceConverter()
+    try {
+      val ok = converter.initialize(present, missing)
+      assertTrue("missing ref_enc must return false", !ok)
+    } finally {
+      present.delete()
+    }
+  }
+
+  // ----- cleanup is idempotent.
+  @Test
+  fun cleanup_calledTwice_safe() {
+    val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+    ensure(ctx, listOf("openvoice"))
+    val converter = OpenVoiceVoiceConverter()
+    assertTrue(converter.initialize(
+      BaoTranslateModelManager.getOpenVoiceConverterFile(ctx),
+      BaoTranslateModelManager.getOpenVoiceRefEncFile(ctx),
+    ))
+    converter.cleanup()
+    converter.cleanup()  // must not throw
+  }
+
+  // ----- Convert a tiny audio (below MAX_FRAMES): must complete without error.
+  @Test
+  fun convert_tinyAudio_succeeds() {
+    val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+    ensure(ctx, listOf("openvoice"))
+    val converter = OpenVoiceVoiceConverter()
+    try {
+      assertTrue(converter.initialize(
+        BaoTranslateModelManager.getOpenVoiceConverterFile(ctx),
+        BaoTranslateModelManager.getOpenVoiceRefEncFile(ctx),
+      ))
+      val tiny = FloatArray(2048) { i -> kotlin.math.sin(i * 0.01).toFloat() }
+      val base = com.google.ai.edge.gallery.customtasks.baotranslate.tts.SynthesizedAudio(tiny, 22050)
+      val tgtSe = converter.computeSpeakerEmbedding(tiny, 22050)
+      assertNotNull(tgtSe)
+      val cloned = converter.convert(base, tgtSe!!)
+      // Output may be null for inputs too short; or it may produce SOMETHING. No crash.
+      Log.i(TAG, "tiny convert: result=${cloned?.samples?.size ?: 0} samples")
+    } finally {
+      converter.cleanup()
+    }
+  }
+
+  // ----- SE_DIM constant is 256 (the OpenVoice reference encoder's output size).
+  @Test
+  fun SE_DIM_is256() {
+    assertEquals(256, OpenVoiceVoiceConverter.SE_DIM)
+  }
+
+  // Like [platformTts] but for an arbitrary locale, returning null (rather than failing) when the
+  // device has no voice for that language — so the fallback-clone test can skip gracefully.
+  private fun platformTtsForLocale(ctx: Context, locale: Locale, text: String): Pair<FloatArray, Int>? {
+    val initLatch = CountDownLatch(1); var st = TextToSpeech.ERROR
+    val tts = TextToSpeech(ctx.applicationContext) { s -> st = s; initLatch.countDown() }
+    try {
+      if (!initLatch.await(30, TimeUnit.SECONDS) || st != TextToSpeech.SUCCESS) return null
+      if (tts.isLanguageAvailable(locale) < TextToSpeech.LANG_AVAILABLE) return null
+      tts.language = locale
+      val uid = "ov-${locale.language}"; val f = File(ctx.cacheDir, "$uid.wav"); if (f.exists()) f.delete()
+      val done = CountDownLatch(1); var err = false
+      tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+        override fun onStart(u: String?) = Unit
+        override fun onDone(u: String?) = done.countDown()
+        @Deprecated("Deprecated in Android framework") override fun onError(u: String?) { err = true; done.countDown() }
+        override fun onError(u: String?, c: Int) { err = true; done.countDown() }
+      })
+      if (tts.synthesizeToFile(text, Bundle().apply { putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, uid) }, f, uid) != TextToSpeech.SUCCESS) return null
+      if (!done.await(60, TimeUnit.SECONDS) || err) return null
+      val bytes = f.readBytes()
+      if (!WavUtils.isValidWav(bytes)) return null
+      val samples = WavUtils.extractSamplesFromWav(bytes)
+      if (samples.isEmpty()) return null
+      return samples to (WavUtils.extractSampleRateFromWav(bytes) ?: 22050)
+    } finally {
+      tts.shutdown()
     }
   }
 

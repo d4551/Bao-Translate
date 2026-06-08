@@ -13,14 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.google.ai.edge.gallery
 
 import android.content.Context
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
-import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.ai.edge.gallery.customtasks.baotranslate.BaoTranslateModelManager
@@ -100,17 +98,21 @@ class BaoTranslateLanguageMatrixE2eTest {
       for (l in all) {
         // English -> L: non-echo, non-blank, and (for non-Latin) contains the target script.
         val toL = translate(translation, src, "en", l.code)
-        val nonEcho = toL.isNotBlank() && !toL.trim().equals(src, ignoreCase = true)
+        val nonBlank = toL.isNotBlank()
+        val nonEcho = nonBlank && !toL.trim().equals(src, ignoreCase = true)
         val scriptOk = l.script?.let { r -> toL.any { it in r } } ?: nonEcho
-        Log.i(TAG, "TR [$modelId en->${l.code}] -> \"${toL.take(60)}\" nonEcho=$nonEcho scriptOk=$scriptOk")
-        if (!nonEcho) failures.add("[$modelId] en->${l.code} echoed/empty")
+        Log.i(TAG, "TR [$modelId en->${l.code}] -> \"${toL.take(60)}\" nonBlank=$nonBlank nonEcho=$nonEcho scriptOk=$scriptOk")
+        if (!nonBlank) failures.add("[$modelId] en->${l.code} returned blank")
+        if (!nonEcho) failures.add("[$modelId] en->${l.code} echoed source: \"$toL\"")
         if (!scriptOk) failures.add("[$modelId] en->${l.code} missing ${l.code} script: \"$toL\"")
 
         // L -> English: produces English (ASCII letters present).
         val toEn = translate(translation, l.phrase, l.code, "en")
-        val englishish = toEn.count { it in 'a'..'z' || it in 'A'..'Z' } >= 3
-        Log.i(TAG, "TR [$modelId ${l.code}->en] -> \"${toEn.take(60)}\" englishish=$englishish")
-        if (!englishish) failures.add("[$modelId] ${l.code}->en non-English/empty: \"$toEn\"")
+        val aCount = toEn.count { it in 'a'..'z' || it in 'A'..'Z' }
+        val wordCount = toEn.split(Regex("\\s+")).count { it.isNotBlank() }
+        val englishish = wordCount >= 2 && aCount >= 5
+        Log.i(TAG, "TR [$modelId ${l.code}->en] -> \"${toEn.take(60)}\" words=$wordCount aCount=$aCount englishish=$englishish")
+        if (!englishish) failures.add("[$modelId] ${l.code}->en not English-enough (words=$wordCount aCount=$aCount): \"$toEn\"")
       }
     } finally {
       translation.cleanup()
@@ -163,7 +165,14 @@ class BaoTranslateLanguageMatrixE2eTest {
       if (!ok) failures.add("${c.code}: forced=\"$forcedText\" matched none of ${c.expects}")
     }
     Log.i(TAG, "RECOGNITION SUMMARY failures=$failures skipped=$skipped")
-    assertTrue("No device TTS voices available to probe recognition (all skipped)", skipped.size < cases.size)
+    // HARDENED: was `skipped.size < cases.size` (5/6 passes). New: at least half of the
+    // cases must have a working TTS voice. The whole point of forcing the language is to
+    // make the audio recognizable — a CI box with zero TTS voices can't prove that.
+    assertTrue(
+      "Less than half the recognition cases had a device TTS voice (skipped=${skipped.size}/${cases.size}); " +
+        "the test premise (forced language works) cannot be verified on this device.",
+      skipped.size <= cases.size / 2,
+    )
     assertTrue("Forced-language recognition failures: $failures", failures.isEmpty())
   }
 
@@ -208,7 +217,134 @@ class BaoTranslateLanguageMatrixE2eTest {
       platform.cleanup()
     }
     Log.i(TAG, "FALLBACK SUMMARY spoke=$spoke skipped=$skipped")
-    assertTrue("Device had no TTS voice for any non-Kokoro language to verify the fallback", spoke.isNotEmpty())
+    // HARDENED: was `spoke.isNotEmpty()` (1/4 passes). New: at least 2 must work — that's
+    // the threshold where we can say "the fallback path is real, not a fluke".
+    assertTrue(
+      "Less than 2 of the non-Kokoro languages produced audio (spoke=$spoke). " +
+        "Fallback routing cannot be verified on this device.",
+      spoke.size >= 2,
+    )
+  }
+
+  // ----- BRUTALISATION -----
+
+  // ----- everyLanguageTranslates: targetLanguage in the response metadata must match the request.
+  // Catches a real bug where the pipeline returns Success but with a wrong target.
+  @Test
+  fun everyLanguageTranslates_targetLanguage_inMetadata() {
+    val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+    ensure(ctx, listOf("qwen25_1b"))
+    val litertlm = BaoTranslateModelManager.getTranslationModelDir(ctx, "qwen25_1b")
+      .listFiles { f -> f.extension == "litertlm" }?.firstOrNull()
+    assertTrue("qwen25_1b .litertlm missing", litertlm != null)
+    val translation = TranslationPipeline(ctx)
+    try {
+      assertTrue("qwen25_1b init", translation.initialize(litertlm!!.absolutePath))
+      for (l in all.take(3)) {  // subset for speed
+        val outcome = translation.translateBlocking("Good morning", "en", l.code)
+        if (outcome is TranslationOutcome.Success) {
+          val result = outcome.result
+          // Pin: result.targetLanguage matches the request.
+          assertEquals("targetLanguage metadata for ${l.code}", l.code, result.targetLanguage)
+        }
+      }
+    } finally {
+      translation.cleanup()
+    }
+  }
+
+  // ----- TranslationFailure is surfaced, not swallowed as Success with empty text.
+  @Test
+  fun everyLanguageTranslates_invalidLanguageCode_surfacesFailure() {
+    val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+    ensure(ctx, listOf("qwen25_1b"))
+    val litertlm = BaoTranslateModelManager.getTranslationModelDir(ctx, "qwen25_1b")
+      .listFiles { f -> f.extension == "litertlm" }?.firstOrNull()
+    assertTrue("qwen25_1b .litertlm missing", litertlm != null)
+    val translation = TranslationPipeline(ctx)
+    try {
+      assertTrue("qwen25_1b init", translation.initialize(litertlm!!.absolutePath))
+      val outcome = translation.translateBlocking("Good morning", "en", "xx-INVALID-XX")
+      // Pin: a clearly-invalid language code must not produce a fake Success.
+      if (outcome is TranslationOutcome.Success) {
+        assertTrue(
+          "invalid code should not echo source (or produce empty): \"${outcome.result.translatedText}\"",
+          outcome.result.translatedText.isNotBlank(),
+        )
+      }
+      // Either Failure or Success-with-real-output is acceptable; a fake Success with empty
+      // is not.
+    } finally {
+      translation.cleanup()
+    }
+  }
+
+  // ----- Translation with empty source: must not crash, must surface a result.
+  @Test
+  fun everyLanguageTranslates_emptySource_handledGracefully() {
+    val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+    ensure(ctx, listOf("qwen25_1b"))
+    val litertlm = BaoTranslateModelManager.getTranslationModelDir(ctx, "qwen25_1b")
+      .listFiles { f -> f.extension == "litertlm" }?.firstOrNull()
+    assertTrue(litertlm != null)
+    val translation = TranslationPipeline(ctx)
+    try {
+      assertTrue("qwen25_1b init", translation.initialize(litertlm!!.absolutePath))
+      val outcome = translation.translateBlocking("", "en", "es")
+      // Outcome must be Failure or Success-with-blank, never a hang or crash.
+      if (outcome is TranslationOutcome.Success) {
+        // Empty source: empty translated is fine.
+        assertTrue("empty source translated to non-blank: \"${outcome.result.translatedText}\"",
+          outcome.result.translatedText.isBlank())
+      }
+    } finally {
+      translation.cleanup()
+    }
+  }
+
+  // ----- Self-translation (en->en) should produce same-source passthrough (not echoed
+  // as a translation failure).
+  @Test
+  fun everyLanguageTranslates_selfTranslation_passthrough() {
+    val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+    ensure(ctx, listOf("qwen25_1b"))
+    val litertlm = BaoTranslateModelManager.getTranslationModelDir(ctx, "qwen25_1b")
+      .listFiles { f -> f.extension == "litertlm" }?.firstOrNull()
+    assertTrue(litertlm != null)
+    val translation = TranslationPipeline(ctx)
+    try {
+      assertTrue("qwen25_1b init", translation.initialize(litertlm!!.absolutePath))
+      val outcome = translation.translateBlocking("Hello world", "en", "en")
+      assertTrue("en->en must succeed", outcome is TranslationOutcome.Success)
+      val translated = (outcome as TranslationOutcome.Success).result.translatedText
+      // The model may or may not actually translate; both passthrough and translation are valid.
+      // What we pin: it does NOT fail.
+      assertTrue("en->en must produce text", translated.isNotBlank())
+    } finally {
+      translation.cleanup()
+    }
+  }
+
+  // ----- Translation determinism: two calls with same input produce same output.
+  @Test
+  fun everyLanguageTranslates_deterministic() {
+    val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+    ensure(ctx, listOf("qwen25_1b"))
+    val litertlm = BaoTranslateModelManager.getTranslationModelDir(ctx, "qwen25_1b")
+      .listFiles { f -> f.extension == "litertlm" }?.firstOrNull()
+    assertTrue(litertlm != null)
+    val translation = TranslationPipeline(ctx)
+    try {
+      assertTrue("qwen25_1b init", translation.initialize(litertlm!!.absolutePath))
+      val t1 = (translation.translateBlocking("Good morning", "en", "es") as? TranslationOutcome.Success)?.result?.translatedText ?: ""
+      val t2 = (translation.translateBlocking("Good morning", "en", "es") as? TranslationOutcome.Success)?.result?.translatedText ?: ""
+      // Same input may not produce byte-identical output (LLM sampling), but both should
+      // be Spanish (non-echo, non-empty). Pin the basic invariant.
+      assertTrue("first call produced Spanish", t1.isNotBlank() && !t1.equals("Good morning", ignoreCase = true))
+      assertTrue("second call produced Spanish", t2.isNotBlank() && !t2.equals("Good morning", ignoreCase = true))
+    } finally {
+      translation.cleanup()
+    }
   }
 
   private fun translate(t: TranslationPipeline, text: String, from: String, to: String): String =

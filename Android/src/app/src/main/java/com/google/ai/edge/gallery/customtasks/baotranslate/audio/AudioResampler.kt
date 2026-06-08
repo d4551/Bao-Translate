@@ -16,8 +16,15 @@ object AudioResampler {
 
   fun resample(samples: FloatArray, srcRate: Int, dstRate: Int): FloatArray {
     if (samples.isEmpty() || srcRate == dstRate) return samples.copyOf()
-    // Anti-alias below the lower Nyquist (with margin) when downsampling.
-    val src = if (dstRate < srcRate) lowPass(samples, srcRate, dstRate * 0.45) else samples
+    // Band-limit before the linear interpolation in BOTH directions (margin below Nyquist):
+    //  - downsample: anti-alias below the destination Nyquist so content above it does not fold back;
+    //  - upsample:   anti-image below the source Nyquist so the triangular (sinc^2) interpolation
+    //    kernel does not pass spectral images through as scratchy high-frequency artifacts.
+    val src = when {
+      dstRate < srcRate -> lowPass(samples, srcRate, dstRate * 0.45)
+      dstRate > srcRate -> lowPass(samples, srcRate, srcRate * 0.45)
+      else -> samples
+    }
     val outLen = (src.size.toLong() * dstRate / srcRate).toInt().coerceAtLeast(1)
     val out = FloatArray(outLen)
     for (i in 0 until outLen) {

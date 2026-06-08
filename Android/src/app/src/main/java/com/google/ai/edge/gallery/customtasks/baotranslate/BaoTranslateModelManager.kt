@@ -40,7 +40,7 @@ data class ModelInfo(
 )
 
 enum class ModelCategory {
-  STT, TRANSLATION, TTS, VAD
+  STT, TRANSLATION, TTS, VAD, VOICE_CLONE
 }
 
 /**
@@ -104,9 +104,20 @@ object BaoTranslateModelManager {
       category = ModelCategory.TRANSLATION,
       estimatedSizeMb = 2468,
     ),
+    ModelInfo(
+      id = "openvoice",
+      displayNameRes = R.string.bao_model_openvoice,
+      category = ModelCategory.VOICE_CLONE,
+      estimatedSizeMb = 125,
+    ),
   )
 
-  val REQUIRED_MODEL_IDS = listOf("whisper_base", "qwen25_1b", "silero_vad", "kokoro_tts")
+  // The required model set — the SINGLE SOURCE OF TRUTH for auto-provisioning, "Required" settings
+  // grouping, and readiness. Every member is treated identically: a download failure for ANY of them
+  // is fatal to the provisioning run (downloadRequiredModels), and areRequiredModelsReady() requires
+  // all of them. OpenVoice voice cloning is a first-class member — not an optional upgrade — so it is
+  // always provisioned; the cloned voice activates the moment the user enrolls.
+  val REQUIRED_MODEL_IDS = listOf("whisper_base", "qwen25_1b", "silero_vad", "kokoro_tts", "openvoice")
 
   private data class ArchiveSpec(
     val modelId: String,
@@ -171,6 +182,30 @@ object BaoTranslateModelManager {
     ),
   )
 
+  private data class OpenVoiceFileSpec(
+    val downloadUrl: String,
+    val targetName: String,
+    val sizeBytes: Long,
+  )
+
+  // OpenVoice v2 ToneColorConverter ONNX (public, downloadable export). ONE pair clones EVERY voice
+  // and language — the speaker identity is a 256-d embedding computed on-device at enrollment, never
+  // baked into the model — so there is no per-voice download. Saved under the app's local names
+  // ([getOpenVoiceConverterFile] / [getOpenVoiceRefEncFile]); sizes pinned to the HF LFS blob sizes
+  // so a truncated download is rejected (see [downloadOpenVoiceModels]).
+  private val OPENVOICE_FILES = listOf(
+    OpenVoiceFileSpec(
+      downloadUrl = "https://huggingface.co/seasonstudio/openvoice_tone_clone_onnx/resolve/main/tone_clone_model.onnx",
+      targetName = "ov_converter.onnx",
+      sizeBytes = 127_891_564L,
+    ),
+    OpenVoiceFileSpec(
+      downloadUrl = "https://huggingface.co/seasonstudio/openvoice_tone_clone_onnx/resolve/main/tone_color_extract_model.onnx",
+      targetName = "ov_refenc.onnx",
+      sizeBytes = 3_257_992L,
+    ),
+  )
+
   fun getSherpaOnnxDir(context: Context): File =
     File(context.filesDir, SHERPA_ONNX_DIR).also { it.mkdirs() }
 
@@ -197,8 +232,10 @@ object BaoTranslateModelManager {
   fun getOpenVoiceRefEncFile(context: Context): File =
     File(getOpenVoiceDir(context), "ov_refenc.onnx")
 
+  // length()>0 (not just exists()): a zero-byte file left by a killed write must not count as ready
+  // (it would feed a corrupt model into ONNX Runtime).
   fun isOpenVoiceCloneAvailable(context: Context): Boolean =
-    getOpenVoiceConverterFile(context).exists() && getOpenVoiceRefEncFile(context).exists()
+    getOpenVoiceConverterFile(context).length() > 0 && getOpenVoiceRefEncFile(context).length() > 0
 
   fun getTranslationModelDir(context: Context, modelId: String = "qwen25_1b"): File =
     File(getTranslationDir(context), modelId)
@@ -245,16 +282,16 @@ object BaoTranslateModelManager {
         if (isTranslationModelDownloaded(context, modelId)) ModelStatus.Ready
         else ModelStatus.NotDownloaded
       }
+      "openvoice" -> {
+        if (isOpenVoiceCloneAvailable(context)) ModelStatus.Ready
+        else ModelStatus.NotDownloaded
+      }
       else -> ModelStatus.NotDownloaded
     }
   }
 
-  fun areRequiredModelsReady(context: Context): Boolean {
-    return checkModelStatus(context, "whisper_base") == ModelStatus.Ready &&
-      checkModelStatus(context, "qwen25_1b") == ModelStatus.Ready &&
-      checkModelStatus(context, "silero_vad") == ModelStatus.Ready &&
-      checkModelStatus(context, "kokoro_tts") == ModelStatus.Ready
-  }
+  fun areRequiredModelsReady(context: Context): Boolean =
+    REQUIRED_MODEL_IDS.all { checkModelStatus(context, it) == ModelStatus.Ready }
 
   fun areAllModelsReady(context: Context): Boolean =
     ALL_MODELS.all { checkModelStatus(context, it.id) == ModelStatus.Ready }
@@ -269,6 +306,7 @@ object BaoTranslateModelManager {
         "silero_vad" -> File(baseDir, "silero_vad.onnx").takeIf { it.exists() }?.length() ?: 0L
         "whisper_base" -> dirSize(getWhisperModelDir(context))
         "qwen25_1b", "gemma4_e2b" -> dirSize(getTranslationModelDir(context, model.id))
+        "openvoice" -> dirSize(getOpenVoiceDir(context))
         else -> 0L
       }
       model.id to size
@@ -308,6 +346,7 @@ object BaoTranslateModelManager {
         }
         "whisper_base" -> downloadWhisperModel(context, modelId)
         "qwen25_1b", "gemma4_e2b" -> downloadTranslationModel(context, modelId)
+        "openvoice" -> downloadOpenVoiceModels(context, modelId)
         else -> Result.failure(
           IllegalArgumentException(context.getString(R.string.bao_translate_error_unknown_model, modelId))
         )
@@ -345,6 +384,7 @@ object BaoTranslateModelManager {
       "silero_vad" -> File(getSherpaOnnxDir(context), "silero_vad.onnx").delete()
       "whisper_base" -> getWhisperModelDir(context).deleteRecursively()
       "qwen25_1b", "gemma4_e2b" -> getTranslationModelDir(context, modelId).deleteRecursively()
+      "openvoice" -> getOpenVoiceDir(context).deleteRecursively()
     }
     _modelStatuses.update { it + (modelId to ModelStatus.NotDownloaded) }
     BaoLog.i(TAG, "Deleted model: $modelId")
@@ -360,8 +400,8 @@ object BaoTranslateModelManager {
   private fun isArchiveExtracted(context: Context, archive: ArchiveSpec): Boolean =
     requiredFilesComplete(getSherpaOnnxDir(context), archive.requiredFiles)
 
-  // Existence alone marked a half-extracted archive Ready: an interrupted untar (or process kill)
-  // leaves espeak-ng-data present-but-empty, or files zero-length. Require directories to be
+  // Existence alone is insufficient: an interrupted untar (or process kill) leaves
+  // espeak-ng-data present-but-empty, or files zero-length. Require directories to be
   // non-empty and files to be non-zero, so a truncated/partial extraction reports NotDownloaded and
   // re-downloads instead of feeding a corrupt model into native sherpa-onnx (SIGSEGV / garbage TTS).
   internal fun requiredFilesComplete(baseDir: File, requiredFiles: List<String>): Boolean =
@@ -491,7 +531,9 @@ object BaoTranslateModelManager {
     val decoderFile = File(modelDir, "base-decoder.int8.onnx")
     val tokensFile = File(modelDir, "base-tokens.txt")
 
-    if (encoderFile.exists() && decoderFile.exists() && tokensFile.exists()) {
+    if (encoderFile.exists() && encoderFile.length() > 0 &&
+        decoderFile.exists() && decoderFile.length() > 0 &&
+        tokensFile.exists() && tokensFile.length() > 0) {
       return@withContext Result.success(Unit)
     }
 
@@ -587,6 +629,47 @@ object BaoTranslateModelManager {
       )
     }
 
+    Result.success(Unit)
+  }
+
+  private suspend fun downloadOpenVoiceModels(
+    context: Context,
+    modelId: String,
+  ): Result<Unit> = withContext(Dispatchers.IO) {
+    if (isOpenVoiceCloneAvailable(context)) {
+      BaoLog.i(TAG, "$modelId already downloaded, skipping")
+      return@withContext Result.success(Unit)
+    }
+    getOpenVoiceDir(context).mkdirs()
+
+    // Combined progress across both files (converter ~128 MB + ref encoder ~3 MB) so the UI shows
+    // one monotonic bar for the logical "voice cloning" model.
+    val totalBytes = OPENVOICE_FILES.sumOf { it.sizeBytes }
+    var completedBytes = 0L
+    for (spec in OPENVOICE_FILES) {
+      val target = File(getOpenVoiceDir(context), spec.targetName)
+      val result = downloadFileWithProgress(
+        context, spec.downloadUrl, target, spec.sizeBytes,
+      ) { downloaded, _ ->
+        val overall = completedBytes + downloaded
+        val progress = if (totalBytes > 0) overall.toFloat() / totalBytes else 0f
+        updateStatus(modelId, ModelStatus.Downloading(progress, overall, totalBytes))
+      }
+      if (result.isFailure) {
+        target.delete()
+        return@withContext result
+      }
+      // Reject a short file (200-with-wrong-length / silent truncation) so a corrupt ONNX never
+      // reaches the runtime; sizeBytes is the pinned HF LFS blob size.
+      if (target.length() < spec.sizeBytes) {
+        val actual = target.length()
+        target.delete()
+        return@withContext Result.failure(
+          Exception(context.getString(R.string.bao_error_incomplete_download, actual, spec.sizeBytes))
+        )
+      }
+      completedBytes += spec.sizeBytes
+    }
     Result.success(Unit)
   }
 

@@ -8,6 +8,7 @@ import com.google.ai.edge.gallery.common.BaoLog
 import com.google.ai.edge.gallery.customtasks.baotranslate.config.PipelineConfig
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
+import kotlin.math.abs
 
 private const val TAG = "AudioPlayback"
 private const val DEFAULT_SAMPLE_RATE = PipelineConfig.TTS_SAMPLE_RATE
@@ -110,6 +111,29 @@ object AudioPlayback {
     }
 
     playbackLock.withLock {
+      // Neural-vocoder float output (Kokoro VITS, OpenVoice ToneColorConverter) is not range-bounded;
+      // writing samples outside [-1,1] to an ENCODING_PCM_FLOAT track makes AudioFlinger HARD-CLIP the
+      // peaks => scratchy distortion. Attenuate the whole buffer so its peak fits in [-1,1] (shape-
+      // preserving; never boost => no inter-utterance loudness pump), leaving 0.99 true-peak headroom
+      // for the OS resample to the device-native rate. Also scrubs any NaN/Inf the vocoder may emit.
+      // Common case (already in range) returns the caller's array unchanged — zero allocation/copy.
+      val playbackSamples = run {
+        var peak = 0f
+        var hasNonFinite = false
+        for (s in samples) {
+          if (!s.isFinite()) { hasNonFinite = true; continue }
+          val a = abs(s)
+          if (a > peak) peak = a
+        }
+        when {
+          hasNonFinite -> {
+            val g = if (peak > 1f) 0.99f / peak else 1f
+            FloatArray(samples.size) { val s = samples[it]; if (s.isFinite()) s * g else 0f }
+          }
+          peak > 1f -> FloatArray(samples.size) { samples[it] * (0.99f / peak) }
+          else -> samples
+        }
+      }
       val track: AudioTrack
       val startHeadPosition: Int
       val preferredApplied: Boolean
@@ -135,7 +159,7 @@ object AudioPlayback {
       while (offset < samples.size && !abortRequested) {
         val remaining = samples.size - offset
         val writeSize = minOf(chunkSize, remaining)
-        val written = track.write(samples, offset, writeSize, AudioTrack.WRITE_BLOCKING)
+        val written = track.write(playbackSamples, offset, writeSize, AudioTrack.WRITE_BLOCKING)
         if (written <= 0) {
           if (!abortRequested) BaoLog.w(TAG, "AudioTrack write failed: $written")
           break

@@ -94,6 +94,14 @@ data class Task(
   val models: MutableList<Model>,
 
   /**
+   * Optional explicit model count for the home-screen card. Custom tasks that manage their own model
+   * set outside [models] (e.g. Bao Translate, whose STT/translation/TTS/VAD/voice-clone models are
+   * provisioned by its own manager rather than registered as [Model]s) set this so the card reports
+   * the real count instead of an always-zero [models].size. Null = derive from [models].
+   */
+  val modelCountOverride: Int? = null,
+
+  /**
    * List of model names for the task.
    *
    * If this field is non-empty, the task will try to find the models with the matching names from

@@ -4,6 +4,9 @@ import com.google.ai.edge.gallery.common.BaoLog
 
 private const val TAG = "ValidationUtils"
 
+internal val HALLUCINATION_TAGS_FOR_TEST: List<String> =
+    listOf("[Music]", "[Applause]", "[Laughter]", "[BLANK_AUDIO]", "(silence)")
+
 internal fun isValidTranscription(text: String): Boolean {
     val trimmed = text.trim()
 
@@ -17,7 +20,7 @@ internal fun isValidTranscription(text: String): Boolean {
         return false
     }
 
-    val hallucinationTags = listOf("[Music]", "[Applause]", "[Laughter]", "[BLANK_AUDIO]", "(silence)")
+    val hallucinationTags = HALLUCINATION_TAGS_FOR_TEST
     if (hallucinationTags.any { trimmed.equals(it, ignoreCase = true) }) {
         BaoLog.d(TAG, "Filtered: hallucination tag '$trimmed'")
         return false

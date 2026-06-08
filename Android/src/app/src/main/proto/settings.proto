@@ -88,7 +88,7 @@ message Settings {
   // legitimately-false bool (e.g. wifi-only default is true), so defaults aren't clobbered on first
   // run.
   string bao_translate_translation_model = 12;
-  reserved 13;  // was bao_translate_tts_engine — removed with the legacy pocket_tts engine
+  reserved 13;  // was bao_translate_tts_engine — removed pre-release
   string bao_translate_source_language = 14;
   string bao_translate_target_language = 15;
   bool bao_translate_wifi_only_downloads = 16;

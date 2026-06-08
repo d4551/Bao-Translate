@@ -1,6 +1,6 @@
 [versions]
 agp = "8.8.2"
-kotlin = "2.2.0"
+kotlin = "2.4.0"
 material3Adaptive = "1.0.0"
 coreKtx = "1.15.0"
 junit = "4.13.2"
@@ -10,7 +10,7 @@ lifecycleRuntimeKtx = "2.8.7"
 activityCompose = "1.10.1"
 composeBom = "2026.02.00"
 navigation = "2.8.9"
-serializationPlugin = "2.0.21"
+serializationPlugin = "2.4.0"
 serializationJson = "1.7.3"
 materialIconExtended = "1.7.8"
 workRuntime = "2.10.0"
@@ -36,7 +36,6 @@ googleService = "4.4.3"
 firebaseBom = "33.16.0"
 exifinterface = "1.4.1"
 securityCrypto = "1.1.0"
-kotlinReflect = "2.2.21"
 moshi = "1.15.2"
 ksp = "2.3.6"
 mlkit-genai-prompt = "1.0.0-beta2"  # Ref: https://developers.google.com/ml-kit/genai/prompt/android/get-started#configure-project
@@ -47,6 +46,7 @@ onnxruntimeAndroid = "1.24.3"
 bluetoothCommunicator = "1.0.6"
 commonsCompress = "1.26.1"
 mockitoKotlin = "5.4.0"
+kotest = "5.9.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -66,7 +66,10 @@ androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit
 androidx-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-material3-adaptive = { group = "androidx.compose.material3.adaptive", name = "adaptive", version.ref = "material3Adaptive" }
 androidx-compose-navigation = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation" }
-kotlin-reflect = { group = "org.jetbrains.kotlin", name = "kotlin-reflect", version.ref = "kotlinReflect" }
+kotlin-reflect = { group = "org.jetbrains.kotlin", name = "kotlin-reflect", version.ref = "kotlin" }
+# Unshaded since Dagger 2.57: supply the metadata reader matching the Kotlin compiler so Hilt's KSP
+# processor can parse Kotlin 2.4.0 class metadata (Hilt's bundled reader maxes at 2.3.0).
+kotlin-metadata-jvm = { group = "org.jetbrains.kotlin", name = "kotlin-metadata-jvm", version.ref = "kotlin" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serializationJson" }
 material-icon-extended = { group = "androidx.compose.material", name = "material-icons-extended", version.ref = "materialIconExtended" }
 androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workRuntime" }
@@ -109,6 +112,8 @@ onnxruntime-android = { module = "com.microsoft.onnxruntime:onnxruntime-android"
 bluetooth-communicator = { group = "com.github.niedev", name = "BluetoothCommunicator", version.ref = "bluetoothCommunicator" }
 commons-compress = { group = "org.apache.commons", name = "commons-compress", version.ref = "commonsCompress" }
 mockito-kotlin = { group = "org.mockito.kotlin", name = "mockito-kotlin", version.ref = "mockitoKotlin" }
+kotest-runner-junit4 = { group = "io.kotest", name = "kotest-runner-junit4", version.ref = "kotest" }
+kotest-property = { group = "io.kotest", name = "kotest-property", version.ref = "kotest" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

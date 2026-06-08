@@ -49,7 +49,9 @@ import com.google.ai.edge.gallery.customtasks.baotranslate.ModelStatus
 import com.google.ai.edge.gallery.customtasks.baotranslate.PipelineStatus
 import com.google.ai.edge.gallery.customtasks.baotranslate.RecordingController
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioResampler
+import com.google.ai.edge.gallery.customtasks.baotranslate.bluetooth.BleMetadataMessage
 import com.google.ai.edge.gallery.customtasks.baotranslate.bluetooth.BleTranscriptMessage
+import com.google.ai.edge.gallery.customtasks.baotranslate.tts.OpenVoiceVoiceConverter
 import com.google.ai.edge.gallery.customtasks.baotranslate.data.TranslationMessage
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.WavUtils
 import com.google.ai.edge.gallery.customtasks.baotranslate.config.PipelineConfig
@@ -61,8 +63,12 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.sqrt
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.ExternalResource
@@ -208,6 +214,240 @@ class BaoTranslateLiveMicTranslationE2eTest {
       spanish.contains("buen") || spanish.contains("dias") || spanish.contains("manana"),
     )
     assertTrue("Translated text equals the English source (not translated)", !routed.translatedText.equals(peer.text, ignoreCase = true))
+  }
+
+  /**
+   * Multi-speaker BLE receive path with peer voice embedding: even when the local user has enrolled
+   * their own timbre, a peer's translated turn must be cloned into the PEER's shared embedding, not
+   * the local one.
+   */
+  @Test
+  fun receivedPeerMessageUsesPeerTimbreWhenEmbeddingPresent() {
+    val context = InstrumentationRegistry.getInstrumentation().targetContext
+    prepareDeviceForLiveMicTest(context)
+    ensureRequiredModelsReady(context)
+    ensureOpenVoiceReady(context)
+
+    val taskDescriptionPrefix = composeRule.prepareHome()
+    composeRule.openTaskByDescription(taskDescriptionPrefix)
+    composeRule.clickTextIfPresent(R.string.bao_translate_welcome_get_started)
+    composeRule.waitForText(R.string.bao_translate_title)
+    composeRule.waitForContentDescription(
+      composeRule.stringResource(R.string.cd_bao_translate_start),
+      timeoutMillis = 180_000,
+    )
+
+    val viewModel = BaoTranslateViewModel.testInstance
+    assertNotNull("Bao Translate ViewModel was not created", viewModel)
+
+    val converter = OpenVoiceVoiceConverter()
+    try {
+      assertTrue(
+        "OpenVoice converter init",
+        converter.initialize(
+          BaoTranslateModelManager.getOpenVoiceConverterFile(context),
+          BaoTranslateModelManager.getOpenVoiceRefEncFile(context),
+        ),
+      )
+
+      val localSe = computeEmbedding(
+        converter,
+        platformTtsRef(context, "Hello my name is LocalUser and this is my natural speaking voice."),
+      )
+      val peerSe = computeEmbedding(
+        converter,
+        platformTtsRef(context, "Hello my name is PeerAlex and this is my natural speaking voice."),
+      )
+      assertNotNull("local speaker embedding null", localSe)
+      assertNotNull("peer speaker embedding null", peerSe)
+
+      composeRule.runOnUiThread { viewModel!!.setTestLocalVoiceEmbeddingForTest(localSe) }
+
+      viewModel!!.bleManager.simulateIncomingMetadataForTest(
+        "peer-test-1",
+        BleMetadataMessage(
+          participantId = "peer-test-1",
+          participantName = "Alex",
+          sourceLanguage = "English",
+          targetLanguage = "Spanish",
+          hasVoiceProfile = true,
+          voiceEmbedding = peerSe!!.toList(),
+        ),
+      )
+
+      val peer = BleTranscriptMessage(
+        text = "Good morning.",
+        senderId = "peer-test-1",
+        senderName = "Alex",
+        sourceLanguage = "English",
+        targetLanguage = "Spanish",
+      )
+      runBlocking { viewModel.bleManager.simulateIncomingTranscriptForTest(peer) }
+
+      val routed = waitForPeerTranscriptWithAudio(viewModel, peer)
+      assertNotNull("Peer message was not spoken aloud (audioPlayed)", routed)
+
+      assertTrue("OpenVoice clone was not attempted for peer message", RecordingController.testLastWasCloned)
+      assertArrayEquals(
+        "Clone target was not the peer embedding",
+        peerSe,
+        RecordingController.testLastCloneTargetSe,
+        1e-5f,
+      )
+      assertFalse(
+        "Clone target incorrectly used the local enrolled embedding",
+        localSe!!.contentEquals(RecordingController.testLastCloneTargetSe),
+      )
+    } finally {
+      converter.cleanup()
+    }
+  }
+
+  /**
+   * PeerOnly timbre routing: when a peer has NOT shared an embedding, the receive path must NOT fall
+   * back to the locally-enrolled voice — it should speak un-cloned TTS instead.
+   */
+  @Test
+  fun receivedPeerMessageWithoutEmbeddingDoesNotUseLocalVoice() {
+    val context = InstrumentationRegistry.getInstrumentation().targetContext
+    prepareDeviceForLiveMicTest(context)
+    ensureRequiredModelsReady(context)
+    ensureOpenVoiceReady(context)
+
+    val taskDescriptionPrefix = composeRule.prepareHome()
+    composeRule.openTaskByDescription(taskDescriptionPrefix)
+    composeRule.clickTextIfPresent(R.string.bao_translate_welcome_get_started)
+    composeRule.waitForText(R.string.bao_translate_title)
+    composeRule.waitForContentDescription(
+      composeRule.stringResource(R.string.cd_bao_translate_start),
+      timeoutMillis = 180_000,
+    )
+
+    val viewModel = BaoTranslateViewModel.testInstance
+    assertNotNull("Bao Translate ViewModel was not created", viewModel)
+
+    val converter = OpenVoiceVoiceConverter()
+    try {
+      assertTrue(
+        "OpenVoice converter init",
+        converter.initialize(
+          BaoTranslateModelManager.getOpenVoiceConverterFile(context),
+          BaoTranslateModelManager.getOpenVoiceRefEncFile(context),
+        ),
+      )
+
+      val localSe = computeEmbedding(
+        converter,
+        platformTtsRef(context, "Hello my name is LocalUser and this is my natural speaking voice."),
+      )
+      assertNotNull("local speaker embedding null", localSe)
+      composeRule.runOnUiThread { viewModel!!.setTestLocalVoiceEmbeddingForTest(localSe) }
+
+      viewModel!!.bleManager.simulateIncomingMetadataForTest(
+        "peer-test-1",
+        BleMetadataMessage(
+          participantId = "peer-test-1",
+          participantName = "Alex",
+          sourceLanguage = "English",
+          targetLanguage = "Spanish",
+          hasVoiceProfile = false,
+          voiceEmbedding = null,
+        ),
+      )
+
+      val peer = BleTranscriptMessage(
+        text = "Good morning.",
+        senderId = "peer-test-1",
+        senderName = "Alex",
+        sourceLanguage = "English",
+        targetLanguage = "Spanish",
+      )
+      runBlocking { viewModel.bleManager.simulateIncomingTranscriptForTest(peer) }
+
+      val routed = waitForPeerTranscriptWithAudio(viewModel, peer)
+      assertNotNull("Peer message was not spoken aloud (audioPlayed)", routed)
+
+      assertNull(
+        "PeerOnly path without peer embedding must not clone (and must not use localSe)",
+        RecordingController.testLastCloneTargetSe,
+      )
+      assertFalse("OpenVoice clone must not run without a peer embedding", RecordingController.testLastWasCloned)
+    } finally {
+      converter.cleanup()
+    }
+  }
+
+  private fun waitForPeerTranscriptWithAudio(
+    viewModel: BaoTranslateViewModel,
+    peer: BleTranscriptMessage,
+  ): TranslationMessage? {
+    val deadline = System.currentTimeMillis() + 60_000
+    var routed: TranslationMessage? = null
+    while (System.currentTimeMillis() < deadline && routed == null) {
+      routed = viewModel.uiState.value.transcripts.firstOrNull {
+        !it.isUser &&
+          it.speakerName == peer.senderName &&
+          it.originalText.contains(peer.text.substringBefore("."), ignoreCase = true) &&
+          it.audioPlayed == true
+      }
+      if (routed == null) Thread.sleep(500)
+    }
+    return routed
+  }
+
+  private fun ensureOpenVoiceReady(ctx: Context) {
+    val convFile = BaoTranslateModelManager.getOpenVoiceConverterFile(ctx)
+    val refEncFile = BaoTranslateModelManager.getOpenVoiceRefEncFile(ctx)
+    assumeTrue(
+      "OpenVoice ONNX models not provisioned at ${convFile.parent}",
+      convFile.exists() && refEncFile.exists(),
+    )
+  }
+
+  private fun platformTtsRef(ctx: Context, text: String): Pair<FloatArray, Int> {
+    val initLatch = CountDownLatch(1)
+    var st = TextToSpeech.ERROR
+    val tts = TextToSpeech(ctx.applicationContext) { s -> st = s; initLatch.countDown() }
+    try {
+      assertTrue("tts init", initLatch.await(30, TimeUnit.SECONDS) && st == TextToSpeech.SUCCESS)
+      tts.language = Locale.US
+      val uid = "ble-peer-ref"
+      val f = File(ctx.cacheDir, "$uid.wav")
+      if (f.exists()) f.delete()
+      val done = CountDownLatch(1)
+      tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+        override fun onStart(u: String?) = Unit
+        override fun onDone(u: String?) = done.countDown()
+        @Deprecated("Deprecated in Android framework") override fun onError(u: String?) = done.countDown()
+        override fun onError(u: String?, c: Int) = done.countDown()
+      })
+      assertTrue(
+        "tts synth",
+        tts.synthesizeToFile(text, Bundle().apply { putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, uid) }, f, uid) == TextToSpeech.SUCCESS,
+      )
+      assertTrue("tts finish", done.await(60, TimeUnit.SECONDS))
+      val bytes = f.readBytes()
+      assertTrue("ref wav", WavUtils.isValidWav(bytes))
+      return WavUtils.extractSamplesFromWav(bytes) to (WavUtils.extractSampleRateFromWav(bytes) ?: 22050)
+    } finally {
+      tts.shutdown()
+    }
+  }
+
+  private fun computeEmbedding(converter: OpenVoiceVoiceConverter, wav: Pair<FloatArray, Int>): FloatArray? =
+    converter.computeSpeakerEmbedding(wav.first, wav.second)
+
+  private fun cosine(a: FloatArray, b: FloatArray): Double {
+    var dot = 0.0
+    var na = 0.0
+    var nb = 0.0
+    val n = minOf(a.size, b.size)
+    for (i in 0 until n) {
+      dot += a[i] * b[i]
+      na += a[i].toDouble() * a[i]
+      nb += b[i].toDouble() * b[i]
+    }
+    return if (na > 0 && nb > 0) dot / (sqrt(na) * sqrt(nb)) else 0.0
   }
 
   private data class LiveLang(val key: String, val code: String, val locale: Locale, val phrase: String)

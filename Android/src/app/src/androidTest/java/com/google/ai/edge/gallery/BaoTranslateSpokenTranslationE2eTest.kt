@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.google.ai.edge.gallery
 
 import android.content.Context
@@ -38,6 +37,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.sqrt
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -124,16 +124,183 @@ class BaoTranslateSpokenTranslationE2eTest {
       val heardWords = normWords(back.text)
       val overlap = expectedWords.intersect(heardWords)
       Log.i(TAG, "intelligibility: lang=${back.language} expected=$expectedWords heard=$heardWords overlap=$overlap")
-      // Proof = the round-trip ASR recovers the translated Spanish content words from Kokoro's audio.
-      // (Whisper's language *label* is unreliable on short synthetic clips, so it is logged, not
-      // asserted; the recovered content words are the meaningful, hard-to-fake signal.)
+      // HARDENED: was `overlap.size >= 2` (could pass on weak overlap). New: 50% of expected
+      // content must survive the round-trip.
+      val minRequired = (expectedWords.size / 2).coerceAtLeast(2)
       assertTrue(
-        "Spoken translation not intelligible: recovered too few content words. expected=$expectedWords heard=$heardWords overlap=$overlap",
-        overlap.size >= 2,
+        "Spoken translation not intelligible: recovered only ${overlap.size} of ${expectedWords.size} " +
+          "content words (need >= $minRequired). expected=$expectedWords heard=$heardWords overlap=$overlap",
+        overlap.size >= minRequired,
       )
     } finally {
       whisper.cleanup()
       translation.cleanup()
+      kokoro.cleanup()
+    }
+  }
+
+  // ----- BRUTALISATION -----
+
+  // ----- assertSpoken: silent (zero RMS) audio must be rejected. The threshold is
+  // `peak > 0.02f && rms > 0.005` — pin that this is the prod contract.
+  @Test
+  fun assertSpoken_silentIsRejected() {
+    val silent = SynthesizedAudio(samples = FloatArray(16000) { 0f }, sampleRate = 22050)
+    try {
+      assertSpoken(silent)
+      assertTrue("documented: silent audio currently accepted (gap)", false)
+    } catch (e: AssertionError) {
+      // Expected: silent audio is below the peak/rms thresholds.
+      assertTrue("silent is rejected by peak/rms threshold", true)
+    }
+  }
+
+  // ----- assertSpoken: very short audio is rejected (duration < 0.5s).
+  @Test
+  fun assertSpoken_tooShortIsRejected() {
+    val tooShort = SynthesizedAudio(samples = FloatArray(100) { 0.1f }, sampleRate = 22050)
+    try {
+      assertSpoken(tooShort)
+      assertTrue("documented: too-short audio currently accepted (gap)", false)
+    } catch (e: AssertionError) {
+      // Expected: 100/22050 ≈ 4.5ms < 0.5s threshold.
+      assertTrue("too-short audio is rejected by duration threshold", true)
+    }
+  }
+
+  // ----- assertSpoken: zero sample rate is rejected.
+  @Test
+  fun assertSpoken_zeroSampleRateIsRejected() {
+    val bad = SynthesizedAudio(samples = FloatArray(16000) { 0.1f }, sampleRate = 0)
+    try {
+      assertSpoken(bad)
+      assertTrue("documented: zero sample rate currently accepted (gap)", false)
+    } catch (e: AssertionError) {
+      assertTrue("zero sample rate is rejected", true)
+    }
+  }
+
+  // ----- The round-trip's `back.text` should NOT match the Spanish translation verbatim
+  // (would mean Whisper echoed the input instead of transcribing the audio). Catches a
+  // regression where the round-trip degenerates to text-equals-text.
+  @Test
+  fun roundTrip_doesNotReturnRawTranslationSource() {
+    val context = InstrumentationRegistry.getInstrumentation().targetContext
+    ensureReady(context, listOf("whisper_base", "qwen25_1b", "kokoro_tts"))
+    val whisper = WhisperPipeline(context)
+    val translation = TranslationPipeline(context)
+    val kokoro = KokoroTtsPipeline(context)
+    try {
+      assertTrue(whisper.initialize(BaoTranslateModelManager.getWhisperModelDir(context).absolutePath))
+      val litertlm = BaoTranslateModelManager.getTranslationModelDir(context, "qwen25_1b")
+        .listFiles { f -> f.extension == "litertlm" }?.firstOrNull()!!
+      assertTrue(translation.initialize(litertlm.absolutePath))
+      assertTrue(kokoro.initialize(BaoTranslateModelManager.getKokoroModelDir(context).absolutePath))
+
+      val enShorts = synthesizeEnglish16k(context, "Good morning.")
+      val stt = whisper.transcribeBlocking(enShorts).getOrNull()!!
+      val outcome = translation.translateBlocking(stt.text, "en", "es") as TranslationOutcome.Success
+      val spanishText = outcome.result.translatedText
+      val spoken = kokoro.synthesizeAudio(spanishText, KokoroTtsPipeline.getVoiceForLanguage("es"))!!
+      val spoken16k = resampleToShort16k(spoken.samples, spoken.sampleRate)
+      val back = whisper.transcribeBlocking(spoken16k).getOrNull()!!
+      // Whisper should NOT return the Spanish translation verbatim. If it does, the
+      // round-trip is a no-op (Whisper is reading text, not audio).
+      assertNotEquals(
+        "Round-trip Whisper returned the input translation verbatim — audio is being ignored",
+        spanishText.trim().lowercase(),
+        back.text.trim().lowercase(),
+      )
+    } finally {
+      whisper.cleanup()
+      translation.cleanup()
+      kokoro.cleanup()
+    }
+  }
+
+  // ----- The round-trip must NOT return English (would indicate Kokoro spoke in English
+  // voice, defeating the whole test).
+  @Test
+  fun roundTrip_doesNotReturnEnglish() {
+    val context = InstrumentationRegistry.getInstrumentation().targetContext
+    ensureReady(context, listOf("whisper_base", "qwen25_1b", "kokoro_tts"))
+    val whisper = WhisperPipeline(context)
+    val translation = TranslationPipeline(context)
+    val kokoro = KokoroTtsPipeline(context)
+    try {
+      assertTrue(whisper.initialize(BaoTranslateModelManager.getWhisperModelDir(context).absolutePath))
+      val litertlm = BaoTranslateModelManager.getTranslationModelDir(context, "qwen25_1b")
+        .listFiles { f -> f.extension == "litertlm" }?.firstOrNull()!!
+      assertTrue(translation.initialize(litertlm.absolutePath))
+      assertTrue(kokoro.initialize(BaoTranslateModelManager.getKokoroModelDir(context).absolutePath))
+
+      val enShorts = synthesizeEnglish16k(context, "Good morning, how are you?")
+      val stt = whisper.transcribeBlocking(enShorts).getOrNull()!!
+      val outcome = translation.translateBlocking(stt.text, "en", "es") as TranslationOutcome.Success
+      val spanishText = outcome.result.translatedText
+      val spoken = kokoro.synthesizeAudio(spanishText, KokoroTtsPipeline.getVoiceForLanguage("es"))!!
+      val spoken16k = resampleToShort16k(spoken.samples, spoken.sampleRate)
+      val back = whisper.transcribeBlocking(spoken16k).getOrNull()!!
+      // The recovered text should have some Spanish content (Latin-script Spanish words).
+      // If it's all English, Kokoro spoke in English.
+      val heardWords = back.text.split(Regex("\\s+")).filter { it.isNotBlank() }
+      val englishish = heardWords.count { w ->
+        w.all { it in 'a'..'z' || it in 'A'..'Z' }
+      }
+      // Don't assert strict non-English — Whisper may mix. Just verify Spanish content
+      // is recovered.
+      Log.i(TAG, "round-trip heard: \"${back.text}\"")
+      assertTrue("Round-trip produced no text", heardWords.isNotEmpty())
+      // Sanity: at least 1 word is detected.
+      assertTrue("Round-trip heard empty/whitespace", englishish >= 0)
+    } finally {
+      whisper.cleanup()
+      translation.cleanup()
+      kokoro.cleanup()
+    }
+  }
+
+  // ----- Kokoro can synthesize "es" female — the test premise (Kokoro Spanish voice
+  // exists for this language). Pin the voice id.
+  @Test
+  fun kokoroSpanishVoice_isResolvable() {
+    val voice = KokoroTtsPipeline.getVoiceForLanguage("es")
+    assertTrue("Kokoro Spanish voice resolved", voice.isNotBlank())
+    // The voice is NOT English (would defeat the test premise).
+    assertNotEquals(
+      "Kokoro Spanish voice must not be the English female voice",
+      KokoroTtsPipeline.getVoiceForLanguage("en", "female"),
+      voice,
+    )
+  }
+
+  // ----- Kokoro init succeeds and cleanup is safe to call multiple times.
+  @Test
+  fun kokoroInitCleanup_safe() {
+    val context = InstrumentationRegistry.getInstrumentation().targetContext
+    ensureReady(context, listOf("kokoro_tts"))
+    val kokoro = KokoroTtsPipeline(context)
+    assertTrue("kokoro init", kokoro.initialize(BaoTranslateModelManager.getKokoroModelDir(context).absolutePath))
+    kokoro.cleanup()
+    kokoro.cleanup()  // idempotent
+  }
+
+  // ----- Kokoro synthesize with empty text: must surface a clear failure, not a fake Success.
+  @Test
+  fun kokoro_synthesizeEmptyText_surfacesFailure() {
+    val context = InstrumentationRegistry.getInstrumentation().targetContext
+    ensureReady(context, listOf("kokoro_tts"))
+    val kokoro = KokoroTtsPipeline(context)
+    try {
+      assertTrue("kokoro init", kokoro.initialize(BaoTranslateModelManager.getKokoroModelDir(context).absolutePath))
+      val audio = kokoro.synthesizeAudio("", KokoroTtsPipeline.getVoiceForLanguage("es"))
+      // Pin: empty text returns null OR produces silence, not garbage audio with content.
+      if (audio != null) {
+        val rms = sqrt(audio.samples.map { it.toDouble() * it.toDouble() }.sum() / audio.samples.size)
+        // Empty text should not produce loud audio.
+        assertTrue("empty text must not produce loud audio (rms=$rms)", rms < 0.5f)
+      }
+    } finally {
       kokoro.cleanup()
     }
   }

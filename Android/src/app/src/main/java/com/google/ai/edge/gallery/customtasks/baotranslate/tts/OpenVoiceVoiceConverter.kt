@@ -1,23 +1,29 @@
 package com.google.ai.edge.gallery.customtasks.baotranslate.tts
 
-import android.content.Context
 import com.google.ai.edge.gallery.common.BaoLog
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioResampler
 import java.io.File
 
 /**
- * On-device cross-lingual voice cloning via the OpenVoice ToneColorConverter (ONNX Runtime).
+ * On-device cross-lingual voice cloning via the OpenVoice v2 ToneColorConverter (ONNX Runtime).
  *
  * Kokoro (correct target-language pronunciation, all 8 languages) → resample 22.05 kHz →
- * [OpenVoiceSpectrogram] STFT → `ov_refenc.onnx` (dynamic length) gives the source speaker
- * embedding → `ov_converter.onnx` (dynamic length) re-times the spectrogram into the enrolled
- * user's timbre → 22.05 kHz audio in the user's voice. Decouples pronunciation (Kokoro) from
- * timbre (converter), covering languages end-to-end clone models can't.
+ * [OpenVoiceSpectrogram] STFT → the converter re-times the spectrogram into the enrolled speaker's
+ * timbre → 22.05 kHz audio in that voice. Decouples pronunciation (Kokoro) from timbre (converter),
+ * so a SINGLE model pair clones EVERY voice and every language — the speaker identity is the 256-d
+ * embedding ([computeSpeakerEmbedding]), never baked into the model, so no per-voice download.
  *
- * Both graphs run at the EXACT utterance length on ONNX Runtime ([OrtOpenVoiceModel]): the dilated
- * WaveNet receptive field never reaches padding, so the output is crisp/intelligible (fixed-length
- * TFLite smeared phonemes). Validated at 96+ dB vs PyTorch. tau=0.3 stochastic posterior via an
- * explicit Gaussian noise input.
+ * Both graphs are the public, downloadable OpenVoice exports from
+ * `huggingface.co/seasonstudio/openvoice_tone_clone_onnx` (provisioned by BaoTranslateModelManager):
+ *  - ref encoder `ov_refenc.onnx`: input `input` = spectrogram TIME-major [1, T, 513] → 256-d
+ *    speaker embedding. Time-major is required (OpenVoice's ReferenceEncoder reshapes to
+ *    [N, 1, T, spec_channels]); feeding freq-major collapses distinct speakers to near-identical
+ *    embeddings. Verified on-device (cos(out,target)=0.92 time-major vs no transfer freq-major).
+ *  - converter `ov_converter.onnx`: inputs `audio` = spectrogram FREQ-major [1, 513, T],
+ *    `audio_length` (int64, the frame count → sequence mask, so it runs at the EXACT utterance
+ *    length with no fixed-size WaveNet padding smear), `src_tone`/`dest_tone` = [1, 256, 1] speaker
+ *    embeddings, `tau` (posterior temperature; the graph samples its own Gaussian internally).
+ *    Output 0 = the converted waveform [1, 1, samples].
  *
  * Thread-safety: an internal [inferenceLock] serializes [initialize]/[computeSpeakerEmbedding]/
  * [convert] against [cleanup], so the native ONNX handles are never closed mid-inference (model
@@ -25,20 +31,18 @@ import java.io.File
  * concurrency-safe but session disposal must not overlap a `Run`; this mirrors the same lock
  * contract used by KokoroTtsPipeline/TranslationPipeline/WhisperPipeline/VadProcessor.
  */
-class OpenVoiceVoiceConverter(@Suppress("unused") private val context: Context) {
-  private companion object {
-    const val TAG = "OpenVoiceVC"
-    const val OV_RATE = 22050
-    const val FREQ = OpenVoiceSpectrogram.FREQ_BINS // 513
+class OpenVoiceVoiceConverter {
+  companion object {
     const val SE_DIM = 256
-    const val INTER = 192 // posterior latent channels (inter_channels); noise input shape [1,192,T]
-    const val HOP = OpenVoiceSpectrogram.HOP // 256 (output samples per frame)
-    const val MAX_FRAMES = 4096 // safety cap (~47 s at 22.05 kHz); longer utterances are truncated
+
+    private const val TAG = "OpenVoiceVC"
+    private const val OV_RATE = 22050
+    private const val FREQ = OpenVoiceSpectrogram.FREQ_BINS // 513
+    private const val TAU = 0.3f // posterior temperature; the converter samples its own noise
+    private const val MAX_FRAMES = 4096 // safety cap (~47 s at 22.05 kHz); longer utterances are truncated
   }
 
-  private val noiseRng = java.util.Random()
-
-  // Serializes native ONNX run() against close() so converter/refEnc are never freed mid-inference
+  // Serializes native run() against close() so converter/refEnc are never freed mid-inference
   // (model delete / pipeline switch / onCleared during an in-flight convert), and serializes the
   // recording and BLE-peer synth paths that share this single converter instance.
   private val inferenceLock = Any()
@@ -55,42 +59,45 @@ class OpenVoiceVoiceConverter(@Suppress("unused") private val context: Context) 
     converter = OrtOpenVoiceModel.load(converterOnnx)
     refEnc = OrtOpenVoiceModel.load(refEncOnnx)
     ready = true
-    BaoLog.i(TAG, "OpenVoice converter + ref_enc loaded (ONNX Runtime, exact-length)")
+    BaoLog.i(TAG, "OpenVoice converter + ref_enc loaded (ONNX Runtime)")
     return true
   }
 
-  /** Enrollment: derive the user's 256-d speaker embedding from a reference clip. */
+  /** Enrollment: derive the speaker's 256-d embedding from a reference clip. */
   fun computeSpeakerEmbedding(wavSamples: FloatArray, sampleRate: Int): FloatArray? = synchronized(inferenceLock) {
     val re = refEnc ?: return null
-    val (spec, frames) = spectrogramFlat(wavSamples, sampleRate) ?: return null
-    return runRefEnc(re, spec, frames)
+    val (spec, frames) = spectrogram(wavSamples, sampleRate) ?: return null
+    if (frames <= 0) return null
+    return runRefEnc(re, spec, frames.coerceAtMost(MAX_FRAMES))
   }
 
-  /** Convert Kokoro audio into the enrolled timbre. [targetSe] from [computeSpeakerEmbedding]. */
+  /** Convert [audio] (e.g. Kokoro output) into the [targetSe] timbre. [targetSe] from [computeSpeakerEmbedding]. */
   fun convert(audio: SynthesizedAudio, targetSe: FloatArray): SynthesizedAudio? = synchronized(inferenceLock) {
     val conv = converter ?: return null
     val re = refEnc ?: return null
     if (!ready) return null
-    val (specReal, framesReal) = spectrogramFlat(audio.samples, audio.sampleRate) ?: return null
+    val (spec, framesReal) = spectrogram(audio.samples, audio.sampleRate) ?: return null
     if (framesReal <= 0) return null
-    val srcSe = runRefEnc(re, specReal, framesReal) ?: return null
 
     val frames = framesReal.coerceAtMost(MAX_FRAMES)
     if (framesReal > MAX_FRAMES) BaoLog.w(TAG, "utterance $framesReal frames > $MAX_FRAMES; truncating")
 
-    // Exact-length inference: feed the real spectrogram (freq-major flat == row-major [1,FREQ,T]),
-    // a Gaussian noise tensor for the tau=0.3 posterior, and the src/tgt speaker embeddings.
-    val ySpec = if (frames == framesReal) specReal else specReal.copyOf(FREQ * frames)
-    // Raw standard Gaussian: the ONNX graph applies the tau temperature internally
-    // (z = m + noise * tau * exp(logs)); pre-scaling here would square it.
-    val noise = FloatArray(INTER * frames) { noiseRng.nextGaussian().toFloat() }
-    val inputs = linkedMapOf(
-      "y" to (ySpec to longArrayOf(1, FREQ.toLong(), frames.toLong())),
-      "src" to (srcSe.copyOf(SE_DIM) to longArrayOf(1, SE_DIM.toLong(), 1)),
-      "tgt" to (targetSe.copyOf(SE_DIM) to longArrayOf(1, SE_DIM.toLong(), 1)),
-      "noise" to (noise to longArrayOf(1, INTER.toLong(), frames.toLong())),
+    // Source timbre = embedding of the base audio itself (so the converter can remove it before
+    // applying the target). Same ref encoder, same time-major layout as enrollment.
+    val srcSe = runRefEnc(re, spec, frames) ?: return null
+
+    // converter: audio FREQ-major [1, FREQ, T]; audio_length (int64) drives the exact-length mask.
+    val audioFlat = OpenVoiceSpectrogram.flatten(spec, frames, timeMajor = false)
+    val floatInputs = linkedMapOf(
+      "audio" to (audioFlat to longArrayOf(1, FREQ.toLong(), frames.toLong())),
+      "src_tone" to (srcSe.copyOf(SE_DIM) to longArrayOf(1, SE_DIM.toLong(), 1)),
+      "dest_tone" to (targetSe.copyOf(SE_DIM) to longArrayOf(1, SE_DIM.toLong(), 1)),
+      "tau" to (floatArrayOf(TAU) to longArrayOf(1)),
     )
-    val (flat, _) = conv.run(inputs)
+    val longInputs = linkedMapOf(
+      "audio_length" to (longArrayOf(frames.toLong()) to longArrayOf(1)),
+    )
+    val (flat, _) = conv.run(floatInputs, longInputs)
     return if (flat.isEmpty()) null else SynthesizedAudio(samples = flat, sampleRate = OV_RATE)
   }
 
@@ -104,18 +111,22 @@ class OpenVoiceVoiceConverter(@Suppress("unused") private val context: Context) 
 
   // ---- helpers ----
 
-  private fun spectrogramFlat(samples: FloatArray, sampleRate: Int): Pair<FloatArray, Int>? {
+  // Resamples to 22.05 kHz and computes the magnitude STFT once ([FREQ_BINS][frames]); callers
+  // flatten it freq- or time-major as each graph requires.
+  private fun spectrogram(samples: FloatArray, sampleRate: Int): Pair<Array<FloatArray>, Int>? {
     if (samples.isEmpty()) return null
     val at22k = AudioResampler.resample(samples, sampleRate, OV_RATE)
     if (at22k.size < OpenVoiceSpectrogram.N_FFT) return null
-    return OpenVoiceSpectrogram.computeFlat(at22k) // FloatArray[FREQ*frames] freq-major, frames
+    val spec = OpenVoiceSpectrogram.compute(at22k) // [FREQ_BINS][frames]
+    val frames = if (spec.isNotEmpty()) spec[0].size else 0
+    return spec to frames
   }
 
-  // ref_enc runs at exact length too: spec flat (freq-major) == row-major [1,FREQ,frames];
-  // TAU/noise unused here (deterministic GRU pooling) -> output [1,SE_DIM,1].
-  private fun runRefEnc(re: OrtOpenVoiceModel, flatSpec: FloatArray, frames: Int): FloatArray? {
-    val name = re.inputNames.firstOrNull() ?: "spec"
-    val (flat, _) = re.run(mapOf(name to (flatSpec to longArrayOf(1, FREQ.toLong(), frames.toLong()))))
+  // ref encoder: spectrogram fed TIME-major [1, frames, FREQ] -> [1, SE_DIM] (flattened to SE_DIM).
+  private fun runRefEnc(re: OrtOpenVoiceModel, spec: Array<FloatArray>, frames: Int): FloatArray? {
+    val name = re.inputNames.firstOrNull() ?: "input"
+    val timeMajor = OpenVoiceSpectrogram.flatten(spec, frames, timeMajor = true)
+    val (flat, _) = re.run(mapOf(name to (timeMajor to longArrayOf(1, frames.toLong(), FREQ.toLong()))))
     return flat.takeIf { it.size >= SE_DIM }?.copyOf(SE_DIM)
   }
 }

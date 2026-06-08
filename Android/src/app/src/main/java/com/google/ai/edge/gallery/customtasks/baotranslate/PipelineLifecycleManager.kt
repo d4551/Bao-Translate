@@ -31,7 +31,7 @@ internal class PipelineLifecycleManager {
 
   private fun initOpenVoiceLocked(app: Application) {
     if (!BaoTranslateModelManager.isOpenVoiceCloneAvailable(app)) return
-    val conv = OpenVoiceVoiceConverter(app)
+    val conv = OpenVoiceVoiceConverter()
     if (!conv.initialize(
         BaoTranslateModelManager.getOpenVoiceConverterFile(app),
         BaoTranslateModelManager.getOpenVoiceRefEncFile(app),

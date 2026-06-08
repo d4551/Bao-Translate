@@ -84,40 +84,40 @@ class VadProcessor(private val context: Context) {
       audioSamples[i].toFloat() / 32768f
     }
 
-    v.reset()
-    v.acceptWaveform(floatSamples)
-    v.flush()
+    // The sherpa-onnx VAD calls below are native (JNI); a native fault would otherwise escape the
+    // recording coroutine (no CoroutineExceptionHandler) and crash the app. Funnel any throw into
+    // the energy-based [fallbackSegmentation] so recording degrades gracefully instead.
+    return runCatching {
+      v.reset()
+      v.acceptWaveform(floatSamples)
+      v.flush()
 
-    val segments = mutableListOf<List<Short>>()
-
-    while (!v.empty()) {
-      val speechSegment = v.front()
-      val floatSeg = speechSegment.samples
-
-      if (floatSeg.isNotEmpty()) {
-        val shortSeg = ShortArray(floatSeg.size) { i ->
-          (floatSeg[i] * 32768f).toInt()
-            .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
-            .toShort()
+      val segments = mutableListOf<List<Short>>()
+      while (!v.empty()) {
+        val floatSeg = v.front().samples
+        if (floatSeg.isNotEmpty()) {
+          segments.add(
+            ShortArray(floatSeg.size) { i ->
+              (floatSeg[i] * 32768f).toInt()
+                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+                .toShort()
+            }.toList()
+          )
         }
-        segments.add(shortSeg.toList())
+        v.pop()
       }
-      v.pop()
-    }
-
-    val usableSegments = segments.filter { it.size >= MIN_STT_SEGMENT_SAMPLES }
-    if (usableSegments.isNotEmpty()) {
       v.reset()
-      return usableSegments
-    }
 
-    if (audioSamples.hasFallbackSpeechEnergy()) {
-      v.reset()
-      return listOf(audioSamples.toList())
+      val usableSegments = segments.filter { it.size >= MIN_STT_SEGMENT_SAMPLES }
+      when {
+        usableSegments.isNotEmpty() -> usableSegments
+        audioSamples.hasFallbackSpeechEnergy() -> listOf(audioSamples.toList())
+        else -> emptyList()
+      }
+    }.getOrElse { e ->
+      BaoLog.w(TAG, "VAD native inference failed; using energy fallback: ${e.message}")
+      fallbackSegmentation(audioSamples)
     }
-
-    v.reset()
-    return emptyList()
   }
 
   fun reset() {

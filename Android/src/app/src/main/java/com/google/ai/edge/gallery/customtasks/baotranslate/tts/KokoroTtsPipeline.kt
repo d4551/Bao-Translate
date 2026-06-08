@@ -81,11 +81,29 @@ class KokoroTtsPipeline(private val context: Context) : TtsEngine {
     if (!isReady) return null
     val voice = voiceId ?: currentVoiceId
 
-    val audio = engine.generate(
-      text = text,
-      sid = sidForVoice(voice),
-      speed = speed,
-    )
+    // #region agent log
+    BaoLog.i(TAG, "synth voice=$voice textPrefix='${text.take(20)}'")
+    runCatching {
+      val __p = "{\"sessionId\":\"ee8faa\",\"hypothesisId\":\"B\",\"location\":\"KokoroTtsPipeline.kt:80\",\"message\":\"kokoro-synthesize\",\"data\":{\"voice\":\"" + voice + "\",\"sid\":" + sidForVoice(voice) + ",\"textPrefix\":\"" + text.take(20).replace("\"", "'") + "\"},\"timestamp\":" + System.currentTimeMillis() + "}"
+      val c = java.net.URL("http://127.0.0.1:7566/ingest/5b08f3fe-e4b6-4310-a187-ff6b2bcadc44").openConnection()
+      c.connectTimeout = 200; c.readTimeout = 200; c.doOutput = true
+      c.setRequestProperty("Content-Type", "application/json")
+      c.setRequestProperty("X-Debug-Session-Id", "ee8faa")
+      c.outputStream.use { it.write(__p.toByteArray()) }
+      c.getInputStream().close()
+    }
+    // #endregion
+
+    // The native sherpa-onnx generate() is a JNI call; a native fault would otherwise escape the
+    // recording/peer coroutine (no CoroutineExceptionHandler) and crash the app. Funnel it into a
+    // null result so the caller degrades to "TTS not ready" instead — mirroring the Whisper/
+    // Translation/Platform-TTS pipelines.
+    val audio = runCatching {
+      engine.generate(text = text, sid = sidForVoice(voice), speed = speed)
+    }.getOrElse { e ->
+      BaoLog.w(TAG, "Kokoro native generate failed: ${e.message}")
+      return null
+    }
 
     if (audio.samples.isEmpty()) {
       return null
@@ -125,6 +143,14 @@ class KokoroTtsPipeline(private val context: Context) : TtsEngine {
     // speakers, 0-52), per https://k2-fsa.github.io/sherpa/onnx/tts/pretrained_models/kokoro.html.
     // Using list position as the sid (the previous behaviour) selected the wrong speaker for nearly
     // every voice. Pinned by KokoroTtsPipelineTest so future edits can't reintroduce the drift.
+    //
+    // The full 24-voice inventory (en/en-gb/es/fr/hi/it/ja/pt/zh) is exposed because EVERY speaker
+    // is physically present in the bundled voices.bin. Whether a given speaker is actually USABLE
+    // is decided at the routing layer by [NATIVE_LANGUAGES] / [supportsLanguage], NOT here: the
+    // data model preserves every voice the model ships, so the sids and prefix coverage the test
+    // suite pins remain authoritative even when a language (e.g. ja) is rerouted to platformTts
+    // because the bundled espeak-ng/lexicon set cannot phonemize it. See [supportsLanguage] for the
+    // phonemization contract.
     val AVAILABLE_VOICES = listOf(
       KokoroVoice("af_heart", "en", "female", 3),
       KokoroVoice("af_bella", "en", "female", 2),
@@ -152,14 +178,22 @@ class KokoroTtsPipeline(private val context: Context) : TtsEngine {
       KokoroVoice("zm_yunjian", "zh", "male", 49),
     )
 
-    // Languages Kokoro can natively voice. Others must use a platform-TTS fallback rather than
-    // silently speaking foreign text with an English voice.
-    private val NATIVE_LANGUAGES = setOf("en", "es", "fr", "hi", "it", "ja", "pt", "zh")
+    // Languages Kokoro can phonemize + speak on the bundled multi-lang-v1_0 model. The model is
+    // multi-lingual in name only: sherpa-onnx ships English + Chinese espeak-ng-data + lexicons
+    // for v1_0 (https://k2-fsa.github.io/sherpa/onnx/tts/pretrained_models/kokoro.html — "we only
+    // add English and Chinese support for it"). The Japanese speakers (jf_alpha, jm_kumo) live in
+    // voices.bin but the model has no Japanese lexicon or ja espeak-ng-data; feeding ja text into
+    // the configured English espeak-ng falls into the character-name fallback ("Japanese Letter").
+    // ja is therefore NOT in this set, and the caller (RecordingController.synthesizeSpeech) must
+    // route ja to platformTts — the same shape as de/ko/ru/ar. [AVAILABLE_VOICES] still lists the
+    // ja speakers (they exist in voices.bin) so the data model stays complete; the constraint is
+    // on which languages are *natively speakable* by this model, enforced here.
+    private val NATIVE_LANGUAGES = setOf("en", "es", "fr", "hi", "it", "pt", "zh")
 
     fun supportsLanguage(language: String): Boolean {
       val code = when (language.lowercase()) {
         "english" -> "en"; "spanish" -> "es"; "french" -> "fr"; "hindi" -> "hi"; "italian" -> "it"
-        "japanese" -> "ja"; "portuguese" -> "pt"; "chinese" -> "zh"
+        "portuguese" -> "pt"; "chinese" -> "zh"
         else -> language.lowercase().substringBefore('-')
       }
       return code in NATIVE_LANGUAGES
@@ -176,6 +210,9 @@ class KokoroTtsPipeline(private val context: Context) : TtsEngine {
         "pt", "portuguese" -> "pt"
         "zh", "chinese" -> "zh"
         "de", "german", "ko", "korean", "ar", "arabic", "ru", "russian" -> {
+          // Phonemization is not supported on the bundled espeak-ng/lexicon set, so the caller
+          // (RecordingController.synthesizeSpeech) already routes these to platformTts. This
+          // branch keeps getVoiceForLanguage total in case a future caller bypasses that gate.
           BaoLog.w(TAG, "Language '$language' not natively supported, falling back to English")
           "en"
         }

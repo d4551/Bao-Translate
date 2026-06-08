@@ -47,6 +47,13 @@ private const val MIN_TRANSLATION_SEGMENT_SECONDS = 1
 private const val AUDIO_READ_EMPTY_SLEEP_MS = 20L
 private const val AUDIO_READ_STALL_TIMEOUT_MS = 3_000L
 
+enum class SpeechTimbre {
+  /** Use [speakerSe] when provided; otherwise fall back to the locally-enrolled timbre. */
+  LocalEnrolled,
+  /** Use [speakerSe] only — never fall back to the local enrolled timbre. */
+  PeerOnly,
+}
+
 internal class RecordingController(
   private val pipelines: PipelineLifecycleManager,
   private val audioRouter: AudioRouter,
@@ -75,6 +82,18 @@ internal class RecordingController(
     @androidx.annotation.VisibleForTesting(otherwise = androidx.annotation.VisibleForTesting.NONE)
     @Volatile
     internal var testPcmSource: ShortArray? = null
+
+    /** Last target speaker embedding passed to OpenVoice convert, or null if no clone was attempted. */
+    @JvmStatic
+    @androidx.annotation.VisibleForTesting(otherwise = androidx.annotation.VisibleForTesting.NONE)
+    @Volatile
+    internal var testLastCloneTargetSe: FloatArray? = null
+
+    /** True when [OpenVoiceVoiceConverter.convert] was attempted with a non-null target embedding. */
+    @JvmStatic
+    @androidx.annotation.VisibleForTesting(otherwise = androidx.annotation.VisibleForTesting.NONE)
+    @Volatile
+    internal var testLastWasCloned: Boolean = false
   }
 
   fun startRecording() {
@@ -132,9 +151,9 @@ internal class RecordingController(
       val sampleRate = PipelineConfig.STT_SAMPLE_RATE
       val channelConfig = AudioFormat.CHANNEL_IN_MONO
       val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-      val bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
-      if (bufferSize <= 0) {
-        BaoLog.e(REC_TAG, "AudioRecord returned invalid min buffer size: $bufferSize")
+      val minBufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+      if (minBufferSize <= 0) {
+        BaoLog.e(REC_TAG, "AudioRecord returned invalid min buffer size: $minBufferSize")
         unlockRecordingIfHeld()
         uiState.update { it.copy(
           pipelineStatus = PipelineStatus.Idle,
@@ -165,12 +184,16 @@ internal class RecordingController(
         return@launch
       }
 
+      // Capture into a generous ring buffer — 0.5 s of PCM16, never below 4x the OS minimum — so a
+      // transient stall in the VAD/STT/translation consumer never overflows AudioRecord and drops
+      // samples (the cause of scratchy/glitchy capture). Mirrors the 4x sizing on the playback track.
+      val captureBufferBytes = maxOf(minBufferSize * 4, sampleRate * Short.SIZE_BYTES / 2)
       val recorder = AudioRecord(
         audioSource,
         sampleRate,
         channelConfig,
         audioFormat,
-        bufferSize,
+        captureBufferBytes,
       )
 
       if (recorder.state != AudioRecord.STATE_INITIALIZED) {
@@ -196,7 +219,7 @@ internal class RecordingController(
       }
 
       audioRecord = recorder
-      val buffer = ShortArray((bufferSize / 2).coerceAtLeast(sampleRate / 10))
+      val buffer = ShortArray((minBufferSize / 2).coerceAtLeast(sampleRate / 10))
       val startTime = System.currentTimeMillis()
       val liveWindowSamples = sampleRate * LIVE_TRANSLATION_WINDOW_SECONDS
       val liveStrideSamples = sampleRate * LIVE_TRANSLATION_STRIDE_SECONDS
@@ -358,10 +381,9 @@ internal class RecordingController(
     }
   }
 
-  // Mirrors the mic read-loop's lifecycle (publish Recording, window the audio into live segments,
-  // flush the tail, stay "recording" until stop) but sources audio from injected PCM. Reuses the
-  // real queueRealtimeTranslationSegment / processAudioSegment path so STT, translation, and UI
-  // markers behave exactly as in production.
+  // Sources audio from injected PCM and reuses the real queueRealtimeTranslationSegment /
+  // processAudioSegment path so STT, translation, and UI markers behave exactly as in production.
+  // Windows audio into live segments and flushes the tail, staying "recording" until stop.
   private suspend fun runInjectedLiveTranslationForTest(recordingSessionId: Long, pcm: ShortArray) {
     try {
       val sampleRate = PipelineConfig.STT_SAMPLE_RATE
@@ -670,13 +692,21 @@ internal class RecordingController(
   }
 
   // `internal` so the conversation receive path (BaoTranslateViewModel) can speak peer messages
-  // through the same engine-selection + playback logic, instead of duplicating it.
+  // through the same engine-selection + playback logic.
   internal suspend fun synthesizeSpeech(
     text: String,
     language: String,
     recordingSessionId: Long? = null,
     preserveRecordingStatus: Boolean = false,
+    // A connected peer's shared voice timbre (256-d OpenVoice speaker embedding). When non-null, the
+    // output is cloned into THAT speaker's voice so a multi-speaker conversation is heard in each
+    // person's own voice; null => the locally-enrolled user's timbre (the normal local-speech path).
+    speakerSe: FloatArray? = null,
+    timbre: SpeechTimbre = SpeechTimbre.LocalEnrolled,
   ): Boolean {
+    testLastCloneTargetSe = null
+    testLastWasCloned = false
+
     if (isStaleRecordingSegment(recordingSessionId)) return false
 
     if (!preserveRecordingStatus) {
@@ -686,25 +716,63 @@ internal class RecordingController(
     val state = uiState.value
     val kokoro = pipelines.kokoroTts
     val ovConverter = pipelines.openVoiceConverter
-    val ovTargetSe = pipelines.openVoiceTargetSe
 
-    // Languages Kokoro can't voice (de/ko/ru/ar/...) MUST use the platform-TTS fallback — otherwise
-    // they'd be spoken with an English Kokoro voice (wrong-language gibberish). No clone for these
-    // (the converter only re-times Kokoro output), but a correct generic voice beats wrong audio.
+    // Pronunciation source: Kokoro for the languages it voices natively, else the device platform
+    // TTS for the rest (de/ko/ru/ar/ja). Speaking those with an English Kokoro voice would be
+    // wrong-language gibberish (e.g. ja → espeak-ng English → "Japanese Letter" character-name
+    // fallback). The supportsLanguage() predicate is the SSOT for which languages Kokoro can
+    // phonemize on the bundled sherpa-onnx kokoro-multi-lang-v1_0 model; it is pinned by
+    // KokoroTtsPipelineTest so a future regression re-adding ja here would fail the build.
     val nativeToKokoro = KokoroTtsPipeline.supportsLanguage(language)
-
-    // Preferred (Kokoro languages): OpenVoice cross-lingual clone — Kokoro supplies correct
-    // pronunciation, then the converter re-times it into the enrolled user's timbre. Falls back to
-    // generic Kokoro if conversion fails or the user hasn't enrolled a voice.
-    val audio = when {
-      !nativeToKokoro -> pipelines.platformTts?.synthesizeAudio(text, language)
-      state.voiceProfileEnrolled && ovConverter != null && ovTargetSe != null && kokoro != null -> {
-        val base = kokoro.synthesizeAudio(text, KokoroTtsPipeline.getVoiceForLanguage(language))
-        base?.let { ovConverter.convert(it, ovTargetSe) } ?: base
+    // #region agent log
+    com.google.ai.edge.gallery.common.BaoLog.i("BaoDbg", "route lang=$language nativeToKokoro=$nativeToKokoro textPrefix='${text.take(20)}'")
+    runCatching {
+      val __dbgPayload = "{\"sessionId\":\"ee8faa\",\"hypothesisId\":\"A\",\"location\":\"RecordingController.kt:723\",\"message\":\"tts-routing\",\"data\":{\"lang\":\"" + language + "\",\"nativeToKokoro\":" + nativeToKokoro + ",\"textPrefix\":\"" + text.take(20).replace("\"", "'") + "\"},\"timestamp\":" + System.currentTimeMillis() + "}"
+      val c = java.net.URL("http://127.0.0.1:7566/ingest/5b08f3fe-e4b6-4310-a187-ff6b2bcadc44").openConnection()
+      c.connectTimeout = 200; c.readTimeout = 200; c.doOutput = true
+      c.setRequestProperty("Content-Type", "application/json")
+      c.setRequestProperty("X-Debug-Session-Id", "ee8faa")
+      c.outputStream.use { it.write(__dbgPayload.toByteArray()) }
+      c.getInputStream().close()
+    }
+    // #endregion
+    val base = if (nativeToKokoro) {
+      kokoro?.synthesizeAudio(text, KokoroTtsPipeline.getVoiceForLanguage(language))
+    } else {
+      // #region agent log
+      com.google.ai.edge.gallery.common.BaoLog.i("BaoDbg", "route -> platformTts lang=$language")
+      runCatching {
+        val __dbgPayload2 = "{\"sessionId\":\"ee8faa\",\"hypothesisId\":\"A2\",\"location\":\"RecordingController.kt:727\",\"message\":\"route-platformTts\",\"data\":{\"lang\":\"" + language + "\"},\"timestamp\":" + System.currentTimeMillis() + "}"
+        val c = java.net.URL("http://127.0.0.1:7566/ingest/5b08f3fe-e4b6-4310-a187-ff6b2bcadc44").openConnection()
+        c.connectTimeout = 200; c.readTimeout = 200; c.doOutput = true
+        c.setRequestProperty("Content-Type", "application/json")
+        c.setRequestProperty("X-Debug-Session-Id", "ee8faa")
+        c.outputStream.use { it.write(__dbgPayload2.toByteArray()) }
+        c.getInputStream().close()
       }
-      kokoro != null ->
-        kokoro.synthesizeAudio(text, KokoroTtsPipeline.getVoiceForLanguage(language))
-      else -> null
+      // #endregion
+      pipelines.platformTts?.synthesizeAudio(text, language)
+    }
+
+    // Voice clone: the OpenVoice tone-color converter re-times the base audio into a target timbre.
+    // It is language- AND source-agnostic, so this clones EVERY supported language — including the
+    // platform-TTS fallback languages (de/ko/ru/ar), not just Kokoro's. [speakerSe] (a peer's shared
+    // timbre) takes precedence so a multi-speaker conversation is heard in each speaker's own voice;
+    // otherwise the locally-enrolled user's timbre is used when enrolled. Falls back to the un-cloned
+    // base when no timbre applies or a conversion fails.
+    val targetSe = when (timbre) {
+      SpeechTimbre.PeerOnly -> speakerSe
+      SpeechTimbre.LocalEnrolled ->
+        speakerSe ?: pipelines.openVoiceTargetSe?.takeIf { state.voiceProfileEnrolled }
+    }
+    if (targetSe != null) {
+      testLastCloneTargetSe = targetSe.copyOf()
+    }
+    val audio = if (ovConverter != null && targetSe != null && base != null) {
+      testLastWasCloned = true
+      ovConverter.convert(base, targetSe) ?: base
+    } else {
+      base
     }
 
     var played = false

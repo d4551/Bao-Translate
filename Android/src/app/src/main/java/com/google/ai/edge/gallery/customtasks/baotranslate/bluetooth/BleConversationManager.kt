@@ -9,6 +9,7 @@ import com.bluetooth.communicator.Message
 import com.bluetooth.communicator.Peer
 import com.google.ai.edge.gallery.customtasks.baotranslate.data.Participant
 import com.google.ai.edge.gallery.customtasks.baotranslate.data.SupportedLanguages
+import com.google.ai.edge.gallery.customtasks.baotranslate.tts.OpenVoiceVoiceConverter
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,18 +23,20 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.floatOrNull
 import kotlinx.serialization.json.longOrNull
 
 private const val TAG = "BleConversationMgr"
 private const val SERVICE_NAME = "bao_translate"
 private const val MSG_TRANSCRIPT = "T"
 private const val MSG_METADATA = "M"
-private const val MAX_BLE_MESSAGE_SIZE = 8192
+internal const val MAX_BLE_MESSAGE_SIZE = 8192
 private const val MAX_TEXT_LENGTH = 4096
 
 @Serializable
@@ -53,15 +56,18 @@ data class BleMetadataMessage(
   val sourceLanguage: String,
   val targetLanguage: String,
   val hasVoiceProfile: Boolean,
+  // The sender's 256-d OpenVoice speaker embedding (~2.5 KB as JSON), shared so the receiver can
+  // speak this peer's translated turns in THAT peer's own voice (multi-speaker voice cloning).
+  // Null/omitted when the peer hasn't enrolled a voice. Well under MAX_BLE_MESSAGE_SIZE.
+  val voiceEmbedding: List<Float>? = null,
 )
 
 /**
  * Pure (Context-free) encode/validate/decode for BLE conversation payloads. Decoding is DEFENSIVE:
  * a connected peer — or link corruption from a legitimate peer — can put arbitrary bytes on the
- * wire, and the substring pre-checks do NOT guarantee well-formed JSON. The kotlinx decode is
- * therefore wrapped to return null on any SerializationException instead of throwing out of the
- * BluetoothCommunicator main-thread callback and crashing the process. Standalone object so the
- * decode contract is unit-testable without a Context.
+ * wire. The kotlinx decode is wrapped to return null on any SerializationException instead of
+ * throwing out of the BluetoothCommunicator main-thread callback and crashing the process.
+ * Standalone object so the decode contract is unit-testable without a Context.
  */
 internal object BleMessageCodec {
   private val json = Json { ignoreUnknownKeys = true }
@@ -106,7 +112,10 @@ internal object BleMessageCodec {
     val sourceLanguage = (obj["sourceLanguage"] as? JsonPrimitive)?.contentOrNull ?: ""
     val targetLanguage = (obj["targetLanguage"] as? JsonPrimitive)?.contentOrNull ?: ""
     val hasVoiceProfile = (obj["hasVoiceProfile"] as? JsonPrimitive)?.booleanOrNull ?: false
-    return BleMetadataMessage(participantId, participantName, sourceLanguage, targetLanguage, hasVoiceProfile)
+    val voiceEmbedding = (obj["voiceEmbedding"] as? JsonArray)
+      ?.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }
+      ?.takeIf { it.size == OpenVoiceVoiceConverter.SE_DIM }
+    return BleMetadataMessage(participantId, participantName, sourceLanguage, targetLanguage, hasVoiceProfile, voiceEmbedding)
   }
 
   // Never throws: malformed JSON (passes the substring gate but isn't parseable) yields null.
@@ -156,6 +165,14 @@ class BleConversationManager(private val context: Context) {
     _messages.emit(message)
   }
 
+  /**
+   * Test-only: apply an incoming peer metadata update through the same path as a real BLE message,
+   * so instrumentation can verify multi-speaker embedding routing without a second physical device.
+   */
+  internal fun simulateIncomingMetadataForTest(peerId: String, metadata: BleMetadataMessage) {
+    applyMetadataForPeer(peerId, metadata)
+  }
+
   private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
   val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
 
@@ -165,6 +182,25 @@ class BleConversationManager(private val context: Context) {
   private var localParticipant: Participant? = null
   private val peerMap = ConcurrentHashMap<String, Peer>()
   private val discoveredPeerMap = ConcurrentHashMap<String, Peer>()
+
+  // Multi-speaker voice cloning: each connected peer's timbre (received from their metadata, keyed
+  // by peer uniqueName). The receive path looks up [voiceEmbeddingFor] so a peer's translated turn
+  // is spoken in their voice. The local timbre is read on demand via [localEmbeddingProvider].
+  private var localEmbeddingProvider: () -> FloatArray? = { null }
+  private val peerVoiceEmbeddings = ConcurrentHashMap<String, FloatArray>()
+
+  /** Supplies the local enrolled timbre when metadata is broadcast to peers. */
+  fun setLocalEmbeddingProvider(provider: () -> FloatArray?) {
+    localEmbeddingProvider = provider
+  }
+
+  /** Re-broadcasts local participant metadata (including the current embedding) to connected peers. */
+  fun rebroadcastMetadata() {
+    if (peerMap.isNotEmpty()) sendMetadata()
+  }
+
+  /** The connected peer's enrolled timbre (256-d), or null if they haven't shared/enrolled one. */
+  fun voiceEmbeddingFor(peerId: String): FloatArray? = peerVoiceEmbeddings[peerId]
 
   private fun ensureCommunicator(): BluetoothCommunicator? {
     if (communicator == null) {
@@ -199,6 +235,7 @@ class BleConversationManager(private val context: Context) {
       override fun onPeerLost(peer: Peer) {
         BaoLog.i(TAG, "Peer lost: ${peer.name}")
         peerMap.remove(peer.uniqueName)
+        peerVoiceEmbeddings.remove(peer.uniqueName)
         _participants.value = _participants.value.filter { it.id != peer.uniqueName }
         _discoveredPeers.value = _discoveredPeers.value.filter { it.id != peer.uniqueName }
       }
@@ -277,6 +314,7 @@ class BleConversationManager(private val context: Context) {
       override fun onDisconnected(peer: Peer, errorCode: Int) {
         BaoLog.i(TAG, "Disconnected: ${peer.name}")
         peerMap.remove(peer.uniqueName)
+        peerVoiceEmbeddings.remove(peer.uniqueName)
         _participants.value = _participants.value.filter { it.id != peer.uniqueName }
         if (_participants.value.isEmpty()) {
           _connectionState.value = ConnectionState.DISCONNECTED
@@ -335,14 +373,26 @@ class BleConversationManager(private val context: Context) {
   }
 
   private fun updateParticipantFromMetadata(source: Peer, metadata: BleMetadataMessage) {
+    applyMetadataForPeer(source.uniqueName, metadata)
+  }
+
+  private fun applyMetadataForPeer(peerId: String, metadata: BleMetadataMessage) {
+    // Store/clear the peer's shared timbre so their translated turns can be spoken in their voice.
+    val embedding = metadata.voiceEmbedding?.takeIf { it.size == OpenVoiceVoiceConverter.SE_DIM }
+    if (embedding != null) {
+      peerVoiceEmbeddings[peerId] = embedding.toFloatArray()
+    } else {
+      peerVoiceEmbeddings.remove(peerId)
+    }
+    val hasVoiceProfile = embedding != null
     val current = _participants.value.toMutableList()
-    val index = current.indexOfFirst { it.id == source.uniqueName }
+    val index = current.indexOfFirst { it.id == peerId }
     if (index >= 0) {
       current[index] = current[index].copy(
         name = metadata.participantName,
         sourceLanguage = metadata.sourceLanguage,
         targetLanguage = metadata.targetLanguage,
-        hasVoiceProfile = metadata.hasVoiceProfile,
+        hasVoiceProfile = hasVoiceProfile,
       )
       _participants.value = current
     }
@@ -423,6 +473,7 @@ class BleConversationManager(private val context: Context) {
       ensureCommunicator()?.disconnect(peer)
     }
     peerMap.remove(deviceAddress)
+    peerVoiceEmbeddings.remove(deviceAddress)
     _participants.value = _participants.value.filter { it.id != deviceAddress }
     if (_participants.value.isEmpty()) {
       _connectionState.value = ConnectionState.DISCONNECTED
@@ -450,31 +501,44 @@ class BleConversationManager(private val context: Context) {
     val local = localParticipant ?: return
     val comm = ensureCommunicator() ?: return
 
-    val metadata = BleMetadataMessage(
+    val rawEmbedding = localEmbeddingProvider()?.toList()
+    val voiceEmbedding = rawEmbedding?.takeIf { it.size == OpenVoiceVoiceConverter.SE_DIM }
+    var hasVoiceProfile = voiceEmbedding != null
+    var metadata = BleMetadataMessage(
       participantId = local.id,
       participantName = local.name,
       sourceLanguage = local.sourceLanguage,
       targetLanguage = local.targetLanguage,
-      hasVoiceProfile = local.hasVoiceProfile,
+      hasVoiceProfile = hasVoiceProfile,
+      voiceEmbedding = voiceEmbedding,
     )
 
-    comm.sendMessage(Message(context, BleMessageCodec.encodeMetadata(metadata)))
+    var encoded = BleMessageCodec.encodeMetadata(metadata)
+    if (encoded.length > MAX_BLE_MESSAGE_SIZE) {
+      BaoLog.w(TAG, "Metadata exceeds MAX_BLE_MESSAGE_SIZE (${encoded.length}); omitting voiceEmbedding")
+      hasVoiceProfile = false
+      metadata = metadata.copy(voiceEmbedding = null, hasVoiceProfile = false)
+      encoded = BleMessageCodec.encodeMetadata(metadata)
+    }
+
+    comm.sendMessage(Message(context, encoded))
   }
 
   fun getConnectedCount(): Int = _participants.value.count { it.isConnected }
 
   fun cleanup() {
     scopeJob.cancel()
+    localEmbeddingProvider = { null }
     val comm = communicator
     communicator = null
-    // destroy() does not stop the active LE advertiser/scanner (it only tears down channels and
-    // calls the deprecated BluetoothAdapter.disable(), a no-op for non-privileged apps on API 31+),
+    // destroy() tears down channels but does not reliably stop the active LE advertiser/scanner,
     // so an in-progress discovery would leak its AdvertiseCallback/ScanCallback to the system stack
     // until process death. Stop them explicitly first.
     comm?.stopAdvertising(true)
     comm?.stopDiscovery(true)
     peerMap.clear()
     discoveredPeerMap.clear()
+    peerVoiceEmbeddings.clear()
     _participants.value = emptyList()
     _discoveredPeers.value = emptyList()
     _isScanning.value = false

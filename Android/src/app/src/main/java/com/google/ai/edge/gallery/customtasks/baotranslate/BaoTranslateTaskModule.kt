@@ -31,6 +31,10 @@ class BaoTranslateTask @Inject constructor(
       description = appContext.getString(R.string.bao_translate_task_description),
       shortDescription = appContext.getString(R.string.bao_translate_task_short_description),
       models = mutableListOf(),
+      // Bao Translate provisions its own model set (BaoTranslateModelManager.ALL_MODELS) rather than
+      // registering Model objects, so the home card derives its count from that SSOT — otherwise the
+      // empty [models] list would render "0 models".
+      modelCountOverride = BaoTranslateModelManager.ALL_MODELS.size,
     )
 
   override fun initializeModelFn(

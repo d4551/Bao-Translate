@@ -79,6 +79,8 @@ internal class VoiceLanguageCoordinator(
         converter.computeSpeakerEmbedding(floats, sampleRate)?.let { embedding ->
           voiceProfileManager.saveSpeakerEmbedding(embedding)
           pipelines.openVoiceTargetSe = embedding
+          // Re-broadcast metadata so connected peers hear THIS user in their own voice.
+          bleManager.rebroadcastMetadata()
         }
       }
     }
@@ -88,6 +90,7 @@ internal class VoiceLanguageCoordinator(
     viewModelScope.launch(Dispatchers.IO) {
       voiceProfileManager.deleteProfile()
       pipelines.openVoiceTargetSe = null
+      bleManager.rebroadcastMetadata()
       uiState.update { state ->
         val updated = state.copy(
           voiceProfileEnrolled = false,
@@ -135,9 +138,9 @@ internal class VoiceLanguageCoordinator(
   }
 
   // Updates uiState with a fresh local participant, then broadcasts it to BLE peers exactly once.
-  // The broadcast must run AFTER commit, outside the update{} lambda: MutableStateFlow.update{} may
-  // re-evaluate its transform under CAS contention, so doing the side effect inside it would push
-  // transient/duplicate participant snapshots onto the wire.
+  // The broadcast runs AFTER commit, outside the update{} lambda: MutableStateFlow.update{} uses a
+  // CAS loop that may re-evaluate its transform under contention, so side effects inside it would
+  // push transient/duplicate participant snapshots onto the wire.
   private fun applyLocalParticipantUpdate(transform: (BaoTranslateUiState) -> BaoTranslateUiState) {
     uiState.update { state ->
       val updated = transform(state)

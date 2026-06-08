@@ -6,6 +6,7 @@ import ai.onnxruntime.OrtSession
 import com.google.ai.edge.gallery.common.BaoLog
 import java.io.File
 import java.nio.FloatBuffer
+import java.nio.LongBuffer
 
 /**
  * Runs an OpenVoice ONNX graph (converter / ref_enc) on Microsoft ONNX Runtime
@@ -28,29 +29,34 @@ class OrtOpenVoiceModel private constructor(
   val inputNames: Set<String> get() = session.inputNames
 
   /**
-   * Runs the graph with named float inputs (each a flat row-major [FloatArray] + its shape) and
-   * returns the first output flattened plus its shape. All ONNX tensors are closed before return.
+   * Runs the graph with named float inputs and (optionally) named int64 inputs — each a flat
+   * row-major buffer + its shape — and returns the first output flattened plus its shape. The
+   * OpenVoice ToneColorConverter graph needs both: the spectrogram / speaker embeddings / tau are
+   * float, while `audio_length` (the sequence-mask length) is int64. All ONNX tensors are closed
+   * before return.
    */
-  fun run(inputs: Map<String, Pair<FloatArray, LongArray>>): Pair<FloatArray, LongArray> {
-    // OnnxTensor / OrtSession.Result hold native off-heap memory freed only by close(). Use
-    // try/finally so a throw from createTensor (mid-loop), session.run (OrtException), or the output
-    // extraction never leaks the already-allocated input tensors or the result handle.
-    val tensors = LinkedHashMap<String, OnnxTensor>(inputs.size)
-    var result: OrtSession.Result? = null
-    try {
-      for ((name, value) in inputs) {
+  fun run(
+    floatInputs: Map<String, Pair<FloatArray, LongArray>>,
+    longInputs: Map<String, Pair<LongArray, LongArray>> = emptyMap(),
+  ): Pair<FloatArray, LongArray> {
+    val tensors = LinkedHashMap<String, OnnxTensor>(floatInputs.size + longInputs.size)
+    return try {
+      for ((name, value) in floatInputs) {
         tensors[name] = OnnxTensor.createTensor(env, FloatBuffer.wrap(value.first), value.second)
       }
-      result = session.run(tensors)
-      val output = result.get(0) as OnnxTensor
-      val shape = output.info.shape
-      val buffer = output.floatBuffer
-      val flat = FloatArray(buffer.remaining())
-      buffer.get(flat)
-      return flat to shape
+      for ((name, value) in longInputs) {
+        tensors[name] = OnnxTensor.createTensor(env, LongBuffer.wrap(value.first), value.second)
+      }
+      session.run(tensors).use { result ->
+        val output = result.get(0) as OnnxTensor
+        val shape = output.info.shape
+        val buffer = output.floatBuffer
+        val flat = FloatArray(buffer.remaining())
+        buffer.get(flat)
+        flat to shape
+      }
     } finally {
-      result?.close()
-      for (tensor in tensors.values) tensor.close()
+      tensors.values.forEach { it.close() }
     }
   }
 

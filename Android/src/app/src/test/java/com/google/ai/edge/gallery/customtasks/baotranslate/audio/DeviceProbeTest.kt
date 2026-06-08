@@ -1,5 +1,6 @@
 package com.google.ai.edge.gallery.customtasks.baotranslate.audio
 
+import com.google.ai.edge.gallery.testkit.Strict
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -7,6 +8,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@Strict
 class DeviceProbeTest {
 
   @Test
@@ -105,7 +107,7 @@ class DeviceProbeTest {
 
   @Test
   fun `listOutputs includes wired after BT`() {
-    val wired = device(DeviceProbe.TYPE_WIRED_HEADPHONES, "Cable", false, true)
+    val wired = device(type = DeviceProbe.TYPE_WIRED_HEADPHONES, name = "Cable", false, true)
     val result = DeviceProbe.listOutputs(listOf(wired), speakerFallback = "Speaker", wiredFallback = "Wired")
     assertTrue(result.contains(AudioDevice.Speaker))
     assertTrue(result.contains(AudioDevice.WiredHeadset("Cable")))
@@ -303,6 +305,142 @@ class DeviceProbeTest {
     assertEquals(1, inputs.size)
     assertEquals("WF-1000XM6", inputs.single().device.name)
     assertEquals(BluetoothTransport.SCO, inputs.single().device.transport)
+  }
+
+  // ----- BRUTALISATION -----
+
+  // ----- Empty fallback strings: production uses them as device-name substitutes.
+  // They should not crash; the resolved name should be the empty string.
+  @Test
+  fun `pickOutput_emptyWiredFallback_substitutesEmptyString`() {
+    val wired = device(type = DeviceProbe.TYPE_WIRED_HEADPHONES, name = "", isSource = false, isSink = true)
+    val result = DeviceProbe.pickOutput(listOf(wired), speakerFallback = "Speaker", wiredFallback = "")
+    // Wired path: productName.ifBlank { wiredFallback } = "" because productName is blank.
+    // Pin the contract: an empty fallback yields an empty device name, not a crash.
+    assertEquals(AudioDevice.WiredHeadset(""), result)
+  }
+
+  @Test
+  fun `pickOutput_emptyBluetoothFallback_substitutesEmptyString`() {
+    val ble = device(type = DeviceProbe.TYPE_BLE_HEADSET, name = "", isSource = true, isSink = true)
+    val result = DeviceProbe.pickOutput(
+      listOf(ble),
+      speakerFallback = "Speaker",
+      bluetoothFallback = "",
+    )
+    val bt = result as AudioDevice.BluetoothHeadset
+    assertEquals("", bt.name)
+    assertEquals(BluetoothTransport.BLE_AUDIO, bt.transport)
+  }
+
+  // ----- All three BT transport descriptors have non-blank keys.
+  @Test
+  fun `transportDescriptor_allKeysNonBlank`() {
+    assertTrue(DeviceProbe.transportDescriptor(BluetoothTransport.BLE_AUDIO).key.isNotBlank())
+    assertTrue(DeviceProbe.transportDescriptor(BluetoothTransport.A2DP).key.isNotBlank())
+    assertTrue(DeviceProbe.transportDescriptor(BluetoothTransport.SCO).key.isNotBlank())
+  }
+
+  // ----- Transport descriptor keys are unique.
+  @Test
+  fun `transportDescriptor_keysUnique`() {
+    val keys = listOf(
+      DeviceProbe.transportDescriptor(BluetoothTransport.BLE_AUDIO).key,
+      DeviceProbe.transportDescriptor(BluetoothTransport.A2DP).key,
+      DeviceProbe.transportDescriptor(BluetoothTransport.SCO).key,
+    )
+    assertEquals("all keys distinct", 3, keys.toSet().size)
+  }
+
+  // ----- Same name across two transports: dedup must keep both (one per transport).
+  @Test
+  fun `listOutputs_sameNameAcrossTransports_keptSeparately`() {
+    val budsBle = device(DeviceProbe.TYPE_BLE_HEADSET, "Buds", isSource = true, isSink = true)
+    val budsA2dp = device(DeviceProbe.TYPE_BLUETOOTH_A2DP, "Buds", isSource = false, isSink = true)
+    val outputs = DeviceProbe.listOutputs(
+      listOf(budsBle, budsA2dp),
+      speakerFallback = "Speaker",
+      wiredFallback = "Wired",
+    )
+    val bt = outputs.filterIsInstance<AudioDevice.BluetoothHeadset>()
+    assertEquals(2, bt.size)
+    assertTrue(bt.any { it.transport == BluetoothTransport.BLE_AUDIO })
+    assertTrue(bt.any { it.transport == BluetoothTransport.A2DP })
+  }
+
+  // ----- Multiple SCO outputs with same name: dedup keeps 1.
+  @Test
+  fun `listOutputs_multipleScoSameName_dedupeToOne`() {
+    val sco1 = device(DeviceProbe.TYPE_BLUETOOTH_SCO, "HFP", isSource = true, isSink = true, address = "AA")
+    val sco2 = device(DeviceProbe.TYPE_BLUETOOTH_SCO, "HFP", isSource = true, isSink = true, address = "BB")
+    val outputs = DeviceProbe.listOutputs(listOf(sco1, sco2), speakerFallback = "Speaker", wiredFallback = "Wired")
+    val bt = outputs.filterIsInstance<AudioDevice.BluetoothHeadset>()
+    assertEquals("SCO dedupes by name+transport", 1, bt.size)
+  }
+
+  // ----- Empty input list: listInputs returns empty.
+  @Test
+  fun `listInputs_empty_returnsEmpty`() {
+    val result = DeviceProbe.listInputs(emptyList(), fallback = "X")
+    assertTrue(result.isEmpty())
+  }
+
+  // ----- Empty sinks list: listOutputs returns at least the speaker.
+  @Test
+  fun `listOutputs_emptySinks_returnsSpeakerOnly`() {
+    val result = DeviceProbe.listOutputs(emptyList(), speakerFallback = "Phone speaker", wiredFallback = "Wired")
+    assertEquals(1, result.size)
+    assertEquals(AudioDevice.Speaker, result[0])
+  }
+
+  // ----- findByName across multiple transport types: only the matching transport is returned.
+  @Test
+  fun `findByName_a2dpTransport_findsOnlyA2dp`() {
+    val budsBle = device(DeviceProbe.TYPE_BLE_HEADSET, "Buds", true, true)
+    val budsA2dp = device(DeviceProbe.TYPE_BLUETOOTH_A2DP, "Buds", false, true)
+    val result = DeviceProbe.findByName(
+      listOf(budsBle, budsA2dp),
+      "Buds",
+      BluetoothTransport.A2DP,
+    )
+    assertEquals(DeviceProbe.TYPE_BLUETOOTH_A2DP, result?.type)
+  }
+
+  // ----- Built-in speaker is NOT a Bluetooth output.
+  @Test
+  fun `isBluetoothOutput_builtInSpeaker_returnsFalse`() {
+    assertFalse(DeviceProbe.isBluetoothOutput(DeviceProbe.TYPE_BUILTIN_SPEAKER))
+  }
+
+  // ----- pickOutput: if a sink is BOTH source and sink, it's still considered (supported).
+  @Test
+  fun `pickOutput_bleSourceAndSink_supported`() {
+    val ble = device(DeviceProbe.TYPE_BLE_HEADSET, "Buds", isSource = true, isSink = true)
+    val result = DeviceProbe.pickOutput(
+      listOf(ble),
+      speakerFallback = "Speaker",
+      inputDevices = listOf(ble),
+    )
+    val bt = result as AudioDevice.BluetoothHeadset
+    assertTrue("input-supported when source bit set", bt.supportsInput)
+  }
+
+  // ----- findByName case sensitivity: must be exact match.
+  @Test
+  fun `findByName_caseSensitive_matchRequired`() {
+    val buds = device(DeviceProbe.TYPE_BLE_HEADSET, "Buds", true, true)
+    val found = DeviceProbe.findByName(listOf(buds), "buds", BluetoothTransport.BLE_AUDIO)
+    assertNull("case mismatch should not match", found)
+  }
+
+  // ----- listInputs with no fallback substitution when productName is blank: should fall
+  // back to the fallback string.
+  @Test
+  fun `listInputs_blankName_usesFallback`() {
+    val buds = device(DeviceProbe.TYPE_BLE_HEADSET, "", isSource = true, isSink = true)
+    val result = DeviceProbe.listInputs(listOf(buds), fallback = "DefaultBT")
+    assertEquals(1, result.size)
+    assertEquals("DefaultBT", result.single().device.name)
   }
 
   private fun device(

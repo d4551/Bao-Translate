@@ -477,12 +477,12 @@ private fun startRecording(
   onJobStarted: (Job) -> Unit,
   onRecordingFailed: () -> Unit,
 ) {
-  val bufferSize = AudioRecord.getMinBufferSize(
+  val minBufferSize = AudioRecord.getMinBufferSize(
     SAMPLE_RATE,
     AudioFormat.CHANNEL_IN_MONO,
     AudioFormat.ENCODING_PCM_16BIT,
   )
-  if (bufferSize <= 0) {
+  if (minBufferSize <= 0) {
     onRecordingFailed()
     return
   }
@@ -494,12 +494,16 @@ private fun startRecording(
     return
   }
 
+  // Oversize the capture buffer (0.5 s of PCM16, never below 4x the OS minimum) so stalls in the
+  // enrollment read loop never overrun AudioRecord and drop frames — corrupt enrollment audio
+  // permanently degrades the cloned-voice embedding. Mirrors RecordingController's capture sizing.
+  val captureBufferBytes = maxOf(minBufferSize * 4, SAMPLE_RATE * Short.SIZE_BYTES / 2)
   val recorder = AudioRecord(
     MediaRecorder.AudioSource.MIC,
     SAMPLE_RATE,
     AudioFormat.CHANNEL_IN_MONO,
     AudioFormat.ENCODING_PCM_16BIT,
-    bufferSize,
+    captureBufferBytes,
   )
 
   if (recorder.state != AudioRecord.STATE_INITIALIZED) {
@@ -508,7 +512,7 @@ private fun startRecording(
     return
   }
 
-  val buffer = ShortArray((bufferSize / 2).coerceAtLeast(SAMPLE_RATE / 10))
+  val buffer = ShortArray((minBufferSize / 2).coerceAtLeast(SAMPLE_RATE / 10))
   val maxSamples = SAMPLE_RATE * 30
   val allSamples = ShortArray(maxSamples)
   var sampleCount = 0

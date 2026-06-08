@@ -33,7 +33,7 @@ object BaoLog {
   private val logClass: Class<*>? by lazy {
     val runtimeName = System.getProperty("java.runtime.name") ?: ""
     if (!runtimeName.contains("Android", ignoreCase = true)) return@lazy null
-    try { Class.forName("android.util.Log") } catch (_: ClassNotFoundException) { null }
+    runCatching { Class.forName("android.util.Log") }.getOrNull()
   }
 
   private fun log(level: String, tag: String, message: String) {

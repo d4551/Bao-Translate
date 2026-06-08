@@ -310,13 +310,13 @@ private fun MainActivityScreenshotRule.captureRecordingStateScreenshot(
 
   Thread.sleep(5_500)
   val audioMonitorBlock = currentAudioMonitorBlock()
+  // HARDENED: was "Recorder port map: {}" string match. New: parse the block into a
+  // structured map and assert the app-uid owns at least one recorder. Catches the
+  // regression where dumpsys output changes but the test is still passing on empty/garbage.
+  val ports = parseRecorderPorts(audioMonitorBlock)
   assertTrue(
-    "Bao Translate did not expose an active recorder while the screenshot harness was recording: $audioMonitorBlock",
-    !audioMonitorBlock.contains("Recorder port map: {}"),
-  )
-  assertTrue(
-    "Bao Translate active recorder did not belong to app uid ${context.applicationInfo.uid}: $audioMonitorBlock",
-    audioMonitorBlock.contains(context.applicationInfo.uid.toString()),
+    "Bao Translate did not expose an active recorder for app uid ${context.applicationInfo.uid}: ports=$ports block=$audioMonitorBlock",
+    ports.values.any { it == context.applicationInfo.uid },
   )
 
   captureScreenshot(
@@ -483,6 +483,21 @@ private fun parseRemoteFileSize(listing: String): Long {
   val firstLine = listing.lineSequence().firstOrNull { it.isNotBlank() } ?: return 0L
   val columns = firstLine.trim().split(Regex("\\s+"))
   return columns.getOrNull(4)?.toLongOrNull() ?: 0L
+}
+
+private fun parseRecorderPorts(dump: String): Map<String, Int> {
+  val start = dump.indexOf("AudioMonitor status:")
+  if (start < 0) return emptyMap()
+  val end = dump.indexOf("Events log: ZAudio service playbck & record monitor", start)
+  val block = if (end > start) dump.substring(start, end) else dump.substring(start)
+  val result = mutableMapOf<String, Int>()
+  val regex = Regex("""(\S+)\s+->\s+(\d+)""")
+  regex.findAll(block).forEach { match ->
+    val (port, uidStr) = match.destructured
+    val uid = uidStr.toIntOrNull() ?: return@forEach
+    result[port] = uid
+  }
+  return result
 }
 
 private fun currentAudioMonitorBlock(): String {

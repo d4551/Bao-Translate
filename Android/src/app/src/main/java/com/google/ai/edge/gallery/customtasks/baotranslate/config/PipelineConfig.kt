@@ -9,7 +9,11 @@ package com.google.ai.edge.gallery.customtasks.baotranslate.config
  * - Latency vs quality tradeoffs
  */
 object PipelineConfig {
-  const val DEFAULT_TARGET_LANGUAGE = "Spanish"
+  // SSOT: the default BLE-peer target language. References SupportedLanguages so a rename there
+  // (or a removal of "Spanish" from the selectable set) surfaces here as a build error, not a
+  // silent "no language selected" UI. Also pins the first-run user-facing default.
+  const val DEFAULT_TARGET_LANGUAGE: String = com.google.ai.edge.gallery.customtasks.baotranslate.data.SupportedLanguages.DEFAULT_TARGET_KEY
+  const val DEFAULT_TARGET_CODE: String = com.google.ai.edge.gallery.customtasks.baotranslate.data.SupportedLanguages.DEFAULT_TARGET_CODE
 
   // Thread counts - should ideally be derived from Runtime.getRuntime().availableProcessors()
   const val STT_THREADS = 2

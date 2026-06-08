@@ -7,7 +7,7 @@ import kotlin.math.sqrt
  * On-device magnitude STFT that exactly matches OpenVoice's `spectrogram_torch`
  * (mel_processing.py): reflect-pad by (n_fft - hop)/2 each side, periodic Hann window,
  * onesided FFT, magnitude = sqrt(re^2 + im^2 + 1e-6). This is the front-end that turns Kokoro's
- * (resampled 22.05 kHz) audio into the spectrogram the OpenVoice ToneColorConverter `.tflite`
+ * (resampled 22.05 kHz) audio into the spectrogram the OpenVoice ToneColorConverter ONNX graph
  * consumes. Verified against a PyTorch reference fixture by OpenVoiceSpectrogramTest.
  */
 object OpenVoiceSpectrogram {
@@ -46,17 +46,35 @@ object OpenVoiceSpectrogram {
     return out
   }
 
-  /** Flattened [1, FREQ_BINS, frames] row-major (freq outer) for direct TFLite input. */
+  /** Flattened freq-major [1, FREQ_BINS, frames] row-major (freq outer). */
   fun computeFlat(samples: FloatArray): Pair<FloatArray, Int> {
     val spec = compute(samples)
     val frames = if (spec.isNotEmpty()) spec[0].size else 0
-    val flat = FloatArray(FREQ_BINS * frames)
+    return flatten(spec, frames, timeMajor = false) to frames
+  }
+
+  /**
+   * Flattens a [FREQ_BINS][frames] spectrogram to a row-major buffer, truncated to [frames].
+   *  - freq-major -> [1, FREQ_BINS, frames] : the converter's `audio` input (channel = frequency).
+   *  - time-major -> [1, frames, FREQ_BINS] : the ref-encoder's `input` (last dim = spec_channels).
+   * The two OpenVoice graphs need opposite layouts. Verified on-device: the ref-encoder only yields
+   * a speaker-discriminative embedding when fed time-major, matching OpenVoice's ReferenceEncoder
+   * which reshapes its input to [N, 1, T, spec_channels]; feeding it freq-major collapses distinct
+   * speakers to near-identical embeddings (no timbre transfer).
+   */
+  fun flatten(spec: Array<FloatArray>, frames: Int, timeMajor: Boolean): FloatArray {
+    val f0 = frames.coerceAtMost(if (spec.isNotEmpty()) spec[0].size else 0).coerceAtLeast(0)
+    val out = FloatArray(FREQ_BINS * f0)
     var idx = 0
-    for (k in 0 until FREQ_BINS) {
-      val row = spec[k]
-      for (f in 0 until frames) flat[idx++] = row[f]
+    if (timeMajor) {
+      for (t in 0 until f0) for (k in 0 until FREQ_BINS) out[idx++] = spec[k][t]
+    } else {
+      for (k in 0 until FREQ_BINS) {
+        val row = spec[k]
+        for (t in 0 until f0) out[idx++] = row[t]
+      }
     }
-    return flat to frames
+    return out
   }
 
   /** torch reflect pad: edges are mirrored without repeating the boundary sample. Requires pad < size. */

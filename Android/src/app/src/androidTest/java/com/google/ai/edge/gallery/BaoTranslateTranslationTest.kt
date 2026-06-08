@@ -184,6 +184,92 @@ class BaoTranslateTranslationTest {
     }
   }
 
+  // ----- BRUTALISATION -----
+
+  // ----- Both translation models should produce the same kind of Spanish output, not be
+  // aliased (e.g. one model silently never loaded and is returning the other's cache).
+  @Test
+  fun translation_qwen_and_gemma_produceDifferentOutput_endToEnd() {
+    val context = InstrumentationRegistry.getInstrumentation().targetContext
+    val source = "The cat drinks water."
+    val qwen = translateWithModel(
+      context = context, modelId = "qwen25_1b", source = source, sourceLanguage = "en", targetLanguage = "es",
+    )
+    val gemma = translateWithModel(
+      context = context, modelId = "gemma4_e2b", source = source, sourceLanguage = "en", targetLanguage = "es",
+    )
+    // Pin: both produce valid Spanish (already covered), AND they differ from each other.
+    // If they produce byte-identical output, one model was never actually loaded.
+    assertTrue(
+      "qwen and gemma produced byte-identical output — one model is likely aliased " +
+        "to the other (qwen=\"$qwen\", gemma=\"$gemma\")",
+      qwen.trim().lowercase() != gemma.trim().lowercase(),
+    )
+  }
+
+  // ----- Translate + speak: the spoken audio length must be a reasonable function of
+  // text length. ~40ms per character is a rough lower bound for clear TTS.
+  @Test
+  fun liveConversation_translateThenSpeak_actualAudioLength() {
+    val context = InstrumentationRegistry.getInstrumentation().targetContext
+    ensureModelReady(context, "qwen25_1b")
+    ensureModelReady(context, "kokoro_tts")
+    val translated = translateWithModel(
+      context = context, modelId = "qwen25_1b", source = "Good morning, how are you today, my friend?",
+      sourceLanguage = "en", targetLanguage = "es",
+    )
+    val kokoro = KokoroTtsPipeline(context)
+    try {
+      assertTrue("kokoro init", kokoro.initialize(BaoTranslateModelManager.getKokoroModelDir(context).absolutePath))
+      val samples = kokoro.synthesize(translated, KokoroTtsPipeline.getVoiceForLanguage("es"))!!
+      // Rough lower bound: 40ms per character of text. Below that, something is wrong.
+      val minExpectedSeconds = translated.length * 0.04f
+      val actualSeconds = samples.size.toFloat() / 22050f  // Kokoro native rate
+      assertTrue(
+        "Kokoro audio too short for text length ${translated.length}: actual=${actualSeconds}s " +
+          "(need >= ${minExpectedSeconds}s)",
+        actualSeconds >= minExpectedSeconds,
+      )
+    } finally {
+      kokoro.cleanup()
+    }
+  }
+
+  // ----- Kokoro init+cleanup cycle: should be repeatable (no native handle leak).
+  @Test
+  fun cleanup_calledBetweenTests_noStateLeak() {
+    val context = InstrumentationRegistry.getInstrumentation().targetContext
+    ensureModelReady(context, "kokoro_tts")
+    repeat(3) {
+      val kokoro = KokoroTtsPipeline(context)
+      assertTrue("kokoro init #$it", kokoro.initialize(BaoTranslateModelManager.getKokoroModelDir(context).absolutePath))
+      kokoro.cleanup()
+    }
+  }
+
+  // ----- The two models are not aliased at the file level: distinct .litertlm files
+  // with distinct content. Catches a copy-paste regression where one model was
+  // accidentally replaced with the other.
+  @Test
+  fun translation_qwen_and_gemma_distinctModelFiles() {
+    val context = InstrumentationRegistry.getInstrumentation().targetContext
+    ensureModelReady(context, listOf("qwen25_1b", "gemma4_e2b"))
+    val qwenFile = BaoTranslateModelManager.getTranslationModelDir(context, "qwen25_1b")
+      .listFiles { f -> f.extension == "litertlm" }?.firstOrNull()
+    val gemmaFile = BaoTranslateModelManager.getTranslationModelDir(context, "gemma4_e2b")
+      .listFiles { f -> f.extension == "litertlm" }?.firstOrNull()
+    assertNotNull("qwen25_1b .litertlm missing", qwenFile)
+    assertNotNull("gemma4_e2b .litertlm missing", gemmaFile)
+    assertNotEquals(
+      "qwen25_1b and gemma4_e2b resolve to the SAME file",
+      qwenFile!!.absolutePath, gemmaFile!!.absolutePath,
+    )
+    assertNotEquals(
+      "qwen25_1b and gemma4_e2b have the same size — one was probably copied from the other",
+      qwenFile.length(), gemmaFile.length(),
+    )
+  }
+
   private fun ensureModelReady(context: Context, modelId: String) {
     if (BaoTranslateModelManager.checkModelStatus(context, modelId) != ModelStatus.Ready) {
       val result = runBlocking {
@@ -259,7 +345,38 @@ class BaoTranslateTranslationTest {
     for (i in 0 until sampleCount) {
       totalDiff += abs(first[i] - second[i]).toDouble()
     }
-    assertTrue("Two Kokoro speaker voices produced identical PCM samples", totalDiff > 0.001)
+    // HARDENED: was `totalDiff > 0.001` (any tiny difference passes). New: at least
+    // 1% of the samples must differ meaningfully, OR Pearson correlation must be < 0.99.
+    val pearson = pearsonCorrelation(first, second, sampleCount)
+    val distinctEnough = totalDiff > sampleCount * 0.01 || kotlin.math.abs(pearson) < 0.99
+    assertTrue(
+      "Two Kokoro speaker voices produced near-identical PCM samples: totalDiff=$totalDiff " +
+        "pearson=$pearson (need totalDiff > ${sampleCount * 0.01} OR |pearson| < 0.99)",
+      distinctEnough,
+    )
+  }
+
+  private fun pearsonCorrelation(first: FloatArray, second: FloatArray, count: Int): Double {
+    if (count <= 1) return 0.0
+    var sumA = 0.0
+    var sumB = 0.0
+    for (i in 0 until count) {
+      sumA += first[i].toDouble()
+      sumB += second[i].toDouble()
+    }
+    val meanA = sumA / count
+    val meanB = sumB / count
+    var cov = 0.0
+    var varA = 0.0
+    var varB = 0.0
+    for (i in 0 until count) {
+      val dA = first[i].toDouble() - meanA
+      val dB = second[i].toDouble() - meanB
+      cov += dA * dB
+      varA += dA * dA
+      varB += dB * dB
+    }
+    return if (varA > 0 && varB > 0) cov / (kotlin.math.sqrt(varA) * kotlin.math.sqrt(varB)) else 0.0
   }
 
   private fun normalize(text: String): String =

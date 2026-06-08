@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.gradle.api.tasks.testing.Test
+
 // com.google.protobuf:protobuf-gradle-plugin:0.9.5 transitively pulls com.android.tools.build:gradle
 // 7.1.0 onto this module's plugin classpath. Its pre-8.0 CommonExtension shadows AGP 8.8.2's and
 // breaks the Kotlin-DSL `android { packaging { ... } }` accessor. Force the build tools to this
@@ -41,7 +44,11 @@ plugins {
   alias(libs.plugins.hilt.application)
   alias(libs.plugins.oss.licenses)
   alias(libs.plugins.ksp)
-  kotlin("kapt")
+}
+
+kotlin {
+  // Modern KGP DSL (the legacy `android { kotlinOptions { ... } }` was removed in Kotlin 2.4).
+  compilerOptions { jvmTarget = JvmTarget.JVM_11 }
 }
 
 android {
@@ -76,10 +83,6 @@ android {
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11
-  }
-  kotlinOptions {
-    jvmTarget = "11"
-    freeCompilerArgs += "-Xcontext-receivers"
   }
   buildFeatures {
     compose = true
@@ -135,9 +138,13 @@ dependencies {
   implementation(libs.firebase.messaging)
   implementation(libs.androidx.exifinterface)
   implementation(libs.moshi.kotlin)
-  kapt(libs.hilt.android.compiler)
+  ksp(libs.hilt.android.compiler)
+  // Give Hilt's KSP processor a Kotlin-2.4.0-aware metadata reader (unshaded since Dagger 2.57).
+  ksp(libs.kotlin.metadata.jvm)
   testImplementation(libs.junit)
   testImplementation(libs.mockito.kotlin)
+  testImplementation(libs.kotest.runner.junit4)
+  testImplementation(libs.kotest.property)
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.espresso.core)
   androidTestImplementation(platform(libs.androidx.compose.bom))
@@ -177,6 +184,23 @@ tasks.register("verifyReleaseReady") {
     "assembleDebug",
     "assembleDebugAndroidTest",
   )
+}
+
+// Strict subset: runs only tests marked @Category(Strict.class). Promoted to the release
+// gate so every new brutalised test exercises production paths with no skipping, no
+// wishful-thinking markers, no time-padding Thread.sleeps. Filters via the JUnit 4
+// categories mechanism — the @Category marker on each test class is what gates inclusion.
+tasks.register<Test>("testDebugUnitTestStrict") {
+  group = "verification"
+  description = "Run the @Category(Strict) subset of unit tests. Gating for release."
+  useJUnit()
+  // JUnit 4's standard property for category filtering.
+  systemProperty("categories", "com.google.ai.edge.gallery.testkit.Strict")
+}
+
+tasks.named("verifyReleaseReady") {
+  // Strict subset is gating; runs as part of the release gate alongside the full unit suite.
+  dependsOn("testDebugUnitTestStrict")
 }
 
 tasks.register("smokeE2e") {

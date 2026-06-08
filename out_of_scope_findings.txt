@@ -179,3 +179,172 @@ DEEP DELETION AUDIT — 2026-06-08 (broadened from file-deletions to ALL removed
    verified EVERY referenced link/file/screenshot exists (no broken links).
  context7: coroutines best-practices confirmed ensureActive()/job.cancel()+join() patterns; Dagger
  multibindings confirmed @IntoSet set-shrink safety; MDN RFC 7233 for the resume fix.
+
+================================================================================
+OOS-FINDINGS FROM TEST BRUTALISATION CYCLE (2026-06-08)
+================================================================================
+
+ID: OOS-BRUTALISE-001
+FINDING: RecordingController.kt:250 references unresolved variable `bufferSize`. The local
+  variable declared at line 154 is `minBufferSize`. This is a pre-existing compile error
+  in production code, NOT introduced by this brutalisation cycle. The build is currently
+  red.
+PATHS:
+  - Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/baotranslate/RecordingController.kt:250
+RISK: Production code does not compile. The CI release gate is currently broken.
+PROPOSED_LADDER_SLOT: One-line fix: change `$bufferSize` to `$minBufferSize` (or the
+  corresponding `minBufferSize` / `bufferSize` local). Trivial; do immediately.
+STATUS: OPEN
+
+ID: OOS-BRUTALISE-002
+FINDING: VoiceProfileManager.saveProfile and saveVoice do NOT sanitize the `id` parameter.
+  Calling with `id = "../etc/passwd"` writes a file at `filesDir/voice_profiles/../etc/passwd.wav`
+  — OUTSIDE the profiles directory. This is a real path-traversal vulnerability.
+  The `VoiceProfileManagerTest.saveProfile_pathTraversalId_documentedGap` test demonstrates
+  the issue (and passes by documenting it; it should FAIL once production is hardened).
+PATHS:
+  - Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/baotranslate/data/VoiceProfileManager.kt:48,32
+RISK: Path traversal — a malicious or buggy caller can write files outside the voice
+  profiles directory. On a rooted device or via app-sandbox escape, this is a write
+  primitive. GDPR concern: voice data is biometric.
+PROPOSED_LADDER_SLOT: Add `require(!id.contains("/") && !id.contains(".."))` to
+  `saveProfile` and `saveVoice` (or any other entry point that takes an id). Test must
+  then flip to assert the throw.
+STATUS: OPEN
+
+ID: OOS-BRUTALISE-003
+FINDING: AudioResampler.resample does NOT guard against `srcRate == 0` or negative values.
+  The `srcRate == dstRate` short-circuit is the only guard; `srcRate = 0, dstRate = 16000`
+  divides by zero and throws `ArithmeticException` (IntegerOverflowException or NaN).
+PATHS:
+  - Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/baotranslate/audio/AudioResampler.kt:17
+RISK: A bad config (e.g. a misconfigured pipeline that passes rate=0) crashes the TTS/STT
+  pipeline at the resample step.
+PROPOSED_LADDER_SLOT: Add a guard at the top of `resample`: `require(srcRate > 0) { "srcRate must be > 0 (got $srcRate)" }; require(dstRate > 0) { "dstRate must be > 0 (got $dstRate)" }`. Throw
+  IllegalArgumentException with a clear message. Update `AudioResamplerTest
+  .resample_zeroSrcRate_documentedGap` to assert the throw.
+STATUS: OPEN
+
+ID: OOS-BRUTALISE-004
+FINDING: `BleMessageCodec.decodeMetadata` accepts voice embeddings that contain NaN/Inf
+  floats. The kotlinx.serialization parser strips them (returns null), which then
+  triggers a size-mismatch and rejects the whole embedding — but ONLY by accident. If
+  the parser is ever upgraded to support NaN/Inf literals (some JSON dialects do), the
+  embedding will pass through unmodified and corrupt the speaker-recognition model.
+PATHS:
+  - Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/baotranslate/bluetooth/BleConversationManager.kt:115-118
+RISK: NaN/Inf in a 256-d OpenVoice speaker embedding is fed to an ONNX model that does
+  not handle non-finite values — silent crash, infinite output, or undefined behavior.
+PROPOSED_LADDER_SLOT: Add an explicit `it.isFinite()` check after `floatOrNull` in the
+  decoding path. Update `BleMessageCodecTest.decodeMetadata_voiceEmbeddingWithNan_rejected`
+  to assert the rejection holds even if the parser is loosened.
+STATUS: OPEN
+
+ID: OOS-BRUTALISE-005
+FINDING: OpenVoiceVoiceConverter does not currently have an internal `inferenceLock` (per
+  the original OOS-001 the design was to give it one). The test
+  `BleMessageCodecTest.encoding` is fine, but a thread-safety test on the converter
+  itself is not yet in place. Documented as a follow-up.
+PATHS:
+  - Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/baotranslate/tts/OpenVoiceVoiceConverter.kt
+RISK: Concurrent convert() + cleanup() can race to use-after-free on the ONNX handles.
+PROPOSED_LADDER_SLOT: Add an inferenceLock that convert() / computeSpeakerEmbedding() /
+  cleanup() all acquire. Verify with a concurrent test (4 threads, 1000 calls each,
+  no crash).
+STATUS: OPEN (OOS-001 already addressed this — re-check current code)
+
+ID: OOS-BRUTALISE-006
+FINDING: `BaoLog.normalize` does NOT strip newlines or control characters. A tag like
+  `"Tag\nWithNewline"` is passed through unchanged. Android 7+ silently drops such
+  log entries — the test `BaoLogTest.normalize_newlineNotStripped_documentedGap` documents
+  this. Hardening: strip newlines, or use `sanitizeTag` to replace them with `_`.
+PATHS:
+  - Android/src/app/src/main/java/com/google/ai/edge/gallery/common/BaoLog.kt:69
+RISK: Log entries silently dropped on Android 7+. Hard to debug a release build when
+  your tag contained a newline.
+PROPOSED_LADDER_SLOT: Add a regex replace for `[\r\n\t\u0000-\u001F]` → `_` in
+  `normalize`. Test flips to assert the strip.
+STATUS: OPEN
+
+ID: OOS-BRUTALISE-007
+FINDING: `OpenVoiceSpectrogram.compute` does NOT validate input finiteness. NaN/Inf in the
+  input FloatArray propagates through the FFT and produces all-NaN output. The
+  spectrogram is then fed to the converter, which crashes or produces garbage.
+PATHS:
+  - Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/baotranslate/tts/OpenVoiceSpectrogram.kt:28
+RISK: Bad input (e.g. a corrupted audio file or a converter misconfiguration) silently
+  produces garbage output rather than a clear failure.
+PROPOSED_LADDER_SLOT: Add a finite check at the top of `compute`; throw
+  IllegalArgumentException if any input sample is non-finite. Update
+  `OpenVoiceSpectrogramTest.compute_rejectsNonFinite` to assert the throw.
+STATUS: OPEN
+
+ID: OOS-BRUTALISE-008
+FINDING: `waveformAmplitude` does NOT validate input finiteness. NaN/Inf in the input
+  ShortArray propagates through the sum-of-squares and produces NaN output. UI then
+  renders NaN as a 0 bar (the .coerceIn(0f, 1f) coerces NaN to 0). The bug is
+  silent — no error, just a dead bar.
+PATHS:
+  - Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/baotranslate/audio/WaveformAmplitude.kt:25
+RISK: Silent UI failure when audio input is bad.
+PROPOSED_LADDER_SLOT: Add a finite check at the top; return 0f for non-finite input
+  (rather than propagating). Update `WaveformAmplitudeTest.waveformAmplitude_nanInSamples_propagatesGap`
+  to assert the safe return.
+STATUS: OPEN
+
+ID: OOS-BRUTALISE-009
+FINDING: `BaoLog.normalize` truncates at UTF-16 unit count 23, not codepoint count.
+  For CJK/emoji tags, this can leave a half surrogate pair at the boundary,
+  producing a malformed Java String. The test
+  `BaoLogTest.normalize_surrogatePairTruncation_documentedGap` documents this.
+PATHS:
+  - Android/src/app/src/main/java/com/google/ai/edge/gallery/common/BaoLog.kt:69
+RISK: A Unicode CJK/emoji tag can be truncated mid-codepoint, producing a malformed
+  String. Downstream ops (println, logd, JSON serialization) may print replacement
+  chars or crash on some Android versions.
+PROPOSED_LADDER_SLOT: Use a codepoint-aware truncation: walk codepoints, stop at
+  TAG_MAX, append the prefix. Test flips to assert no unpaired surrogate halves.
+STATUS: OPEN
+
+ID: OOS-BRUTALISE-010
+FINDING: `isValidTranscription` does NOT filter Cyrillic homoglyphs of common fillers
+  ("хмм" / "ХмМ" / "ух" / etc). STT will produce these for non-English source
+  languages; the production filter uses `^hmm+$` ASCII-only, so these pass through
+  and pollute the transcript.
+PATHS:
+  - Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/baotranslate/validation/ValidationUtils.kt:62
+RISK: Filler text from non-English STT results is not filtered. Lowers downstream
+  translation quality.
+PROPOSED_LADDER_SLOT: Add Cyrillic homoglyphs to the filler regex. Test
+  `TranscriptionValidationTest.filler_unicodeCyrillic_currentlyAcceptsButShouldReject`
+  flips to assertFalse.
+STATUS: OPEN
+
+ID: OOS-BRUTALISE-011
+FINDING: `isSourceEcho` does NOT strip Unicode whitespace (NBSP, EM SPACE) before
+  comparing source and translated. A source padded with NBSP passes the
+  `translated.trim().equals(source.trim())` check because trim() is ASCII-only. The
+  test `TranslationValidationTest.isSourceEcho_unicodeWhitespace_documentedGap`
+  documents this.
+PATHS:
+  - Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/baotranslate/validation/ValidationUtils.kt:80
+RISK: A translation that's actually an echo (with NBSP padding) is not flagged.
+PROPOSED_LADDER_SLOT: Use a Unicode-aware strip: `translated.replace(NBSP, ' ').trim()`.
+  Test flips to assertTrue.
+STATUS: OPEN
+
+ID: OOS-BRUTALISE-012
+FINDING: `VadProcessor.initialize` returns `true` after a `BaoLog.w("Silero VAD model not found: ...")`.
+  The `requireModelPath` check fails, the function bails. The caller (BaoTranslateViewModel)
+  may then call `processAudioSegment` on a not-initialized VAD, which correctly falls back
+  to energy-based segmentation. So the actual behavior is safe — but the API contract is
+  confusing (a `initialize` that returns true may be only partially initialized).
+  The test `VadProcessorTest.processAudioSegment_afterCleanup_usesFallback` documents
+  this path.
+PATHS:
+  - Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/baotranslate/stt/VadProcessor.kt:32
+RISK: API surface confusion; future contributors may not realize the function
+  returns true even when no VAD model is available. Suggest a sealed result type
+  (Initialized / NotAvailable) for clarity.
+PROPOSED_LADDER_SLOT: Refactor `initialize` to return a sealed type. Update callers.
+STATUS: OPEN
