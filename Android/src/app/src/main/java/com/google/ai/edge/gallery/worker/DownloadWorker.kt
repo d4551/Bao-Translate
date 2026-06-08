@@ -58,8 +58,31 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 private const val TAG = "AGDownloadWorker"
+// HttpURLConnection has no constant for 416; java.net only added HTTP_* up to 505.
+private const val HTTP_RANGE_NOT_SATISFIABLE = 416
 
 data class UrlAndFileName(val url: String, val fileName: String)
+
+internal data class ResumeDecision(val append: Boolean, val expectedFinalSize: Long)
+
+/**
+ * Decides, from the server's response to a (possibly Range-carrying) request, whether to APPEND to
+ * the partial file and what the complete file should weigh. Per RFC 7233 / MDN: a 206 Partial
+ * Content means the range was honored (append + resume), while a 200 OK means the range was IGNORED
+ * and the full body is being sent from byte 0 (must overwrite, never append — appending corrupts the
+ * file). [expectedFinalSize] is the "/<total>" of Content-Range on a 206, or Content-Length on a
+ * 200; -1 (unknown / chunked) disables the post-write size check rather than failing a valid file.
+ */
+internal fun resolveResumeDecision(
+  responseCode: Int,
+  contentRange: String?,
+  contentLength: Long,
+): ResumeDecision {
+  val append = responseCode == HttpURLConnection.HTTP_PARTIAL
+  val expectedFinalSize =
+    if (append) contentRange?.substringAfterLast('/')?.toLongOrNull() ?: -1L else contentLength
+  return ResumeDecision(append, expectedFinalSize)
+}
 
 private const val FOREGROUND_NOTIFICATION_CHANNEL_ID = "model_download_channel_foreground"
 private const val SHARED_NOTIFICATION_ID = 1001
@@ -162,48 +185,55 @@ class DownloadWorker(context: Context, params: WorkerParameters) :
                   .joinToString(separator = File.separator),
               )
             val outputFileBytes = outputTmpFile.length()
-            if (outputFileBytes > 0) {
+            val requestedResume = outputFileBytes > 0
+            if (requestedResume) {
               BaoLog.d(
                 TAG,
-                "File '${outputTmpFile.name}' partial size: ${outputFileBytes}. Trying to resume download",
+                "File '${outputTmpFile.name}' partial size: $outputFileBytes. Trying to resume download",
               )
               connection.setRequestProperty("Range", "bytes=${outputFileBytes}-")
               // Force the server to send non-compressed data to make download resuming work.
               connection.setRequestProperty("Accept-Encoding", "identity")
             }
             connection.connect()
-            BaoLog.d(TAG, "response code: ${connection.responseCode}")
+            val responseCode = connection.responseCode
+            BaoLog.d(TAG, "response code: $responseCode")
 
-            if (
-              connection.responseCode == HttpURLConnection.HTTP_OK ||
-                connection.responseCode == HttpURLConnection.HTTP_PARTIAL
+            // Out-of-range (our partial is >= the resource — a stale/over-sized leftover, including a
+            // file corrupted by a previous bad resume): the server can't satisfy the Range. Discard
+            // the partial and fail so the next attempt starts clean.
+            if (responseCode == HTTP_RANGE_NOT_SATISFIABLE) {
+              outputTmpFile.delete()
+              throw IOException("Range not satisfiable for ${file.fileName}; discarded stale partial")
+            }
+            if (responseCode != HttpURLConnection.HTTP_OK &&
+              responseCode != HttpURLConnection.HTTP_PARTIAL
             ) {
-              val contentRange = connection.getHeaderField("Content-Range")
+              throw IOException("HTTP error code: $responseCode")
+            }
 
-              if (contentRange != null) {
-                // Parse the Content-Range header
-                val rangeParts = contentRange.substringAfter("bytes ").split("/")
-                val byteRange = rangeParts[0].split("-")
-                val startByte = byteRange.getOrNull(0)?.toLongOrNull() ?: 0L
-                val endByte = byteRange.getOrNull(1)?.toLongOrNull() ?: 0L
-
-                BaoLog.d(
-                  TAG,
-                  "Content-Range: $contentRange. Start bytes: ${startByte}, end bytes: $endByte",
-                )
-
-                downloadedBytes += startByte
-              } else {
-                BaoLog.d(TAG, "Download starts from beginning.")
-              }
-            } else {
-              throw IOException("HTTP error code: ${connection.responseCode}")
+            // Append ONLY when the server actually honored the range (206 Partial Content). A 200 OK
+            // after a Range request means the server IGNORED the range and is streaming the FULL body
+            // from byte 0 — appending it onto the partial would corrupt the file (partial+full). Per
+            // RFC 7233 / MDN HTTP Range requests: honored range => 206 + Content-Range; unsupported
+            // => 200 + full body; out-of-bounds => 416. Gate append + the running byte total on 206.
+            val contentRange = connection.getHeaderField("Content-Range")
+            val resumeDecision = resolveResumeDecision(responseCode, contentRange, connection.contentLengthLong)
+            val resumed = resumeDecision.append
+            // Size of the COMPLETE file once written, used for a post-write integrity check.
+            val expectedFinalSize: Long = resumeDecision.expectedFinalSize
+            if (resumed) {
+              downloadedBytes += outputFileBytes
+              BaoLog.d(TAG, "Resuming '${outputTmpFile.name}' at $outputFileBytes bytes (206); range=$contentRange")
+            } else if (requestedResume) {
+              BaoLog.d(TAG, "Server ignored Range (HTTP $responseCode); restarting '${outputTmpFile.name}' from 0")
             }
 
             // `.use{}` guarantees both streams close on every exit path (incl. a mid-download read/
             // write throw — the dominant failure mode), instead of leaking their file descriptors.
+            // append == resumed: a non-206 response truncates + overwrites instead of corrupting.
             connection.inputStream.use { inputStream ->
-            FileOutputStream(outputTmpFile, true /* append */).use { outputStream ->
+            FileOutputStream(outputTmpFile, resumed /* append only on an honored 206 */).use { outputStream ->
 
             val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
             var bytesRead: Int
@@ -262,6 +292,14 @@ class DownloadWorker(context: Context, params: WorkerParameters) :
             } // outputStream.use
             } // inputStream.use
             connection.disconnect()
+
+            // Reject a truncated or oversized result instead of renaming corruption to the final
+            // name (where it would later be loaded as a valid model and crash native inference).
+            if (expectedFinalSize > 0 && outputTmpFile.length() != expectedFinalSize) {
+              throw IOException(
+                "Size mismatch for ${file.fileName}: got ${outputTmpFile.length()}, expected $expectedFinalSize"
+              )
+            }
 
             // Rename the tmp file to the original file name by removing the tmp file ext.
             val originalFilePath = outputTmpFile.absolutePath.replace(".$TMP_FILE_EXT", "")

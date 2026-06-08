@@ -85,12 +85,25 @@ class TranslationPipeline(private val context: Context) {
       samplerConfig = samplerConfig,
     )
 
-    val conversation = eng.createConversation(conversationConfig)
-    val translatedText = try {
-      val response = conversation.sendMessage(prompt)
-      cleanTranslation(extractText(response))
-    } finally {
-      conversation.close()
+    // The native litertlm inference (createConversation/sendMessage) can throw on OOM, a native
+    // abort, or a model-state error. translateBlocking promises a total TranslationOutcome, so funnel
+    // any throw into Failure instead of letting it escape and crash the recording/peer coroutine
+    // (whose launch scope has no CoroutineExceptionHandler). conversation.close() stays in finally.
+    val translatedText = runCatching {
+      val conversation = eng.createConversation(conversationConfig)
+      try {
+        val response = conversation.sendMessage(prompt)
+        cleanTranslation(extractText(response))
+      } finally {
+        conversation.close()
+      }
+    }.getOrElse { e ->
+      BaoLog.w(TAG, "Translation inference failed: ${e.message}")
+      return TranslationOutcome.Failure(
+        "Translation failed: ${e.message ?: "inference error"}",
+        sourceLanguage,
+        targetLanguage,
+      )
     }
 
     // Guard against the common on-device LLM failure where the model echoes the source verbatim

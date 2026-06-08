@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Launch window background = the app's Material surface (theme-aware: light here, dark in
+      values-night). The post-splash activity window paints this for the ~1 frame before Compose
+      draws. Without it, Theme.Gallery inherits Material.Light's white window and flashes white on
+      launchers that skip the Android-12 splash icon (e.g. this OEM); matching the surface removes
+      that flash and makes the splash→app handoff seamless.
+    -->
+    <color name="launch_window_background">#FFFFFFFF</color>
+</resources>

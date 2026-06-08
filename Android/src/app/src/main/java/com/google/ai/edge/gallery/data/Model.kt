@@ -307,8 +307,8 @@ data class Model(
   // AICoreModelHelper, etc.) writes its own concrete subtype, and consumers narrow via
   // `as?` + elvis (e.g. `model.instance as? LlmModelInstance ?: return`). Using a sealed
   // `ModelInstance` interface is not viable because Kotlin 1.5+ requires sealed hierarchies to
-  // live in the same package; the concrete subtypes span runtime/aicore, ui/llmchat, and
-  // customtasks/examplecustomtask.
+  // live in the same package; the concrete subtypes span runtime/aicore, ui/llmchat, and the
+  // customtasks packages.
   var instance: Any? = null,
   var initializing: Boolean = false,
   // TODO(jingjin): use a "queue" system to manage model init and cleanup.

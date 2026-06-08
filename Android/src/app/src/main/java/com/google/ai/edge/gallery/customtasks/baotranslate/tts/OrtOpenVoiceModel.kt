@@ -32,19 +32,26 @@ class OrtOpenVoiceModel private constructor(
    * returns the first output flattened plus its shape. All ONNX tensors are closed before return.
    */
   fun run(inputs: Map<String, Pair<FloatArray, LongArray>>): Pair<FloatArray, LongArray> {
+    // OnnxTensor / OrtSession.Result hold native off-heap memory freed only by close(). Use
+    // try/finally so a throw from createTensor (mid-loop), session.run (OrtException), or the output
+    // extraction never leaks the already-allocated input tensors or the result handle.
     val tensors = LinkedHashMap<String, OnnxTensor>(inputs.size)
-    for ((name, value) in inputs) {
-      tensors[name] = OnnxTensor.createTensor(env, FloatBuffer.wrap(value.first), value.second)
+    var result: OrtSession.Result? = null
+    try {
+      for ((name, value) in inputs) {
+        tensors[name] = OnnxTensor.createTensor(env, FloatBuffer.wrap(value.first), value.second)
+      }
+      result = session.run(tensors)
+      val output = result.get(0) as OnnxTensor
+      val shape = output.info.shape
+      val buffer = output.floatBuffer
+      val flat = FloatArray(buffer.remaining())
+      buffer.get(flat)
+      return flat to shape
+    } finally {
+      result?.close()
+      for (tensor in tensors.values) tensor.close()
     }
-    val result = session.run(tensors)
-    val output = result.get(0) as OnnxTensor
-    val shape = output.info.shape
-    val buffer = output.floatBuffer
-    val flat = FloatArray(buffer.remaining())
-    buffer.get(flat)
-    result.close()
-    for (tensor in tensors.values) tensor.close()
-    return flat to shape
   }
 
   fun close() = session.close()

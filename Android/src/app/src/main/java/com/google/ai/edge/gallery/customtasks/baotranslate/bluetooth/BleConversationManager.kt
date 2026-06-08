@@ -22,6 +22,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.longOrNull
@@ -52,6 +55,65 @@ data class BleMetadataMessage(
   val hasVoiceProfile: Boolean,
 )
 
+/**
+ * Pure (Context-free) encode/validate/decode for BLE conversation payloads. Decoding is DEFENSIVE:
+ * a connected peer — or link corruption from a legitimate peer — can put arbitrary bytes on the
+ * wire, and the substring pre-checks do NOT guarantee well-formed JSON. The kotlinx decode is
+ * therefore wrapped to return null on any SerializationException instead of throwing out of the
+ * BluetoothCommunicator main-thread callback and crashing the process. Standalone object so the
+ * decode contract is unit-testable without a Context.
+ */
+internal object BleMessageCodec {
+  private val json = Json { ignoreUnknownKeys = true }
+
+  fun encodeTranscript(message: BleTranscriptMessage): String =
+    MSG_TRANSCRIPT + json.encodeToString(BleTranscriptMessage.serializer(), message)
+
+  fun encodeMetadata(message: BleMetadataMessage): String =
+    MSG_METADATA + json.encodeToString(BleMetadataMessage.serializer(), message)
+
+  fun isValidTranscriptJson(payload: String): Boolean =
+    payload.startsWith("{") && payload.endsWith("}") &&
+      payload.contains("\"text\"") &&
+      payload.contains("\"senderId\"") &&
+      payload.contains("\"senderName\"") &&
+      payload.contains("\"sourceLanguage\"") &&
+      payload.contains("\"targetLanguage\"")
+
+  fun isValidMetadataJson(payload: String): Boolean =
+    payload.startsWith("{") && payload.endsWith("}") &&
+      payload.contains("\"participantId\"") &&
+      payload.contains("\"participantName\"") &&
+      payload.contains("\"sourceLanguage\"") &&
+      payload.contains("\"targetLanguage\"") &&
+      payload.contains("\"hasVoiceProfile\"")
+
+  fun decodeTranscript(payload: String): BleTranscriptMessage? {
+    val obj = parseObject(payload) ?: return null
+    val text = (obj["text"] as? JsonPrimitive)?.contentOrNull ?: return null
+    val senderId = (obj["senderId"] as? JsonPrimitive)?.contentOrNull ?: ""
+    val senderName = (obj["senderName"] as? JsonPrimitive)?.contentOrNull ?: ""
+    val sourceLanguage = (obj["sourceLanguage"] as? JsonPrimitive)?.contentOrNull ?: ""
+    val targetLanguage = (obj["targetLanguage"] as? JsonPrimitive)?.contentOrNull ?: ""
+    val timestamp = (obj["timestamp"] as? JsonPrimitive)?.longOrNull ?: System.currentTimeMillis()
+    return BleTranscriptMessage(text, senderId, senderName, sourceLanguage, targetLanguage, timestamp)
+  }
+
+  fun decodeMetadata(payload: String): BleMetadataMessage? {
+    val obj = parseObject(payload) ?: return null
+    val participantId = (obj["participantId"] as? JsonPrimitive)?.contentOrNull ?: return null
+    val participantName = (obj["participantName"] as? JsonPrimitive)?.contentOrNull ?: ""
+    val sourceLanguage = (obj["sourceLanguage"] as? JsonPrimitive)?.contentOrNull ?: ""
+    val targetLanguage = (obj["targetLanguage"] as? JsonPrimitive)?.contentOrNull ?: ""
+    val hasVoiceProfile = (obj["hasVoiceProfile"] as? JsonPrimitive)?.booleanOrNull ?: false
+    return BleMetadataMessage(participantId, participantName, sourceLanguage, targetLanguage, hasVoiceProfile)
+  }
+
+  // Never throws: malformed JSON (passes the substring gate but isn't parseable) yields null.
+  private fun parseObject(payload: String): JsonObject? =
+    runCatching { json.decodeFromString<JsonElement>(payload) }.getOrNull() as? JsonObject
+}
+
 data class DiscoveredPeer(
   val id: String,
   val name: String,
@@ -67,7 +129,6 @@ enum class ConnectionState {
 }
 
 class BleConversationManager(private val context: Context) {
-  private val json = Json { ignoreUnknownKeys = true }
   private val scopeJob = SupervisorJob()
   private val scope = CoroutineScope(scopeJob + Dispatchers.Main)
 
@@ -224,26 +285,6 @@ class BleConversationManager(private val context: Context) {
     })
   }
 
-  private fun isValidTranscriptJson(payload: String): Boolean {
-    return payload.startsWith("{") &&
-      payload.endsWith("}") &&
-      payload.contains("\"text\"") &&
-      payload.contains("\"senderId\"") &&
-      payload.contains("\"senderName\"") &&
-      payload.contains("\"sourceLanguage\"") &&
-      payload.contains("\"targetLanguage\"")
-  }
-
-  private fun isValidMetadataJson(payload: String): Boolean {
-    return payload.startsWith("{") &&
-      payload.endsWith("}") &&
-      payload.contains("\"participantId\"") &&
-      payload.contains("\"participantName\"") &&
-      payload.contains("\"sourceLanguage\"") &&
-      payload.contains("\"targetLanguage\"") &&
-      payload.contains("\"hasVoiceProfile\"")
-  }
-
   private fun handleIncomingMessage(message: Message) {
     val text = message.text ?: return
     if (text.isEmpty() || text.length > MAX_BLE_MESSAGE_SIZE) {
@@ -262,11 +303,14 @@ class BleConversationManager(private val context: Context) {
 
     when (header) {
       MSG_TRANSCRIPT -> {
-        if (!isValidTranscriptJson(payload)) {
+        if (!BleMessageCodec.isValidTranscriptJson(payload)) {
           BaoLog.w(TAG, "Invalid transcript JSON structure")
           return
         }
-        val transcript = decodeTranscript(payload) ?: return
+        val transcript = BleMessageCodec.decodeTranscript(payload) ?: run {
+          BaoLog.w(TAG, "Dropping malformed transcript payload")
+          return
+        }
         if (transcript.text.length > MAX_TEXT_LENGTH) {
           BaoLog.w(TAG, "Transcript text too long: ${transcript.text.length}")
           return
@@ -277,49 +321,17 @@ class BleConversationManager(private val context: Context) {
         }
       }
       MSG_METADATA -> {
-        if (!isValidMetadataJson(payload)) {
+        if (!BleMessageCodec.isValidMetadataJson(payload)) {
           BaoLog.w(TAG, "Invalid metadata JSON structure")
           return
         }
-        val metadata = decodeMetadata(payload) ?: return
+        val metadata = BleMessageCodec.decodeMetadata(payload) ?: run {
+          BaoLog.w(TAG, "Dropping malformed metadata payload")
+          return
+        }
         updateParticipantFromMetadata(sender, metadata)
       }
     }
-  }
-
-  private fun decodeTranscript(payload: String): BleTranscriptMessage? {
-    val element = json.decodeFromString<kotlinx.serialization.json.JsonElement>(payload)
-    val obj = element as? kotlinx.serialization.json.JsonObject ?: run {
-      BaoLog.w(TAG, "Transcript payload is not a JSON object")
-      return null
-    }
-    val text = (obj["text"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull ?: run {
-      BaoLog.w(TAG, "Transcript missing text field")
-      return null
-    }
-    val senderId = (obj["senderId"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull ?: ""
-    val senderName = (obj["senderName"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull ?: ""
-    val sourceLanguage = (obj["sourceLanguage"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull ?: ""
-    val targetLanguage = (obj["targetLanguage"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull ?: ""
-    val timestamp = (obj["timestamp"] as? kotlinx.serialization.json.JsonPrimitive)?.longOrNull ?: System.currentTimeMillis()
-    return BleTranscriptMessage(text, senderId, senderName, sourceLanguage, targetLanguage, timestamp)
-  }
-
-  private fun decodeMetadata(payload: String): BleMetadataMessage? {
-    val element = json.decodeFromString<kotlinx.serialization.json.JsonElement>(payload)
-    val obj = element as? kotlinx.serialization.json.JsonObject ?: run {
-      BaoLog.w(TAG, "Metadata payload is not a JSON object")
-      return null
-    }
-    val participantId = (obj["participantId"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull ?: run {
-      BaoLog.w(TAG, "Metadata missing participantId")
-      return null
-    }
-    val participantName = (obj["participantName"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull ?: ""
-    val sourceLanguage = (obj["sourceLanguage"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull ?: ""
-    val targetLanguage = (obj["targetLanguage"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull ?: ""
-    val hasVoiceProfile = (obj["hasVoiceProfile"] as? kotlinx.serialization.json.JsonPrimitive)?.booleanOrNull ?: false
-    return BleMetadataMessage(participantId, participantName, sourceLanguage, targetLanguage, hasVoiceProfile)
   }
 
   private fun updateParticipantFromMetadata(source: Peer, metadata: BleMetadataMessage) {
@@ -429,9 +441,9 @@ class BleConversationManager(private val context: Context) {
       targetLanguage = targetLanguage,
     )
 
-    val jsonStr = MSG_TRANSCRIPT + json.encodeToString(BleTranscriptMessage.serializer(), message)
-    comm.sendMessage(Message(context, jsonStr))
-    BaoLog.i(TAG, "Sent transcript: ${text.take(50)}...")
+    comm.sendMessage(Message(context, BleMessageCodec.encodeTranscript(message)))
+    // Log length only — the transcript is user speech content (PII), not diagnostics.
+    BaoLog.i(TAG, "Sent transcript: ${text.length} chars")
   }
 
   private fun sendMetadata() {
@@ -446,8 +458,7 @@ class BleConversationManager(private val context: Context) {
       hasVoiceProfile = local.hasVoiceProfile,
     )
 
-    val jsonStr = MSG_METADATA + json.encodeToString(BleMetadataMessage.serializer(), metadata)
-    comm.sendMessage(Message(context, jsonStr))
+    comm.sendMessage(Message(context, BleMessageCodec.encodeMetadata(metadata)))
   }
 
   fun getConnectedCount(): Int = _participants.value.count { it.isConnected }
@@ -456,6 +467,12 @@ class BleConversationManager(private val context: Context) {
     scopeJob.cancel()
     val comm = communicator
     communicator = null
+    // destroy() does not stop the active LE advertiser/scanner (it only tears down channels and
+    // calls the deprecated BluetoothAdapter.disable(), a no-op for non-privileged apps on API 31+),
+    // so an in-progress discovery would leak its AdvertiseCallback/ScanCallback to the system stack
+    // until process death. Stop them explicitly first.
+    comm?.stopAdvertising(true)
+    comm?.stopDiscovery(true)
     peerMap.clear()
     discoveredPeerMap.clear()
     _participants.value = emptyList()

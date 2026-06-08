@@ -12,9 +12,12 @@ import com.google.ai.edge.gallery.common.BaoLog
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioDevice
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioRouter
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.BluetoothTransport
+import com.google.ai.edge.gallery.customtasks.baotranslate.audio.WAVEFORM_HISTORY
+import com.google.ai.edge.gallery.customtasks.baotranslate.audio.waveformAmplitude
 import com.google.ai.edge.gallery.customtasks.baotranslate.config.PipelineConfig
 import com.google.ai.edge.gallery.customtasks.baotranslate.data.SupportedLanguages
 import com.google.ai.edge.gallery.customtasks.baotranslate.data.TranslationMessage
+import com.google.ai.edge.gallery.customtasks.baotranslate.stt.EmptyTranscriptionException
 import com.google.ai.edge.gallery.customtasks.baotranslate.stt.VadProcessor
 import com.google.ai.edge.gallery.customtasks.baotranslate.translate.TranslationOutcome
 import com.google.ai.edge.gallery.customtasks.baotranslate.tts.KokoroTtsPipeline
@@ -41,7 +44,6 @@ private const val INPUT_ROUTE_TIMEOUT_MS = 2_000L
 private const val LIVE_TRANSLATION_WINDOW_SECONDS = 8
 private const val LIVE_TRANSLATION_STRIDE_SECONDS = 4
 private const val MIN_TRANSLATION_SEGMENT_SECONDS = 1
-private const val WAVEFORM_VISUAL_GAIN = 2.5f
 private const val AUDIO_READ_EMPTY_SLEEP_MS = 20L
 private const val AUDIO_READ_STALL_TIMEOUT_MS = 3_000L
 
@@ -271,14 +273,8 @@ internal class RecordingController(
             }
 
             val elapsed = (System.currentTimeMillis() - startTime) / 1000f
-            var sumSquares = 0L
-            for (i in 0 until readCount) {
-              val sample = buffer[i].toLong()
-              sumSquares += sample * sample
-            }
-            val rms = sqrt(sumSquares.toDouble() / readCount) / 32768.0
-            val amplitude = (sqrt(rms).toFloat() * WAVEFORM_VISUAL_GAIN).coerceIn(0f, 1f)
-            val newAmplitudes = (uiState.value.amplitudes + amplitude).takeLast(50)
+            val amplitude = waveformAmplitude(buffer, readCount)
+            val newAmplitudes = (uiState.value.amplitudes + amplitude).takeLast(WAVEFORM_HISTORY)
             if (!publishedRecordingState) {
               val stats = buffer.copyOf(readCount).audioStats()
               BaoLog.i(
@@ -533,7 +529,11 @@ internal class RecordingController(
         onSuccess = { it },
         onFailure = { error ->
           BaoLog.w(REC_TAG, "Transcription failed: ${error.message}")
-          if (!isStaleRecordingSegment(recordingSessionId)) {
+          // A blank decode (VAD false-positive / noise window) is benign in continuous live mode;
+          // suppress it there to match the VAD-empty and invalid-transcription branches. A real
+          // native decode failure still surfaces so a corrupt model is never silent.
+          val benignEmpty = error is EmptyTranscriptionException
+          if ((reportEmptySpeech || !benignEmpty) && !isStaleRecordingSegment(recordingSessionId)) {
             uiState.update { it.copy(errorMessage = getApp().getString(R.string.bao_error_transcription_failed, error.message)) }
           }
           null

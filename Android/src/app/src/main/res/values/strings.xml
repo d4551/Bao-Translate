@@ -121,7 +121,6 @@
   <string name="chat_generic_result_name">Result</string>
   <string name="clear">Clear</string>
   <string name="collect">Collect</string>
-  <string name="color">Color</string>
   <string name="config_dialog_tab_model_configs">Model configs</string>
   <string name="config_dialog_tab_system_prompt">System prompt</string>
   <string name="configurations_dialog_title">Configurations</string>
@@ -671,6 +670,17 @@
   <string name="bao_translate_record_voice_title">Record Your Voice</string>
   <string name="bao_translate_record_voice_desc">Record a local voice profile for PocketTTS voice clone. You can un-enroll anytime in Settings.</string>
   <string name="bao_translate_record_prompt">The quick brown fox jumps over the lazy dog.</string>
+  <!-- Voice-enrollment read-aloud sentence per source language (authored natively, not auto-localized). -->
+  <string name="bao_translate_record_prompt_es">El veloz zorro marrón salta sobre el perro perezoso al amanecer.</string>
+  <string name="bao_translate_record_prompt_fr">Le rapide renard brun saute par-dessus le chien paresseux au matin.</string>
+  <string name="bao_translate_record_prompt_de">Der schnelle braune Fuchs springt am Morgen über den faulen Hund.</string>
+  <string name="bao_translate_record_prompt_zh">敏捷的棕色狐狸清晨跳过了那只懒狗。</string>
+  <string name="bao_translate_record_prompt_ja">素早い茶色の狐が朝、怠け者の犬を飛び越えます。</string>
+  <string name="bao_translate_record_prompt_ko">빠른 갈색 여우가 아침에 게으른 개를 뛰어넘습니다.</string>
+  <string name="bao_translate_record_prompt_pt">A rápida raposa marrom salta sobre o cão preguiçoso ao amanhecer.</string>
+  <string name="bao_translate_record_prompt_it">La rapida volpe marrone salta sopra il cane pigro al mattino.</string>
+  <string name="bao_translate_record_prompt_ru">Быстрая коричневая лиса утром прыгает через ленивую собаку.</string>
+  <string name="bao_translate_record_prompt_ar">الثعلب البني السريع يقفز فوق الكلب الكسول في الصباح.</string>
   <string name="bao_translate_tap_to_record">Tap to Record</string>
   <string name="bao_translate_tap_to_stop">Tap to Stop</string>
   <string name="bao_translate_min_record">Minimum 3 seconds. Works best with 5-10 seconds of clear speech.</string>
@@ -693,6 +703,7 @@
   <string name="cd_bao_translate_start">Start translating</string>
   <string name="cd_bao_translate_stop">Stop recording</string>
   <string name="cd_bao_translate_swap">Swap languages</string>
+  <string name="cd_bao_translate_clear">Clear conversation</string>
   <string name="cd_bao_translate_enroll">Enroll voice</string>
   <string name="cd_bao_translate_settings_enroll_voice">Enroll voice from settings</string>
   <string name="cd_bao_translate_waveform">Audio waveform</string>

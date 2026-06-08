@@ -4,11 +4,14 @@ import android.content.Context
 import com.google.ai.edge.gallery.common.BaoLog
 import com.google.ai.edge.gallery.R
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.cancellation.CancellationException
+import kotlin.coroutines.coroutineContext
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 import java.io.BufferedInputStream
@@ -234,7 +237,8 @@ object BaoTranslateModelManager {
         val encoderFile = File(dir, "base-encoder.int8.onnx")
         val decoderFile = File(dir, "base-decoder.int8.onnx")
         val tokensFile = File(dir, "base-tokens.txt")
-        if (encoderFile.exists() && decoderFile.exists() && tokensFile.exists()) ModelStatus.Ready
+        // length()>0 (not just exists()): a zero-byte file left by a killed write must not be Ready.
+        if (encoderFile.length() > 0 && decoderFile.length() > 0 && tokensFile.length() > 0) ModelStatus.Ready
         else ModelStatus.NotDownloaded
       }
       "qwen25_1b", "gemma4_e2b" -> {
@@ -289,9 +293,10 @@ object BaoTranslateModelManager {
 
     // A mid-stream network drop or disk error during a multi-GB download throws (connect/read/
     // write/responseCode), which would otherwise escape `withContext`, bypass the fold below, and
-    // crash the app while leaving the status stuck on Downloading. runCatching converts any such
-    // throw into the Result.failure the fold already handles.
-    val result = runCatching {
+    // crash the app while leaving the status stuck on Downloading. runCatchingCancellable converts
+    // any such throw into the Result.failure the fold handles — but RETHROWS CancellationException
+    // so a delete-triggered cancel actually cancels (and is not mislabeled as a download Error).
+    val result = runCatchingCancellable {
       when (modelId) {
         "kokoro_tts" -> {
           val archive = ARCHIVES.first { it.modelId == modelId }
@@ -352,10 +357,22 @@ object BaoTranslateModelManager {
     BaoLog.i(TAG, "Deleted all models")
   }
 
-  private fun isArchiveExtracted(context: Context, archive: ArchiveSpec): Boolean {
-    val baseDir = getSherpaOnnxDir(context)
-    return archive.requiredFiles.all { File(baseDir, it).exists() }
-  }
+  private fun isArchiveExtracted(context: Context, archive: ArchiveSpec): Boolean =
+    requiredFilesComplete(getSherpaOnnxDir(context), archive.requiredFiles)
+
+  // Existence alone marked a half-extracted archive Ready: an interrupted untar (or process kill)
+  // leaves espeak-ng-data present-but-empty, or files zero-length. Require directories to be
+  // non-empty and files to be non-zero, so a truncated/partial extraction reports NotDownloaded and
+  // re-downloads instead of feeding a corrupt model into native sherpa-onnx (SIGSEGV / garbage TTS).
+  internal fun requiredFilesComplete(baseDir: File, requiredFiles: List<String>): Boolean =
+    requiredFiles.all { rel ->
+      val f = File(baseDir, rel)
+      when {
+        !f.exists() -> false
+        f.isDirectory -> f.listFiles()?.isNotEmpty() == true
+        else -> f.length() > 0
+      }
+    }
 
   private fun isFileDownloaded(context: Context, file: FileSpec): Boolean {
     val target = File(getSherpaOnnxDir(context), file.fileName)
@@ -654,6 +671,9 @@ object BaoTranslateModelManager {
           var bytesRead: Int
 
           while (input.read(buffer).also { bytesRead = it } != -1) {
+            // Cooperative cancellation: a delete-during-download cancels this coroutine; check each
+            // chunk so cancel()/join() returns promptly instead of blocking on the full transfer.
+            coroutineContext.ensureActive()
             output.write(buffer, 0, bytesRead)
             downloaded += bytesRead
             if (totalSize > 0) {
@@ -681,6 +701,12 @@ object BaoTranslateModelManager {
   private fun updateStatus(modelId: String, status: ModelStatus) {
     _modelStatuses.update { it + (modelId to status) }
   }
+
+  // Like runCatching, but never swallows CancellationException — rethrowing it preserves structured
+  // concurrency so a cancelled (e.g. delete-triggered) download unwinds instead of being captured as
+  // a Result.failure and mislabeled an Error.
+  private inline fun <T> runCatchingCancellable(block: () -> T): Result<T> =
+    runCatching(block).onFailure { if (it is CancellationException) throw it }
 
   private fun translationSpec(modelId: String): TranslationModelSpec =
     TRANSLATION_MODELS.first { it.modelId == modelId }

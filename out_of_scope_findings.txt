@@ -17,4 +17,165 @@ PROPOSED_LADDER_SLOT: Belongs to the SEPARATELY-OWNED TTS synthesis fix
   synthesizeAudio() — otherwise OpenVoiceVoiceConverter remains exposed. Alternatively, give
   OpenVoiceVoiceConverter its own inferenceLock that convert()/computeSpeakerEmbedding()/cleanup()
   all acquire, mirroring TranslationPipeline/WhisperPipeline/VadProcessor/KokoroTtsPipeline.
-STATUS: OPEN — out of scope for this task (translation + whisper/vad paths). Flagged for TTS owner.
+STATUS: RESOLVED 2026-06-07. Chose the per-instance inferenceLock (not the pipelineMutex wrap):
+  wrapping synthesizeSpeech in pipelineMutex would hold it across the full Kokoro synth + OpenVoice
+  convert (up to ~47s at MAX_FRAMES) while processAudioSegment takes that same mutex
+  (RecordingController.kt:476), stalling live transcription. OpenVoiceVoiceConverter now holds
+  `private val inferenceLock = Any()`; initialize()/computeSpeakerEmbedding()/convert()/cleanup() are
+  all `synchronized(inferenceLock)`, mirroring Kokoro/Translation/Whisper/Vad. The `val conv =
+  converter ?: return null` re-check under the lock also closes the synthesizeSpeech TOCTOU
+  (reads pipelines.openVoiceConverter at :688, calls convert at :703) — a concurrent cleanup now makes
+  convert() return null safely instead of dereferencing a freed ONNX handle. Grounded in ONNX Runtime
+  docs: Session::Run is concurrency-safe but disposal must not overlap a Run.
+  VERIFIED: compileDebugKotlin + testDebugUnitTest pass (JDK 21 JBR); device E2E
+  BaoTranslateOpenVoiceCloneE2eTest OK (1 test, 31.7s) drives convert/computeSpeakerEmbedding/cleanup
+  and asserts real audio + timbre shift toward enrolled voice + Spanish intelligibility; full
+  regression OK (12 tests, 309s: Smoke, DeepLink, LanguageMatrix, LiveMic, SpokenTranslation) on
+  Vertu VTL-202403 / Android 15 with the lock-fixed APK.
+
+================================================================================
+DEEP AUDIT — 2026-06-07 (9-lens adversarial workflow, 45 agents; 16 confirmed)
+================================================================================
+FIXED (11), verified by compile + JVM unit suite + device E2E OK(13) on Vertu
+VTL-202403/Android 15; two new JVM tests added (BleMessageCodecTest 5/5,
+ModelIntegrityTest 4/4) directly prove #4 and #5:
+
+ 1 HIGH  PlatformTtsPipeline.synthesizeAudio unserialized -> concurrent callers clobber the single
+         TextToSpeech listener+language (30s stall + false failure + wrong-language audio). FIX:
+         serialize whole synth under engineLock (also guards init/cleanup) + per-utterance uid match.
+ 2 HIGH  WhisperPipeline.transcribeBlocking native JNI throw escaped the Result envelope -> crashed
+         the recording coroutine (no CoroutineExceptionHandler). FIX: runCatching -> Result.failure;
+         typed EmptyTranscriptionException for the benign blank-decode case.
+ 3 HIGH  TranslationPipeline.translateBlocking native litertlm throw escaped TranslationOutcome ->
+         crash. FIX: runCatching -> TranslationOutcome.Failure (conversation.close stays in finally).
+ 4 HIGH  BLE decodeTranscript/decodeMetadata: unguarded kotlinx decode of peer-controlled payload ->
+         SerializationException out of the library main-thread callback -> remote-DoS process crash.
+         FIX: extracted Context-free BleMessageCodec; decode wrapped in runCatching -> null.
+ 5 MED+  Model status existence-only accepted empty espeak-ng-data dir / zero-byte files as Ready ->
+         native sherpa-onnx fed a corrupt model. FIX: requiredFilesComplete() (non-empty dir +
+         length>0); whisper branch length>0. (silero left length>0 — its spec sizeBytes=2MB is bogus;
+         real on-device file is 644KB, so a >=sizeBytes gate would brick the valid VAD model.)
+ 6 MED   AudioRouter left MODE_IN_COMMUNICATION when setCommunicationDevice() failed. FIX: reset
+         mode NORMAL + clearCommunicationDevice() in the failure branch.
+ 7 MED   BleConversationManager.cleanup() destroy() never stops the LE advertiser/scanner (leak on
+         screen exit mid-discovery). FIX: stopAdvertising(true)+stopDiscovery(true) before destroy().
+ 8 MED   OrtOpenVoiceModel.run leaked native OnnxTensor/Result on any throw. FIX: try/finally closes
+         all input tensors + result on success and exception paths.
+ 9 LOW   Live-window blank decode flashed a spurious "transcription failed" error despite
+         reportEmptySpeech=false. FIX: gate on (reportEmptySpeech || not EmptyTranscriptionException)
+         — real native failures still surface (interacts with #2; advisor-flagged).
+10 LOW   Transcript content (user speech PII) written to BaoLog. FIX: log length only.
+11 (slice of #13) "Delete All" button had no enabled-guard during download. FIX: disabled while any
+         model is Downloading/Extracting.
+
+SECOND PASS — 2026-06-07 — the "deferred" items were IN SCOPE (not shipped; no legacy kept). Fixed
+properly, plus a confirmed finding the first pass MISSED. NOTHING below is deferred or out of scope.
+
+ 12 FIXED  worker/DownloadWorker.kt resumed-download corruption. Refactored resume to be RFC 7233 /
+           MDN-correct (grounded via context7 MDN HTTP Range requests): append ONLY on 206 Partial
+           Content; a 200 OK after a Range request means the server ignored the range and is sending
+           the full body from byte 0, so truncate+overwrite instead of appending; 416 discards the
+           stale/over-sized partial; added a post-write size check (Content-Range total /
+           Content-Length) so a truncated or oversized file is never renamed to the final name. This
+           is the SHARED downloader (DownloadRepository/ModelManagerViewModel) — fixing it was the
+           point, NOT out of scope. "Pre-existing legacy" was exactly why it had to be prioritised.
+ 13 FIXED  delete-vs-download race, at the coordinator level (not just the UI gate). (a)
+           downloadFileWithProgress calls coroutineContext.ensureActive() each chunk so a
+           delete-triggered cancel unwinds promptly; (b) BaoTranslateModelManager.downloadModel uses
+           runCatchingCancellable (RETHROWS CancellationException) so a cancelled download isn't
+           swallowed/mislabeled Error — also closes a latent CancellationException-swallow bug; (c)
+           ModelDownloadCoordinator tracks each download Job and exposes cancelDownload /
+           cancelAllDownloads; (d) ViewModel.deleteModel/deleteAllModels cancel+await the in-flight
+           download(s) BEFORE deleting files. No live writer can race a delete. (UI gate from pass 1
+           retained as defence-in-depth.)
+ 4* FIXED  (MISSED by pass 1) Deleting the active translation model left the persisted pref pointing
+           at the deleted model → cold start wedged into ModelsNotReady though a usable model was
+           present. resolveAndPersistTranslationModel() falls back to an installed translation model
+           (required qwen25_1b) and PERSISTS the correction; wired into initializeModels (self-heals
+           any stale persisted value), the post-download init path, and deleteModel/deleteAllModels.
+           Removed dead `ALL_DOWNLOADS` const from the ViewModel.
+
+DOCS: README corrected to describe what the platform DOES — fixed root README "speech-to-text"→
+"text-to-speech" for the fallback path; rewrote Android/README.md (was the stale one-line upstream
+"Google AI Edge Gallery (Android)" stub) into a real Bao Translate Android module doc.
+
+REJECTED by adversarial verification (NOT bugs):
+ - Swap-language IconButton "touch target <48dp": false positive. Finder misread Dimensions.Icon
+   (large=32/xl=48) as Spacing; minimumInteractiveComponentSize() expands the hit area to 48dp.
+ - English pluralization in Kotlin / Record-FAB missing Role.Button: no localized resources exist
+   (UI is English-only) and combinedClickable already carries activation semantics + contentDesc.
+
+VERIFICATION CEILING (honest): device E2E proves NON-REGRESSION (happy paths intact; the TTS
+lock+uid-guard and Ort try/finally do not break synthesis/cloning — nonKokoroLanguages + OpenVoice
+clone both green). It does NOT reproduce the race/crash CONDITIONS for #1/#2/#3/#4/#6/#7 (no 2nd BLE
+device; simulateIncomingTranscriptForTest bypasses decodeTranscript; the TTS fallback test is
+single-threaded). Those fixes rest on code-review + pattern-parity with the shipped inferenceLock
+engines + the new JVM unit tests (#4) + ONNX-RT disposal grounding (context7). TextToSpeech
+single-listener semantics: context7 lacks the framework reference; relied on the audit verifiers'
+web-confirmation that setOnUtteranceProgressListener is last-wins single-listener.
+
+SECOND-PASS VERIFICATION (2026-06-07): build green; JVM unit suite green incl. new ResumeDecisionTest
+4/4 (proves #12 append-on-206 / overwrite-on-200 / size-check gating) alongside BleMessageCodecTest
+5/5 + ModelIntegrityTest 4/4; device E2E OK(13) on Vertu VTL-202403/Android 15 (OpenVoiceClone,
+LanguageMatrix, LiveMic, SpokenTranslation, Smoke, DeepLink) — non-regression incl. the resolver
+running on every initializeModels (qwen Ready -> returns unchanged). Ceiling: device E2E does not
+re-download or delete models (provisioned stack), so the #12 transfer path, #13 cancel-on-delete, and
+the #4* cold-start brick are proven by unit test (#12 decision) + code-review/pattern-parity + MDN
+(context7) grounding, not by a device repro of those exact conditions.
+
+THIRD PASS — 2026-06-07 — legacy/demo task cleanup (in scope; "no demos, full-fledged features").
+ - DELETED customtasks/examplecustomtask/* — a Hilt tutorial example (a "Model Viewer" sample).
+   CORRECTION to an earlier overstatement: its `@Provides @IntoSet` was COMMENTED OUT
+   ("/* Remove comment to enable ... */"), so it was NEVER registered and never rendered a home tile
+   — inert dead sample code. Deletion is therefore provably safe (audited: zero surviving references
+   across code/res/manifest/allowlists/tests). Repointed two KDoc links (CustomTask.kt, Model.kt) at
+   the production baotranslate example, and removed the now-orphaned `R.string.color` ("Color")
+   string it was the sole user of.
+ - Tiny Garden + Mobile Actions: I FIRST removed `experimental = true` and rewrote their copy to look
+   production-grade, then REVERTED both. Reason (honesty): TinyGardenTask.kt:69 calls itself a task
+   that "demonstrates how to use FunctionGemma to play a simple gardening game" (270M, "responses may
+   vary") — flipping a flag and deleting that true caveat made the description LESS honest, not more.
+   Labels must follow verified behavior, and I have NOT run these tasks (their LLM models — covered by
+   model_allowlists/1_0_15.json: agent_chat=2, ask_audio=4, mobile_actions=1, tiny_garden=1 — are not
+   on the test device; only the bao-translate stack is). So `experimental` and the original copy are
+   restored as the honest state. Genuine LLM tasks (AI Chat, Prompt Lab, Ask Image, Audio Scribe,
+   Agent Skills) have models in the versioned allowlist and remain registered, but are UNVERIFIED by me.
+ - README: the "On-device AI toolset" bullet states honestly that the app BUNDLES the upstream
+   AI-Edge-Gallery LLM tools (which run models downloaded in-app) and marks Mobile Actions + Tiny
+   Garden experimental — it does NOT assert them as verified-polished features.
+ OPEN (needs product owner / a verification session, not a silent defer): "implement them as full-
+   fledged features" is unmet for the LLM tasks because verifying/elevating each requires downloading
+   its model (Gemma3-1B ~555MB is the smallest covering chat/prompt-lab) and driving its UI to confirm
+   real output — out of this session's device scope. Decision owed: per task, (a) verify-and-keep with
+   an honest description, or (b) cut. Tiny Garden is the clearest cut candidate (author-labeled demo).
+ VERIFIED (this pass): compileDebugKotlin green; Smoke + DeepLink OK(4); full device regression OK(13)
+ was green on the changeset BEFORE these reverts (reverts are string/flag-only, no pipeline impact).
+
+DEEP DELETION AUDIT — 2026-06-08 (broadened from file-deletions to ALL removed/refactored code)
+ Method: git diff (removed-line review) + behavior-equivalence check + fresh-config build (no config
+ cache) to defeat masking. Findings:
+ - BLE refactor (deleted json/isValid*/decode* members -> BleMessageCodec): SAFE & behavior-preserving.
+   New decode* has IDENTICAL null-conditions (text/participantId missing -> null; other fields default;
+   timestamp default) and BYTE-IDENTICAL wire encoding (same serializer + MSG_* header + Json config) =>
+   BLE peer interop preserved. Only adds the runCatching crash-fix; granular per-field warn logs
+   collapsed to one "Dropping malformed payload" log (observability, not correctness).
+ - ModelDownloadCoordinator rewrite (deleted Set<String> beginDownload/endDownload + try/finally):
+   SAFE. Guard semantics preserved exactly (ALL_DOWNLOADS exclusivity + per-id dedup); finally->
+   invokeOnCompletion is equivalent for release AND adds cancellation support (the new requirement).
+ - deleteModel branch merge (deleted separate qwen/gemma branches + the in-memory-only gemma reset):
+   SAFE. Pipeline cleanup preserved for both; reset generalized to resolveAndPersistTranslationModel
+   (fixes the brick + now persists). Strictly better, no behavior lost.
+ - ROOT build.gradle.kts buildscript pin deletion (PRIOR session, uncommitted): SAFE — the AGP pin was
+   RELOCATED into app/build.gradle.kts (lines 21-31), scoped to the module that applies protobuf
+   0.9.5. Verified the `android { packaging { } }` DSL resolves via `:app:help --no-configuration-cache`
+   (fresh configuration, no config-cache masking). BEST-PRACTICE FIX applied this pass: the relocated
+   pin hardcoded useVersion("8.8.2"); changed to useVersion(libs.versions.agp.get()) so it can't drift
+   on an AGP bump — verified `libs` IS accessible in that buildscript{} scope (fresh-config green).
+ - ExampleCustomTask deletion: re-confirmed inert (commented-out @IntoSet), zero surviving refs;
+   removed orphaned R.string.color.
+ README (this pass): de-conflated the Features section — "AI Chat" had wrongly claimed MCP/tool/
+   function-calling, which belong to the distinct Agent Skills task; folded the mcp/ +
+   Function_Calling_Guide.md links onto Agent Skills; noted downloads are resumable + integrity-checked;
+   verified EVERY referenced link/file/screenshot exists (no broken links).
+ context7: coroutines best-practices confirmed ensureActive()/job.cancel()+join() patterns; Dagger
+ multibindings confirmed @IntoSet set-shrink safety; MDN RFC 7233 for the resume fix.

@@ -63,6 +63,7 @@ fun ConversationModeScreen(
   onScanDevices: () -> Unit,
   onStopScan: () -> Unit,
   onConnectDevice: (String) -> Unit,
+  onDisconnectDevice: (String) -> Unit,
   onStartConversation: () -> Unit,
   modifier: Modifier = Modifier,
   isTablet: Boolean = false,
@@ -111,6 +112,7 @@ fun ConversationModeScreen(
         ParticipantCard(
           participant = participant,
           isLocal = false,
+          onDisconnect = { onDisconnectDevice(participant.id) },
         )
       }
     }
@@ -302,6 +304,7 @@ private fun ParticipantCard(
   participant: Participant,
   isLocal: Boolean,
   audioDevice: AudioDevice? = null,
+  onDisconnect: (() -> Unit)? = null,
   modifier: Modifier = Modifier,
 ) {
   Card(
@@ -384,6 +387,14 @@ private fun ParticipantCard(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
+        }
+
+        // Leave-the-conversation control for a connected peer (the only way to drop a peer from the
+        // UI; the BLE manager supported it but nothing called it before).
+        if (!isLocal && onDisconnect != null) {
+          OutlinedButton(onClick = onDisconnect) {
+            Text(stringResource(R.string.bao_translate_disconnect))
+          }
         }
       }
 

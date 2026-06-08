@@ -17,7 +17,13 @@ import java.io.File
  * Both graphs run at the EXACT utterance length on ONNX Runtime ([OrtOpenVoiceModel]): the dilated
  * WaveNet receptive field never reaches padding, so the output is crisp/intelligible (fixed-length
  * TFLite smeared phonemes). Validated at 96+ dB vs PyTorch. tau=0.3 stochastic posterior via an
- * explicit Gaussian noise input. Not thread-safe; callers serialize.
+ * explicit Gaussian noise input.
+ *
+ * Thread-safety: an internal [inferenceLock] serializes [initialize]/[computeSpeakerEmbedding]/
+ * [convert] against [cleanup], so the native ONNX handles are never closed mid-inference (model
+ * delete / pipeline switch / onCleared while a convert is in flight). ONNX Runtime's `Run` is
+ * concurrency-safe but session disposal must not overlap a `Run`; this mirrors the same lock
+ * contract used by KokoroTtsPipeline/TranslationPipeline/WhisperPipeline/VadProcessor.
  */
 class OpenVoiceVoiceConverter(@Suppress("unused") private val context: Context) {
   private companion object {
@@ -32,11 +38,16 @@ class OpenVoiceVoiceConverter(@Suppress("unused") private val context: Context) 
 
   private val noiseRng = java.util.Random()
 
+  // Serializes native ONNX run() against close() so converter/refEnc are never freed mid-inference
+  // (model delete / pipeline switch / onCleared during an in-flight convert), and serializes the
+  // recording and BLE-peer synth paths that share this single converter instance.
+  private val inferenceLock = Any()
+
   private var converter: OrtOpenVoiceModel? = null
   private var refEnc: OrtOpenVoiceModel? = null
   @Volatile private var ready = false
 
-  fun initialize(converterOnnx: File, refEncOnnx: File): Boolean {
+  fun initialize(converterOnnx: File, refEncOnnx: File): Boolean = synchronized(inferenceLock) {
     if (!converterOnnx.exists() || !refEncOnnx.exists()) {
       BaoLog.w(TAG, "OpenVoice onnx missing: conv=${converterOnnx.exists()} refEnc=${refEncOnnx.exists()}")
       return false
@@ -49,14 +60,14 @@ class OpenVoiceVoiceConverter(@Suppress("unused") private val context: Context) 
   }
 
   /** Enrollment: derive the user's 256-d speaker embedding from a reference clip. */
-  fun computeSpeakerEmbedding(wavSamples: FloatArray, sampleRate: Int): FloatArray? {
+  fun computeSpeakerEmbedding(wavSamples: FloatArray, sampleRate: Int): FloatArray? = synchronized(inferenceLock) {
     val re = refEnc ?: return null
     val (spec, frames) = spectrogramFlat(wavSamples, sampleRate) ?: return null
     return runRefEnc(re, spec, frames)
   }
 
   /** Convert Kokoro audio into the enrolled timbre. [targetSe] from [computeSpeakerEmbedding]. */
-  fun convert(audio: SynthesizedAudio, targetSe: FloatArray): SynthesizedAudio? {
+  fun convert(audio: SynthesizedAudio, targetSe: FloatArray): SynthesizedAudio? = synchronized(inferenceLock) {
     val conv = converter ?: return null
     val re = refEnc ?: return null
     if (!ready) return null
@@ -84,9 +95,11 @@ class OpenVoiceVoiceConverter(@Suppress("unused") private val context: Context) 
   }
 
   fun cleanup() {
-    ready = false
-    converter?.close(); converter = null
-    refEnc?.close(); refEnc = null
+    synchronized(inferenceLock) {
+      ready = false
+      converter?.close(); converter = null
+      refEnc?.close(); refEnc = null
+    }
   }
 
   // ---- helpers ----

@@ -247,6 +247,7 @@ fun BaoTranslateScreen(
       onEnrollComplete = { samples, sampleRate -> viewModel.startEnrollmentRecording(samples, sampleRate) },
       enrollmentState = enrollmentState,
       onEnrollmentStateChange = { enrollmentState = it },
+      sourceLanguage = uiState.sourceLanguage,
       isTablet = isTablet,
     )
   }
@@ -293,6 +294,17 @@ fun BaoTranslateScreen(
         actions = {
           val conversationModeDesc = stringResource(R.string.bao_translate_conversation_mode)
           val settingsDesc = stringResource(R.string.settings_title)
+          val clearDesc = stringResource(R.string.cd_bao_translate_clear)
+          // Clear the current conversation transcript (local-only). Shown only when there is
+          // something to clear and the user is on the translate view, not in conversation pairing.
+          if (uiState.modelsReady && !showConversationMode && uiState.transcripts.isNotEmpty()) {
+            IconButton(
+              onClick = { viewModel.clearTranscripts() },
+              modifier = Modifier.semantics { contentDescription = clearDesc },
+            ) {
+              Icon(imageVector = Icons.Default.Refresh, contentDescription = null)
+            }
+          }
           if (uiState.modelsReady) {
             val conversationTooltipState = rememberTooltipState(isPersistent = true)
             val conversationTooltipScope = rememberCoroutineScope()
@@ -314,7 +326,13 @@ fun BaoTranslateScreen(
                 Icon(
                   imageVector = Icons.Default.People,
                   contentDescription = null,
-                  tint = if (showConversationMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                  // Primary tint while the pairing sheet is open OR a peer is actively connected, so
+                  // the user can see they are in a live conversation after returning to the main view.
+                  tint = if (showConversationMode || connectionState == ConnectionState.CONNECTED) {
+                    MaterialTheme.colorScheme.primary
+                  } else {
+                    MaterialTheme.colorScheme.onSurface
+                  },
                 )
               }
             }
@@ -451,6 +469,7 @@ fun BaoTranslateScreen(
             onScanDevices = { runWithBluetoothPermissions { viewModel.bleManager.startConversationDiscovery() } },
             onStopScan = { viewModel.bleManager.stopConversationDiscovery() },
             onConnectDevice = { address -> runWithBluetoothPermissions { viewModel.bleManager.connectToDevice(address) } },
+            onDisconnectDevice = { address -> viewModel.disconnectPeer(address) },
             onStartConversation = { showConversationMode = false },
             modifier = Modifier.weight(1f).fillMaxWidth(),
             isTablet = isTablet,

@@ -148,7 +148,13 @@ fun BaoTranslateSettingsSheet(
               text = stringResource(R.string.bao_translate_storage_format, totalStorageMb),
               style = MaterialTheme.typography.bodyMedium,
             )
-            TextButton(onClick = onDeleteModels) {
+            // Disabled while any model is downloading/extracting: a recursive delete racing an
+            // in-flight download to the same dirs can leave a partial file or a deleted model
+            // re-marked Ready by the still-running download's completion write.
+            val deleteBusy = modelStatuses.values.any {
+              it is ModelStatus.Downloading || it is ModelStatus.Extracting
+            }
+            TextButton(onClick = onDeleteModels, enabled = !deleteBusy) {
               Icon(
                 Icons.Default.Delete,
                 contentDescription = stringResource(R.string.cd_delete_icon),

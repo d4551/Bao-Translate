@@ -44,6 +44,27 @@ object SupportedLanguages {
 
   val CODE_TO_KEY: Map<String, String> = CODE_MAP.entries.associate { (key, code) -> code to key }
 
+  // Voice-enrollment read-aloud sentence per language (the user records themselves reading this).
+  // Each string is authored natively in its own language, so it is NOT device-locale-localized —
+  // it lives in the default strings.xml. Auto / unknown falls back to the English prompt.
+  private val SAMPLE_PROMPT_RES: Map<String, Int> = mapOf(
+    "English" to R.string.bao_translate_record_prompt,
+    "Spanish" to R.string.bao_translate_record_prompt_es,
+    "French" to R.string.bao_translate_record_prompt_fr,
+    "German" to R.string.bao_translate_record_prompt_de,
+    "Chinese" to R.string.bao_translate_record_prompt_zh,
+    "Japanese" to R.string.bao_translate_record_prompt_ja,
+    "Korean" to R.string.bao_translate_record_prompt_ko,
+    "Portuguese" to R.string.bao_translate_record_prompt_pt,
+    "Italian" to R.string.bao_translate_record_prompt_it,
+    "Russian" to R.string.bao_translate_record_prompt_ru,
+    "Arabic" to R.string.bao_translate_record_prompt_ar,
+  )
+
+  @StringRes
+  fun samplePromptResFor(languageKey: String): Int =
+    SAMPLE_PROMPT_RES[languageKey] ?: R.string.bao_translate_record_prompt
+
   fun codeFor(languageKey: String): String = CODE_MAP[languageKey] ?: languageKey
 
   fun keyForCode(languageCode: String): String? =

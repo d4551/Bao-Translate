@@ -1,6 +1,7 @@
 package com.google.ai.edge.gallery.customtasks.baotranslate
 
 import android.app.Application
+import com.google.ai.edge.gallery.common.BaoLog
 import androidx.annotation.VisibleForTesting
 import androidx.lifecycle.AndroidViewModel
 import com.google.ai.edge.gallery.R
@@ -28,7 +29,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 
 private const val TAG = "BaoTranslateVM"
-private const val ALL_DOWNLOADS = "__all_downloads__"
 
 sealed interface PipelineStatus {
   data object Idle : PipelineStatus
@@ -148,6 +148,7 @@ class BaoTranslateViewModel @Inject constructor(
     viewModelScope = viewModelScope,
     getApp = { getApplication() },
     refreshLocalRuntimeState = participantStateManager::refreshLocalRuntimeState,
+    resolveTranslationModel = ::resolveAndPersistTranslationModel,
   )
 
   internal companion object {
@@ -308,7 +309,7 @@ class BaoTranslateViewModel @Inject constructor(
         return@launch
       }
 
-      pipelines.initializePipelines(app, _uiState.value.translationModel, sttLanguageCode())
+      pipelines.initializePipelines(app, resolveAndPersistTranslationModel(app), sttLanguageCode())
       if (!pipelines.requiredPipelinesReady()) {
         val missing = pipelines.missingPipelineComponents(app)
         pipelines.cleanupPipelines()
@@ -341,6 +342,10 @@ class BaoTranslateViewModel @Inject constructor(
   fun deleteModel(modelId: String) {
     viewModelScope.launch(Dispatchers.IO) {
       val app = getApplication<Application>()
+      // Cancel and await any in-flight download of this model BEFORE deleting its files, so the
+      // delete can't race a live writer (no surviving partial, no model resurrected by a late
+      // completion write).
+      downloadCoordinator.cancelDownload(modelId)
       when (modelId) {
         "whisper_base" -> {
           pipelines.pipelineMutex.withLock {
@@ -354,19 +359,10 @@ class BaoTranslateViewModel @Inject constructor(
             pipelines.vadProcessor = null
           }
         }
-        "qwen25_1b" -> {
+        "qwen25_1b", "gemma4_e2b" -> {
           pipelines.pipelineMutex.withLock {
             pipelines.translationPipeline?.cleanup()
             pipelines.translationPipeline = null
-          }
-        }
-        "gemma4_e2b" -> {
-          pipelines.pipelineMutex.withLock {
-            pipelines.translationPipeline?.cleanup()
-            pipelines.translationPipeline = null
-          }
-          if (_uiState.value.translationModel == "gemma4_e2b") {
-            _uiState.update { it.copy(translationModel = "qwen25_1b") }
           }
         }
         "kokoro_tts" -> {
@@ -377,6 +373,10 @@ class BaoTranslateViewModel @Inject constructor(
         }
       }
       modelManager.deleteModel(app, modelId)
+      // If the deleted model was the active translation model, fall back to one that still exists
+      // and PERSIST it, so a cold start can't restore a pointer to the deleted model and wedge the
+      // pipeline into ModelsNotReady while the required model is present.
+      resolveAndPersistTranslationModel(app)
       val requiredReady = modelManager.areRequiredModelsReady(app)
       _uiState.update { it.copy(
         storageBreakdown = modelManager.getStorageBreakdown(app),
@@ -389,10 +389,15 @@ class BaoTranslateViewModel @Inject constructor(
   fun deleteAllModels() {
     viewModelScope.launch(Dispatchers.IO) {
       val app = getApplication<Application>()
+      // Cancel and await every in-flight download before wiping the model dirs (avoids the
+      // delete-vs-download race and a download re-marking a model Ready after the wipe).
+      downloadCoordinator.cancelAllDownloads()
       pipelines.pipelineMutex.withLock {
         pipelines.cleanupPipelinesLocked()
       }
       modelManager.deleteAllModels(app)
+      // No translation model remains; reset the persisted selection to the required default.
+      resolveAndPersistTranslationModel(app)
       _uiState.update { it.copy(
         storageBreakdown = emptyMap(),
         modelsReady = false,
@@ -401,9 +406,49 @@ class BaoTranslateViewModel @Inject constructor(
     }
   }
 
+  // Returns a translation model whose files are actually present on disk. When the selected/persisted
+  // model is missing (deleted, or a partial install), falls back to the required qwen25_1b (or any
+  // other ready translation model) and PERSISTS the correction. Self-heals the cold-start brick where
+  // a stale persisted model id forced ModelsNotReady even though a usable model was installed.
+  private fun resolveAndPersistTranslationModel(app: Application): String {
+    val current = _uiState.value.translationModel
+    if (modelManager.checkModelStatus(app, current) == ModelStatus.Ready) return current
+    val fallback = listOf("qwen25_1b", "gemma4_e2b")
+      .firstOrNull { modelManager.checkModelStatus(app, it) == ModelStatus.Ready }
+      ?: "qwen25_1b"
+    if (fallback != current) {
+      _uiState.update { it.copy(translationModel = fallback) }
+      persistBaoTranslateSettings()
+      BaoLog.w(TAG, "Translation model '$current' unavailable; fell back to '$fallback'")
+    }
+    return fallback
+  }
+
   fun startRecording() = recordingController.startRecording()
 
   fun stopRecording() = recordingController.stopRecording()
+
+  // Clears this device's conversation transcript and any in-flight preview. Local-only: it does NOT
+  // touch BLE participants/connection state, the enrolled voice profile, downloaded models, or the
+  // recording session. No-op while recording so it can't race RecordingController's append path.
+  fun clearTranscripts() {
+    if (_uiState.value.isRecording || _uiState.value.isStartingRecording) return
+    _uiState.update {
+      it.copy(
+        transcripts = emptyList(),
+        liveTranslationPreview = null,
+        detectedLanguage = null,
+        errorMessage = null,
+      )
+    }
+  }
+
+  // Leaves a live conversation: disconnects the peer and stops advertising/scanning. Wired to the
+  // per-device disconnect control in ConversationModeScreen (the BLE manager already supports it; it
+  // was never reachable from the UI before).
+  fun disconnectPeer(deviceAddress: String) = bleManager.disconnectFromDevice(deviceAddress)
+
+  fun leaveConversation() = bleManager.stopConversationDiscovery()
 
   fun setSourceLanguage(language: String) {
     voiceLanguageCoordinator.setSourceLanguage(language)

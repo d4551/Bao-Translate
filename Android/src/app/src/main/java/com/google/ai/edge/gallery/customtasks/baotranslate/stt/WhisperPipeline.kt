@@ -18,6 +18,13 @@ data class TranscriptionResult(
   val language: String,
 )
 
+/**
+ * Benign "the segment decoded to no words" outcome (VAD false-positive / noise window), as opposed
+ * to a real decode failure. Carried as a [Result.failure] so the caller can suppress the no-speech
+ * case in continuous live mode while still surfacing genuine native failures.
+ */
+class EmptyTranscriptionException : Exception("Empty transcription")
+
 sealed class WhisperOutcome {
   data class Transcribed(val result: TranscriptionResult) : WhisperOutcome()
   data class Failed(val reason: String) : WhisperOutcome()
@@ -95,28 +102,24 @@ class WhisperPipeline(private val context: Context) {
       audioSamples[i].toFloat() / 32768f
     }
 
-    val stream = recog.createStream()
-    try {
-      stream.acceptWaveform(floatSamples, SAMPLE_RATE)
-
-      recog.decode(stream)
-
-      val result = recog.getResult(stream)
-      val text = result.text.trim()
-      val lang = result.lang.ifBlank { "en" }
-
-      return if (text.isNotBlank()) {
-        Result.success(
-          TranscriptionResult(
-            text = text,
-            language = lang,
-          )
-        )
-      } else {
-        Result.failure(Exception("Empty transcription"))
+    // The native sherpa-onnx JNI calls (acceptWaveform/decode/getResult) can throw on a malformed
+    // model or decode error. transcribeBlocking promises a Result envelope, so funnel any throw
+    // into Result.failure instead of letting it escape and crash the recording coroutine (its
+    // launch scope has no CoroutineExceptionHandler). runCatching never rethrows, so stream.release()
+    // below always runs.
+    return runCatching {
+      val stream = recog.createStream()
+      try {
+        stream.acceptWaveform(floatSamples, SAMPLE_RATE)
+        recog.decode(stream)
+        val result = recog.getResult(stream)
+        val text = result.text.trim()
+        val lang = result.lang.ifBlank { "en" }
+        if (text.isBlank()) throw EmptyTranscriptionException()
+        TranscriptionResult(text = text, language = lang)
+      } finally {
+        stream.release()
       }
-    } finally {
-      stream.release()
     }
   }
 

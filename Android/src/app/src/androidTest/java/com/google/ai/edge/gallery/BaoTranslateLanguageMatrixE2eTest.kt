@@ -72,17 +72,29 @@ class BaoTranslateLanguageMatrixE2eTest {
     Lang("ar", "صباح الخير، كيف حالك؟", '؀'..'ۿ'),
   )
 
+  // Every selectable translation model must translate every language, both directions. Runs the full
+  // matrix for each installed model so a model that loads but fails to invoke (e.g. gemma-4-E2B-it
+  // under a too-small kv-cache: "Failed to invoke the compiled model") is caught here, not in prod.
   @Test
   fun everyLanguageTranslates_endToEnd() {
     val ctx = InstrumentationRegistry.getInstrumentation().targetContext
-    ensure(ctx, listOf("qwen25_1b"))
+    val failures = mutableListOf<String>()
+    for (modelId in listOf("qwen25_1b", "gemma4_e2b")) {
+      failures += runTranslationMatrix(ctx, modelId)
+    }
+    Log.i(TAG, "TRANSLATION SUMMARY failures=$failures")
+    assertTrue("Per-language translation failures: $failures", failures.isEmpty())
+  }
+
+  private fun runTranslationMatrix(ctx: Context, modelId: String): List<String> {
+    ensure(ctx, listOf(modelId))
     val translation = TranslationPipeline(ctx)
     val failures = mutableListOf<String>()
     try {
-      val litertlm = BaoTranslateModelManager.getTranslationModelDir(ctx, "qwen25_1b")
+      val litertlm = BaoTranslateModelManager.getTranslationModelDir(ctx, modelId)
         .listFiles { f -> f.extension == "litertlm" }?.firstOrNull()
-      assertTrue("qwen25_1b .litertlm missing", litertlm != null)
-      assertTrue("translation init", translation.initialize(litertlm!!.absolutePath))
+      assertTrue("$modelId .litertlm missing", litertlm != null)
+      assertTrue("$modelId init", translation.initialize(litertlm!!.absolutePath))
 
       val src = "Good morning, how are you?"
       for (l in all) {
@@ -90,21 +102,20 @@ class BaoTranslateLanguageMatrixE2eTest {
         val toL = translate(translation, src, "en", l.code)
         val nonEcho = toL.isNotBlank() && !toL.trim().equals(src, ignoreCase = true)
         val scriptOk = l.script?.let { r -> toL.any { it in r } } ?: nonEcho
-        Log.i(TAG, "TR [en->${l.code}] -> \"${toL.take(60)}\" nonEcho=$nonEcho scriptOk=$scriptOk")
-        if (!nonEcho) failures.add("en->${l.code} echoed/empty")
-        if (!scriptOk) failures.add("en->${l.code} missing ${l.code} script: \"$toL\"")
+        Log.i(TAG, "TR [$modelId en->${l.code}] -> \"${toL.take(60)}\" nonEcho=$nonEcho scriptOk=$scriptOk")
+        if (!nonEcho) failures.add("[$modelId] en->${l.code} echoed/empty")
+        if (!scriptOk) failures.add("[$modelId] en->${l.code} missing ${l.code} script: \"$toL\"")
 
         // L -> English: produces English (ASCII letters present).
         val toEn = translate(translation, l.phrase, l.code, "en")
         val englishish = toEn.count { it in 'a'..'z' || it in 'A'..'Z' } >= 3
-        Log.i(TAG, "TR [${l.code}->en] -> \"${toEn.take(60)}\" englishish=$englishish")
-        if (!englishish) failures.add("${l.code}->en non-English/empty: \"$toEn\"")
+        Log.i(TAG, "TR [$modelId ${l.code}->en] -> \"${toEn.take(60)}\" englishish=$englishish")
+        if (!englishish) failures.add("[$modelId] ${l.code}->en non-English/empty: \"$toEn\"")
       }
     } finally {
       translation.cleanup()
     }
-    Log.i(TAG, "TRANSLATION SUMMARY failures=$failures")
-    assertTrue("Per-language translation failures: $failures", failures.isEmpty())
+    return failures
   }
 
   // [expects]: any normalized content root proving correct-language decode. [script]: if the forced

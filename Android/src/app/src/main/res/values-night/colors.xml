@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark Material surface (surfaceDark in Color.kt) — matches the dark app window. -->
+    <color name="launch_window_background">#FF131314</color>
+</resources>

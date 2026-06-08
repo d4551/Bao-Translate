@@ -14,6 +14,22 @@
  * limitations under the License.
  */
 
+// com.google.protobuf:protobuf-gradle-plugin:0.9.5 transitively pulls com.android.tools.build:gradle
+// 7.1.0 onto this module's plugin classpath. Its pre-8.0 CommonExtension shadows AGP 8.8.2's and
+// breaks the Kotlin-DSL `android { packaging { ... } }` accessor. Force the build tools to this
+// project's AGP so a single, correct CommonExtension is on the classpath.
+buildscript {
+  configurations.all {
+    resolutionStrategy.eachDependency {
+      if (requested.group == "com.android.tools.build" &&
+        (requested.name == "gradle" || requested.name == "gradle-api")
+      ) {
+        useVersion(libs.versions.agp.get())
+      }
+    }
+  }
+}
+
 plugins {
   alias(libs.plugins.android.application)
   // Note: set apply to true to enable google-services (requires google-services.json).
@@ -69,7 +85,13 @@ android {
     compose = true
     buildConfig = true
   }
-  // PACKAGING_BLOCK_PLACEHOLDER
+  packaging {
+    jniLibs {
+      // sherpa-onnx and onnxruntime-android both ship libonnxruntime.so (both the official ORT
+      // 1.24.3 build — byte-identical), so either copy satisfies both consumers. Keep one.
+      pickFirsts += "**/libonnxruntime.so"
+    }
+  }
 }
 
 dependencies {

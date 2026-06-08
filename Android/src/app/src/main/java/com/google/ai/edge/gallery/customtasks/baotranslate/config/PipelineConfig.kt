@@ -22,8 +22,12 @@ object PipelineConfig {
   const val STT_SAMPLE_RATE = 16000
   const val TTS_SAMPLE_RATE = 24000
 
-  // Translation engine
-  const val MAX_TOKENS = 512
+  // Translation engine. maxNumTokens is the litertlm kv-cache size (sum of input+output tokens).
+  // gemma-4-E2B-it is published/benchmarked at a 2048-token context; a 512 cache made its compiled
+  // graph fail to invoke ("Failed to invoke the compiled model") while qwen tolerated it. 2048 is
+  // the model's documented context and is comfortably small for a ~2B model's kv-cache; the actual
+  // translation workload (short prompt + short output) is far below it, so latency is unaffected.
+  const val MAX_TOKENS = 2048
   const val MAX_INPUT_LENGTH = 2000
 
   // Translation sampler (temperature/topK/topP control generation quality)

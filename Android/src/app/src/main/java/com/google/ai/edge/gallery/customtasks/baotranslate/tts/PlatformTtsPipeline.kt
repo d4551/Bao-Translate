@@ -24,11 +24,19 @@ class PlatformTtsPipeline(private val context: Context) {
 
   @Volatile private var tts: TextToSpeech? = null
   @Volatile private var ready = false
-  private val initLock = Any()
+
+  // Serializes init, synthesis, and cleanup against one another. The shared [TextToSpeech] engine
+  // holds a SINGLE UtteranceProgressListener and a single mutable `language`, so two overlapping
+  // synthesizeAudio calls (the live recording path under segmentProcessingMutex and the BLE-peer
+  // path on Dispatchers.IO) would clobber each other's listener — the victim's `done` latch is
+  // never counted down and it stalls the full 30s, then falsely reports failure. Holding this lock
+  // for the whole synthesis guarantees exactly one utterance owns the listener + language at a time,
+  // and also prevents cleanup() from shutting the engine down mid-synthesis (use-after-free).
+  private val engineLock = Any()
 
   fun ensureReady(): Boolean {
     if (ready) return true
-    synchronized(initLock) {
+    synchronized(engineLock) {
       if (ready) return true
       val latch = CountDownLatch(1)
       var status = TextToSpeech.ERROR
@@ -54,7 +62,7 @@ class PlatformTtsPipeline(private val context: Context) {
   }
 
   /** Synthesizes [text] in [languageCode] to PCM. Returns null if unavailable or synthesis failed. */
-  fun synthesizeAudio(text: String, languageCode: String): SynthesizedAudio? {
+  fun synthesizeAudio(text: String, languageCode: String): SynthesizedAudio? = synchronized(engineLock) {
     if (text.isBlank() || !ensureReady()) return null
     val engine = tts ?: return null
     val locale = Locale.forLanguageTag(languageCode)
@@ -70,12 +78,16 @@ class PlatformTtsPipeline(private val context: Context) {
 
     val done = CountDownLatch(1)
     var failed = false
+    // Count the latch down only for OUR utterance id. The lock already guarantees no concurrent
+    // synth, but a previous call that timed out at 30s could still deliver a late callback after
+    // its listener was replaced; the uid match makes that stale callback inert instead of
+    // prematurely releasing this call. Android delivers the same utteranceId passed below.
     engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
       override fun onStart(utteranceId: String?) = Unit
-      override fun onDone(utteranceId: String?) = done.countDown()
+      override fun onDone(utteranceId: String?) { if (utteranceId == uid) done.countDown() }
       @Deprecated("Deprecated in Android framework")
-      override fun onError(utteranceId: String?) { failed = true; done.countDown() }
-      override fun onError(utteranceId: String?, errorCode: Int) { failed = true; done.countDown() }
+      override fun onError(utteranceId: String?) { if (utteranceId == uid) { failed = true; done.countDown() } }
+      override fun onError(utteranceId: String?, errorCode: Int) { if (utteranceId == uid) { failed = true; done.countDown() } }
     })
 
     val params = Bundle().apply { putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, uid) }
@@ -99,7 +111,7 @@ class PlatformTtsPipeline(private val context: Context) {
   }
 
   fun cleanup() {
-    synchronized(initLock) {
+    synchronized(engineLock) {
       tts?.shutdown()
       tts = null
       ready = false

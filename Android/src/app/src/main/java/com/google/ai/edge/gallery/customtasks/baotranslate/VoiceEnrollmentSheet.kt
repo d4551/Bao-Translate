@@ -10,11 +10,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,7 +45,6 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -57,15 +54,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.google.ai.edge.gallery.R
+import com.google.ai.edge.gallery.customtasks.baotranslate.audio.WAVEFORM_HISTORY
+import com.google.ai.edge.gallery.customtasks.baotranslate.audio.WaveformRenderer
+import com.google.ai.edge.gallery.customtasks.baotranslate.audio.waveformAmplitude
 import com.google.ai.edge.gallery.customtasks.baotranslate.config.PipelineConfig
+import com.google.ai.edge.gallery.customtasks.baotranslate.data.SupportedLanguages
 import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.customColors
 import com.google.ai.edge.gallery.ui.theme.isReducedMotion
@@ -95,6 +94,9 @@ fun VoiceEnrollmentSheet(
   onEnrollComplete: (ShortArray, Int) -> Unit,
   enrollmentState: EnrollmentState,
   onEnrollmentStateChange: (EnrollmentState) -> Unit,
+  // The user's selected source language key (e.g. "English", "Russian"); the read-aloud prompt is
+  // shown in this language so a non-English speaker reads a sentence they can actually pronounce.
+  sourceLanguage: String,
   errorMessage: String? = null,
   isTablet: Boolean = false,
 ) {
@@ -113,7 +115,9 @@ fun VoiceEnrollmentSheet(
 	  val reduceMotion = isReducedMotion
 
   var recordingDurationMs by remember { mutableStateOf(0L) }
-  var amplitude by remember { mutableFloatStateOf(0f) }
+  // Rolling amplitude history (newest last) feeding the shared WaveformRenderer — same contract as
+  // the live recording path, so enrollment shows the identical scrolling waveform.
+  var amplitudes by remember { mutableStateOf(emptyList<Float>()) }
   val audioSamplesRef = remember { mutableStateOf<ShortArray?>(null) }
   var recordingJob by remember { mutableStateOf<Job?>(null) }
   var audioRecord by remember { mutableStateOf<AudioRecord?>(null) }
@@ -126,7 +130,7 @@ fun VoiceEnrollmentSheet(
       startRecording(
         context = context,
         scope = scope,
-        onAmplitudeUpdate = { amp -> amplitude = amp },
+        onAmplitudeUpdate = { amp -> amplitudes = (amplitudes + amp).takeLast(WAVEFORM_HISTORY) },
         onDurationUpdate = { ms -> recordingDurationMs = ms },
         onSamplesReady = { samples -> audioSamplesRef.value = samples },
         onRecordingStarted = { recorder -> audioRecord = recorder },
@@ -152,7 +156,7 @@ fun VoiceEnrollmentSheet(
       startRecording(
         context = context,
         scope = scope,
-        onAmplitudeUpdate = { amp -> amplitude = amp },
+        onAmplitudeUpdate = { amp -> amplitudes = (amplitudes + amp).takeLast(WAVEFORM_HISTORY) },
         onDurationUpdate = { ms -> recordingDurationMs = ms },
         onSamplesReady = { samples -> audioSamplesRef.value = samples },
         onRecordingStarted = { recorder -> audioRecord = recorder },
@@ -265,7 +269,7 @@ fun VoiceEnrollmentSheet(
           Spacer(modifier = Modifier.height(Dimensions.Spacing.small))
 
           Text(
-            text = stringResource(R.string.bao_translate_record_prompt),
+            text = stringResource(SupportedLanguages.samplePromptResFor(sourceLanguage)),
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Medium,
           )
@@ -309,8 +313,9 @@ fun VoiceEnrollmentSheet(
 
             Spacer(modifier = Modifier.height(Dimensions.Spacing.small))
 
-            EnrollmentWaveform(
-              amplitude = amplitude,
+            WaveformRenderer(
+              amplitudes = amplitudes,
+              isActive = true,
               modifier = Modifier
                 .fillMaxWidth()
                 .height(Dimensions.Waveform.height),
@@ -337,7 +342,7 @@ fun VoiceEnrollmentSheet(
             onClick = {
               onEnrollmentStateChange(EnrollmentState.RECORDING)
               recordingDurationMs = 0L
-              amplitude = 0f
+              amplitudes = emptyList()
               audioSamplesRef.value = null
               localErrorMessage = null
               requestPermissionAndRecord()
@@ -440,7 +445,7 @@ fun VoiceEnrollmentSheet(
           Button(onClick = {
             onEnrollmentStateChange(EnrollmentState.READY)
             recordingDurationMs = 0L
-            amplitude = 0f
+            amplitudes = emptyList()
             audioSamplesRef.value = null
             localErrorMessage = null
           }) {
@@ -528,15 +533,10 @@ private fun startRecording(
           sampleCount += copyCount
         }
 
-        var sumSquares = 0L
-        for (i in 0 until readCount) {
-          val sample = buffer[i].toLong()
-          sumSquares += sample * sample
-        }
-        val rms = (sumSquares.toFloat() / readCount) / (32768f * 32768f)
+        val amplitude = waveformAmplitude(buffer, readCount)
 
         withContext(Dispatchers.Main) {
-          onAmplitudeUpdate(rms.coerceIn(0f, 1f))
+          onAmplitudeUpdate(amplitude)
           onDurationUpdate((sampleCount * 1000L) / SAMPLE_RATE)
           onSamplesReady(allSamples.copyOf(sampleCount))
         }
@@ -551,40 +551,4 @@ private fun startRecording(
   }
 
   onJobStarted(job)
-}
-
-@Composable
-private fun EnrollmentWaveform(
-  amplitude: Float,
-  modifier: Modifier = Modifier,
-) {
-  // Smooth amplitude changes so the waveform animates between mic samples instead of snapping
-  // (the previous LaunchedEffect just copied the value, which animated nothing).
-  val animatedAmplitude by animateFloatAsState(
-    targetValue = amplitude,
-    animationSpec = tween(durationMillis = 80),
-    label = "waveformAmplitude",
-  )
-  val waveformColor = MaterialTheme.colorScheme.error
-
-  Canvas(modifier = modifier.padding(vertical = Dimensions.Spacing.xs).clearAndSetSemantics {}) {
-    val barWidth = Dimensions.Waveform.barWidth.toPx()
-    val spacing = Dimensions.Waveform.barSpacing.toPx()
-    val barCount = (size.width / (barWidth + spacing)).toInt()
-    val centerY = size.height / 2
-
-    for (i in 0 until barCount) {
-      val x = i * (barWidth + spacing)
-      val offset = (i - barCount / 2).toFloat() / (barCount / 2)
-      val envelope = 1f - (offset * offset)
-      val barHeight = (centerY * animatedAmplitude * envelope).coerceAtLeast(Dimensions.Spacing.xxs.toPx())
-
-      drawLine(
-        color = waveformColor,
-        start = Offset(x, centerY - barHeight),
-        end = Offset(x, centerY + barHeight),
-        strokeWidth = barWidth,
-      )
-    }
-  }
 }

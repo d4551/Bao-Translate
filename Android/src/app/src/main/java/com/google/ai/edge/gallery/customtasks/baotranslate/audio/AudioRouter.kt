@@ -256,6 +256,11 @@ class AudioRouter(private val context: Context) {
         onCommunicationDeviceChanged(candidate)
       }
     } else {
+      // configureCommunicationDevice set MODE_IN_COMMUNICATION before setCommunicationDevice
+      // returned false; with no routing timeout armed (that only happens on success), the device
+      // would otherwise stay stuck in call-audio mode. Restore normal audio state on failure.
+      audioManager.mode = AudioManager.MODE_NORMAL
+      audioManager.clearCommunicationDevice()
       _routingStatus.value = RoutingStatus.FAILED
     }
     return success
