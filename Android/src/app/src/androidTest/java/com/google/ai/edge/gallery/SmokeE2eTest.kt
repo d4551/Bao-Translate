@@ -35,7 +35,10 @@ import androidx.test.espresso.Espresso.pressBack
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.espresso.IdlingPolicies
+import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.rules.ExternalResource
 import org.junit.rules.RuleChain
@@ -52,6 +55,16 @@ class SmokeE2eTest {
   val ruleChain: TestRule =
     RuleChain.outerRule(NotificationPermissionRule())
       .around(composeRule)
+
+  // A screen that never reaches Compose idle (e.g. an indeterminate progress animation or a
+  // polling LaunchedEffect) makes the implicit waitForIdle block FOREVER. That hang previously
+  // sailed through `am instrument` as exit 0 (masked green). Bound the idle wait so a stuck
+  // screen fails fast and deterministically instead of hanging the whole CI gate.
+  @Before
+  fun boundIdleWaits() {
+    IdlingPolicies.setMasterPolicyTimeout(90, TimeUnit.SECONDS)
+    IdlingPolicies.setIdlingResourceTimeout(60, TimeUnit.SECONDS)
+  }
 
   @Test
   fun launchesHomeAndOpensBaoTranslateSetupSurfaces() {

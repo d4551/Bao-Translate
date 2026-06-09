@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import java.io.ByteArrayOutputStream
 import java.util.Properties
 import org.gradle.api.tasks.Exec
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -221,6 +222,13 @@ tasks.register<Exec>("smokeE2e") {
   dependsOn("assembleDebug", "assembleDebugAndroidTest", "installDebug", "installDebugAndroidTest")
   val localPropertiesFile = rootProject.file("local.properties")
   val appId = android.defaultConfig.applicationId
+  // `adb shell am instrument` returns shell exit 0 even when tests FAIL or the test process
+  // CRASHES — the real result is only in the instrumentation text output. Capture it and assert,
+  // otherwise this gate is permanently green and masks failures (a hung/crashed test "passes").
+  val captured = ByteArrayOutputStream()
+  standardOutput = captured
+  errorOutput = captured
+  isIgnoreExitValue = true
   doFirst {
     val props = Properties()
     check(localPropertiesFile.exists()) {
@@ -243,6 +251,19 @@ tasks.register<Exec>("smokeE2e") {
       "$appId.test/androidx.test.runner.AndroidJUnitRunner",
     )
   }
+  doLast {
+    val out = captured.toString()
+    logger.lifecycle(out)
+    val failureMarkers =
+      listOf("FAILURES!!!", "Process crashed", "INSTRUMENTATION_STATUS_CODE: -1", "shortMsg=", "Test run failed")
+    val hasFailure = failureMarkers.any { out.contains(it) }
+    val sawSuccess = Regex("OK \\(\\d+ test").containsMatchIn(out)
+    if (hasFailure || !sawSuccess) {
+      throw GradleException(
+        "smokeE2e FAILED — am instrument masks this in its exit code. Instrumentation output:\n$out"
+      )
+    }
+  }
 }
 
 protobuf {
@@ -254,16 +275,18 @@ protobuf {
 // skills/ is the single source of truth; the Android copy is gitignored.
 // Layout must stay FLAT (assets/skills/<id>/SKILL.md) — SkillManagerViewModel
 // lists assets.list("skills") and reads skills/<dir>/SKILL.md directly.
-// Ships built-in skills + _shared runtime modules only: featured/ skills are
+// Ships built-in skills + the shared/ runtime modules only: featured/ skills are
 // not bundled (host-app parity with the pre-sync asset set) and _vendor/ is a
 // 32 MB package mirror whose needed files are already vendored per-skill.
+// NOTE: the shared dir must NOT be underscore-prefixed — aapt drops `_*` assets
+// from the APK, which silently breaks every skill's `import '../../shared/*'`.
 tasks.register<Copy>("syncSkills") {
   group = "build"
-  description = "Copy skills/built-in + skills/_shared into Android assets before build."
+  description = "Copy skills/built-in + skills/shared into Android assets before build."
   val skillsDir = file("../../../skills")
   into(file("src/main/assets/skills"))
   from(skillsDir.resolve("built-in"))
-  from(skillsDir.resolve("_shared")) { into("_shared") }
+  from(skillsDir.resolve("shared")) { into("shared") }
 }
 
 tasks.named("preBuild") {

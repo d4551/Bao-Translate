@@ -156,7 +156,8 @@ limitations under the License.
         outline-offset: -3px;
       }
 
-      .visually-hidden {
+      .visually-hidden,
+      .sr-only {
         position: absolute;
         width: 1px;
         height: 1px;
@@ -164,6 +165,40 @@ limitations under the License.
         clip: rect(0 0 0 0);
         white-space: nowrap;
       }
+
+      /* Error panel — surfaces fail() output when the audio engine fails. */
+      #error-wrap { display: none; }
+      #error-wrap:has(#error:not([hidden])) {
+        position: fixed;
+        left: 50%;
+        top: 16px;
+        transform: translateX(-50%);
+        z-index: 1100;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        max-width: 92vw;
+        background: rgba(40, 0, 0, 0.92);
+        border: 1px solid #ff6b6b;
+        color: #ffd9d9;
+        border-radius: 12px;
+        padding: 12px 16px;
+        font-family: sans-serif;
+        font-size: 14px;
+      }
+      #error-wrap svg { width: 20px; height: 20px; flex-shrink: 0; }
+      #error-retry {
+        background: #ff6b6b;
+        color: #1e1e2f;
+        border: none;
+        border-radius: 8px;
+        padding: 10px 16px;
+        font-weight: bold;
+        cursor: pointer;
+        min-width: 44px;
+        min-height: 44px;
+      }
+      #error-retry:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
 
       #tap-overlay {
         position: fixed;
@@ -184,6 +219,14 @@ limitations under the License.
   </head>
   <body>
     <h1 class="visually-hidden" data-i18n="piano.title">88-key virtual piano</h1>
+
+    <!-- fail() target: unhiding #error reveals this toast + retry. -->
+    <div id="error-wrap">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+      <span id="error" role="alert" hidden data-i18n="error.generic">Something went wrong</span>
+      <button id="error-retry" type="button" data-i18n="common.retry">Retry</button>
+    </div>
+
     <div id="piano-scroll-container">
       <div id="piano">
         <div id="key-container" role="group" data-i18n-aria="piano.keys" aria-label="Piano keys"></div>
@@ -192,8 +235,9 @@ limitations under the License.
     </div>
 
     <script type="module">
-      import { log } from '../../_shared/log.js';
-      import { t, hydrate } from '../../_shared/i18n.js';
+      import { log } from '../../shared/log.js';
+      import { fail } from '../../shared/result.js';
+      import { t, hydrate } from '../../shared/i18n.js';
 
       const keyContainer = document.getElementById("key-container");
       let noteNumber = 1;
@@ -246,6 +290,17 @@ limitations under the License.
       }
 
       const keys = Array.from(document.querySelectorAll(".key"));
+      let lastFailedNote = null;
+
+      // Retry: rebuild the failed note's Audio element and replay it.
+      document.getElementById("error-retry").addEventListener("click", () => {
+        document.getElementById("error").hidden = true;
+        if (lastFailedNote == null) return;
+        const note = lastFailedNote;
+        audioNotes[note] = new Audio(`assets/${note}.mp3`);
+        const keyEl = document.querySelector(`.key[data-note="${note}"]`);
+        if (keyEl) playKey(keyEl);
+      });
 
       function playKey(keyEl) {
         const note = keyEl.getAttribute("data-note");
@@ -257,7 +312,9 @@ limitations under the License.
           if (e.name === 'NotAllowedError') {
             showTapToPlayOverlay();
           } else {
-            log.error('virtual-piano.audio', e);
+            // Real audio failure: surface to the user with a retry control.
+            lastFailedNote = note;
+            fail('virtual-piano.audio', e, t('error.generic'));
           }
         });
 

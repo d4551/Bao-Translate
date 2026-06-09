@@ -1,5 +1,5 @@
-import { log } from '../../_shared/log.js';
-import { fail } from '../../_shared/result.js';
+import { log } from '../../shared/log.js';
+import { fail } from '../../shared/result.js';
 
 async function digestMessage(message) {
   const msgUint8 = new TextEncoder().encode(message);

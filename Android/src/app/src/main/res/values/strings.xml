@@ -27,6 +27,7 @@
   <string name="aichat_initializing_content">Sit tight, this can take up to 1 minute</string>
   <string name="app_intro">Real-time voice translation with</string>
   <string name="app_name">Bao Translate</string>
+  <string name="skill_embedded_content">Embedded skill content</string>
   <string name="app_name_first_part">Bao</string>
   <string name="app_name_second_part">Translate</string>
   <string name="app_title_google">Bao</string>

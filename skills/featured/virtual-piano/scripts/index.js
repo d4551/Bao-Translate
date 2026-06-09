@@ -1,5 +1,5 @@
-import { log } from '../../_shared/log.js';
-import { fail } from '../../_shared/result.js';
+import { log } from '../../shared/log.js';
+import { fail } from '../../shared/result.js';
 
 window['ai_edge_gallery_get_result'] = async (dataStr) => {
   try {

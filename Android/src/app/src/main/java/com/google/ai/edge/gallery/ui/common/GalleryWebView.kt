@@ -38,6 +38,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebViewAssetLoader
+import com.google.ai.edge.gallery.BuildConfig
+import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.common.LOCAL_URL_BASE
 import java.io.File
 import org.json.JSONObject
@@ -51,6 +53,7 @@ private val iframeWrapper =
           width="100%"
           height="100%"
           src="___"
+          title="%%TITLE%%"
           frameborder="0"
           style="border:0;">
       </iframe>
@@ -173,6 +176,10 @@ fun GalleryWebView(
   AndroidView(
     modifier = modifier,
     factory = { ctx ->
+      // Allow Chrome DevTools (chrome://inspect) to attach to skill WebViews in debug builds only.
+      if (BuildConfig.DEBUG) {
+        WebView.setWebContentsDebuggingEnabled(true)
+      }
       WebView(ctx).apply {
         layoutParams =
           ViewGroup.LayoutParams(
@@ -269,7 +276,11 @@ fun GalleryWebView(
 
         initialUrl?.let { url ->
           if (useIframeWrapper) {
-            loadDataWithBaseURL(null, iframeWrapper.replace("___", url), "text/html", "UTF-8", null)
+            val framedHtml =
+              iframeWrapper
+                .replace("___", url)
+                .replace("%%TITLE%%", ctx.getString(R.string.skill_embedded_content))
+            loadDataWithBaseURL(null, framedHtml, "text/html", "UTF-8", null)
           } else {
             loadUrl(url)
           }

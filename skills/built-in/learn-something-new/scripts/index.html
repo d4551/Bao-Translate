@@ -17,24 +17,37 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap"
-      rel="stylesheet"
-    />
+    <style>
+      /* Vendored Outfit (SIL OFL 1.1) — replaces the proprietary CDN "Google Sans"; offline-safe. */
+      @font-face {
+        font-family: 'Outfit';
+        font-style: normal;
+        font-weight: 300 700;
+        font-display: swap;
+        src: url('../assets/vendor/fonts/outfit-latin.woff2') format('woff2'),
+             url('../assets/vendor/fonts/outfit-latinext.woff2') format('woff2');
+      }
+    </style>
     <script src="../assets/vendor/qrcode.min.js" defer></script>
   </head>
   <body>
     <div id="qrcode-container" style="display: none"></div>
     <canvas id="card-canvas" style="display: none"></canvas>
     <script type="module">
-      import { log } from '../../_shared/log.js';
-      import { fail } from '../../_shared/result.js';
+      import { log } from '../../shared/log.js';
+      import { fail } from '../../shared/result.js';
 
       window["ai_edge_gallery_get_result"] = async function (data, secret) {
         log.debug("[learn-something-new] Script started with data payload:", data);
         try {
-          // Ensure fonts are loaded before measuring/drawing text
-          if (document.fonts && document.fonts.ready) {
+          // Ensure the vendored Outfit font is actually loaded before measuring/drawing on the
+          // canvas. document.fonts.ready alone can resolve before a canvas-only @font-face loads,
+          // so explicitly request the weights the card uses.
+          if (document.fonts && document.fonts.load) {
+            await Promise.all([
+              document.fonts.load('700 72px "Outfit"'),
+              document.fonts.load('400 42px "Outfit"'),
+            ]);
             await document.fonts.ready;
           }
 
@@ -115,12 +128,12 @@
 
           // 2. Draw "TODAY I LEARNED" Header
           ctx.fillStyle = "#FF6B6B";
-          ctx.font = 'bold 32px "Google Sans", sans-serif';
+          ctx.font = 'bold 32px "Outfit", sans-serif';
           ctx.fillText("💡 TODAY I LEARNED", 120, 150);
 
           // 3. Draw Topic
           ctx.fillStyle = "#2D3436";
-          ctx.font = 'bold 72px "Google Sans", sans-serif';
+          ctx.font = 'bold 72px "Outfit", sans-serif';
           const topicY = 250;
           const nextYAfterTopic = wrapText(ctx, topic, 120, topicY, 840, 85);
 
@@ -141,7 +154,7 @@
             }
           }
           ctx.fillStyle = "#636E72";
-          ctx.font = '42px "Google Sans", sans-serif';
+          ctx.font = '42px "Outfit", sans-serif';
           wrapText(ctx, clampedDescription, 120, nextYAfterTopic + 90, 840, 60);
 
           // Helper to get platform
@@ -224,10 +237,10 @@
           });
 
           ctx.fillStyle = "#2D3436";
-          ctx.font = 'bold 36px "Google Sans", sans-serif';
+          ctx.font = 'bold 36px "Outfit", sans-serif';
           ctx.fillText("Google AI Edge Gallery", 200, footerY);
           ctx.fillStyle = "#B2BEC3";
-          ctx.font = '28px "Google Sans", sans-serif';
+          ctx.font = '28px "Outfit", sans-serif';
           ctx.fillText("Scan to download the app", 200, footerY + 40);
 
           const finalBase64 = canvas.toDataURL("image/jpeg", 0.9);

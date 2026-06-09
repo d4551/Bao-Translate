@@ -22,9 +22,18 @@ limitations under the License.
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Mood Tracker Dashboard</title>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
   <script src="vendor/chart.min.js" defer></script>
   <style>
+    /* Vendored Outfit (SIL OFL 1.1) — no external/CDN dependency, works offline. */
+    @font-face {
+      font-family: 'Outfit';
+      font-style: normal;
+      font-weight: 300 600;
+      font-display: swap;
+      src: url('vendor/fonts/outfit-latin.woff2') format('woff2'),
+           url('vendor/fonts/outfit-latinext.woff2') format('woff2');
+    }
+
     :root {
       --bg-gradient: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
       --glass-bg: rgba(255, 255, 255, 0.05);
@@ -55,6 +64,18 @@ limitations under the License.
       overflow-x: hidden;
     }
 
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
     .container {
       width: 100%;
       max-width: 500px;
@@ -64,6 +85,74 @@ limitations under the License.
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(20px); }
       to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Error panel — surfaces fail() output in the host. Hidden until the
+       inner #error span is unhidden by fail(). */
+    #error-wrap { display: none; }
+    #error-wrap:has(#error:not([hidden])) {
+      width: 100%;
+      max-width: 500px;
+      background: rgba(255, 77, 77, 0.12);
+      border: 1px solid #ff6b6b;
+      color: #ffd9d9;
+      border-radius: 16px;
+      padding: 18px 20px;
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    #error-wrap .error-row { display: flex; align-items: center; gap: 10px; }
+    #error-wrap svg { width: 22px; height: 22px; flex-shrink: 0; }
+    #error-retry {
+      background: #ff6b6b;
+      color: #1a1a2e;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 18px;
+      font-weight: 600;
+      cursor: pointer;
+      min-width: 44px;
+      min-height: 44px;
+    }
+    #error-retry:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+
+    /* Loading indicator */
+    #loading[hidden] { display: none; }
+    #loading {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--text-dim);
+      padding: 16px 0;
+    }
+    .spinner {
+      width: 22px;
+      height: 22px;
+      border: 3px solid var(--glass-border);
+      border-top-color: var(--accent-primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .date-button:focus-visible,
+    .delete-btn:focus-visible,
+    #toggle-raw-btn:focus-visible,
+    #copy-raw-btn:focus-visible {
+      outline: 3px solid var(--accent-secondary);
+      outline-offset: 2px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .container,
+      .history-item { animation: none; }
+      .mood-score-circle { animation: none; }
+      .spinner { animation: none; }
+      .mood-card,
+      .date-button { transition: none; }
     }
 
     header {
@@ -98,8 +187,8 @@ limitations under the License.
       background: rgba(255, 255, 255, 0.1);
       border: none;
       color: var(--text-main);
-      width: 40px;
-      height: 40px;
+      width: 44px;
+      height: 44px;
       border-radius: 50%;
       display: flex;
       align-items: center;
@@ -179,6 +268,13 @@ limitations under the License.
       font-weight: 600;
       text-transform: uppercase;
       opacity: 0.8;
+    }
+
+    #score-text {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-main);
+      margin-bottom: 8px;
     }
 
     .mood-comment-text {
@@ -266,9 +362,11 @@ limitations under the License.
     .delete-btn {
         background: transparent;
         border: none;
-        color: rgba(255, 255, 255, 0.2);
+        color: rgba(255, 255, 255, 0.45);
         cursor: pointer;
         padding: 5px;
+        min-width: 44px;
+        min-height: 44px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -335,6 +433,21 @@ limitations under the License.
       <h1>Mood Tracker</h1>
     </header>
 
+    <!-- fail() writes its message into #error (textContent) and clears its
+         [hidden]; CSS :has() reveals the surrounding panel + retry control. -->
+    <div id="error-wrap">
+      <div class="error-row">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+        <span id="error" role="alert" hidden data-i18n="mood.errorTitle">Couldn’t load your mood data</span>
+      </div>
+      <button id="error-retry" type="button" data-i18n="common.retry">Retry</button>
+    </div>
+
+    <div id="loading" role="status" hidden>
+      <span class="spinner" aria-hidden="true"></span>
+      <span data-i18n="common.loading">Loading…</span>
+    </div>
+
     <div class="date-navigator">
       <button class="date-button" id="prev-date" data-i18n-aria="nav.prevDay" aria-label="Previous day">
         <svg fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z"/></svg>
@@ -347,9 +460,11 @@ limitations under the License.
 
     <div class="mood-card">
       <div class="mood-score-circle">
-        <div class="score-value" id="current-score">-</div>
+        <div class="score-value" id="current-score" aria-hidden="true">-</div>
         <div class="score-label">Score</div>
       </div>
+      <!-- Score is also conveyed as text (not color alone) and announced to AT. -->
+      <p id="score-text" role="status" aria-live="polite"></p>
       <div class="mood-comment-text" id="current-comment">No notes for today.</div>
     </div>
 
@@ -380,9 +495,9 @@ limitations under the License.
   </div>
 
   <script type="module">
-    import { log } from '../../_shared/log.js';
-    import { storage } from '../../_shared/storage.js';
-    import { t, hydrate } from '../../_shared/i18n.js';
+    import { log } from '../../shared/log.js';
+    import { storage } from '../../shared/storage.js';
+    import { t, hydrate } from '../../shared/i18n.js';
 
     hydrate();
 
@@ -424,9 +539,13 @@ limitations under the License.
       const scoreEl = document.getElementById('current-score');
       const commentEl = document.getElementById('current-comment');
 
+      const scoreTextEl = document.getElementById('score-text');
+
       if (entry) {
         scoreEl.textContent = entry.score;
         commentEl.textContent = entry.comment || t('mood.feelingZen');
+        // Not color-only: numeric score is also presented as text and announced.
+        scoreTextEl.textContent = t('mood.scoreOutOf', { score: entry.score });
 
         // Color based on score
         const hue = (entry.score -1) * 12; // 0 to 108 (red-ish to green-ish)
@@ -434,6 +553,7 @@ limitations under the License.
       } else {
         scoreEl.textContent = '-';
         commentEl.textContent = t('mood.noEntry');
+        scoreTextEl.textContent = t('mood.noScore');
         document.querySelector('.mood-score-circle').style.background = 'rgba(255,255,255,0.1)';
       }
 
@@ -633,8 +753,25 @@ limitations under the License.
         // Future extensibility
     });
 
-    // Initial load
+    // Realtime: when mood data is written through the host storage bridge (by this view or a
+    // sibling skill surface), re-render live instead of only on initial load.
+    window.addEventListener('skill-storage-change', function(event) {
+        if (!event.detail || event.detail.key === STORAGE_KEY) {
+            loadData();
+        }
+    });
+
+    // Retry re-runs the real data load (clears any prior error first).
+    document.getElementById('error-retry').addEventListener('click', () => {
+      document.getElementById('error').hidden = true;
+      loadData();
+    });
+
+    // Initial load: show loading until first render completes.
+    const loadingEl = document.getElementById('loading');
+    loadingEl.hidden = false;
     loadData();
+    loadingEl.hidden = true;
   </script>
 </body>
 </html>
