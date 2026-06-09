@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -91,7 +92,7 @@ private const val SAMPLE_RATE = PipelineConfig.STT_SAMPLE_RATE
 @Composable
 fun VoiceEnrollmentSheet(
   onDismiss: () -> Unit,
-  onEnrollComplete: (ShortArray, Int) -> Unit,
+  onEnrollComplete: (ShortArray, Int, String?) -> Unit,
   enrollmentState: EnrollmentState,
   onEnrollmentStateChange: (EnrollmentState) -> Unit,
   // The user's selected source language key (e.g. "English", "Russian"); the read-aloud prompt is
@@ -122,6 +123,7 @@ fun VoiceEnrollmentSheet(
   var recordingJob by remember { mutableStateOf<Job?>(null) }
   var audioRecord by remember { mutableStateOf<AudioRecord?>(null) }
   var localErrorMessage by remember { mutableStateOf<String?>(null) }
+  var profileName by remember { mutableStateOf("") }
 
   val micPermissionLauncher = rememberLauncherForActivityResult(
     ActivityResultContracts.RequestPermission()
@@ -189,7 +191,7 @@ fun VoiceEnrollmentSheet(
       delay(50)
       val samples = audioSamplesRef.value
       if (samples != null && samples.size >= SAMPLE_RATE * (MIN_RECORDING_MS / 1000f)) {
-        onEnrollComplete(samples, SAMPLE_RATE)
+        onEnrollComplete(samples, SAMPLE_RATE, profileName.trim().takeIf { it.isNotBlank() })
         onEnrollmentStateChange(EnrollmentState.SUCCESS)
       } else {
         localErrorMessage = recordingShort
@@ -244,6 +246,18 @@ fun VoiceEnrollmentSheet(
         text = stringResource(R.string.bao_translate_record_voice_desc),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+
+      Spacer(modifier = Modifier.height(Dimensions.Spacing.medium))
+
+      OutlinedTextField(
+        value = profileName,
+        onValueChange = { profileName = it },
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text(stringResource(R.string.bao_translate_voice_profile_name_label)) },
+        placeholder = { Text(stringResource(R.string.bao_translate_voice_profile_name_hint)) },
+        singleLine = true,
+        enabled = enrollmentState == EnrollmentState.READY || enrollmentState == EnrollmentState.ERROR,
       )
 
       Spacer(modifier = Modifier.height(Dimensions.Spacing.large))

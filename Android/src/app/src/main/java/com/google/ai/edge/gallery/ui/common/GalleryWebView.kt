@@ -40,6 +40,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebViewAssetLoader
 import com.google.ai.edge.gallery.common.LOCAL_URL_BASE
 import java.io.File
+import org.json.JSONObject
 
 private const val TAG = "AGGalleryWebView"
 private val iframeWrapper =
@@ -82,9 +83,38 @@ open class BaseGalleryWebViewClient(private val context: Context) : WebViewClien
           return WebResourceResponse("text/plain", "UTF-8", null)
         }
       }
-      return localFileAssetsLoader.shouldInterceptRequest(request.url)
+      return correctAssetMimeType(
+        localFileAssetsLoader.shouldInterceptRequest(request.url),
+        request.url.path ?: "",
+      )
     }
     return super.shouldInterceptRequest(view, request)
+  }
+
+  /**
+   * [WebViewAssetLoader] derives a response MIME type from the file extension via
+   * `URLConnection.guessContentTypeFromName`, which returns `text/plain` for `.mjs` (and `.js` on
+   * some Android builds). Strict-MIME WebViews refuse to execute such a response as an ES module
+   * (`<script type="module">`) and refuse to stream-compile WASM. Correcting the MIME here — the
+   * single point every local asset flows through — lets skills use standard ES module imports and
+   * `WebAssembly.instantiateStreaming` deterministically across devices.
+   */
+  private fun correctAssetMimeType(
+    response: WebResourceResponse?,
+    path: String,
+  ): WebResourceResponse? {
+    if (response == null) return null
+    val correctedMime =
+      when {
+        path.endsWith(".mjs") || path.endsWith(".js") -> "text/javascript"
+        path.endsWith(".wasm") -> "application/wasm"
+        else -> return response
+      }
+    response.mimeType = correctedMime
+    if (correctedMime == "text/javascript" && response.encoding.isNullOrEmpty()) {
+      response.encoding = "utf-8"
+    }
+    return response
   }
 }
 
@@ -156,6 +186,25 @@ fun GalleryWebView(
           allowFileAccess = false
           mediaPlaybackRequiresUserGesture = false
         }
+
+        // Expose durable, host-visible storage + locale to skill content as `window.AndroidBridge`.
+        // A mutation broadcasts a `skill-storage-change` event back into this WebView so visual
+        // surfaces (e.g. dashboards) can re-render live instead of only on load.
+        val bridgeWebView = this
+        addJavascriptInterface(
+          SkillStorageBridge(ctx) { key, value ->
+            bridgeWebView.post {
+              val k = JSONObject.quote(key)
+              val v = if (value == null) "null" else JSONObject.quote(value)
+              bridgeWebView.evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent('skill-storage-change'," +
+                  "{detail:{key:$k,value:$v}}));",
+                null,
+              )
+            }
+          },
+          SkillStorageBridge.INTERFACE_NAME,
+        )
 
         if (preventParentScrolling) {
           setOnTouchListener { v, event ->

@@ -118,61 +118,50 @@ class VoiceProfileManagerTest {
 
   // ----- BRUTALISATION -----
 
-  // ----- SECURITY: path traversal. Production does `File(profilesDir, "$id.wav")` with
-  // no sanitization. id="../etc/passwd" would write to filesDir/../etc/passwd.wav —
-  // outside the profiles directory. This is a CRITICAL security gap.
+  // ----- SECURITY: path traversal. Production sanitizes id and canonicalizes the path.
   @Test
-  fun `saveProfile_pathTraversalId_documentedGap`() {
+  fun `saveProfile_pathTraversalId_sanitizedInsideProfilesDir`() {
     val samples = ShortArray(1600) { 0 }
     val profilesDir = File(filesDir, "voice_profiles").canonicalFile
-    val before = profilesDir.listFiles()?.toList() ?: emptyList()
-    // We must NOT crash (no NPE / no permission denied on a normal temp dir).
-    // The current production code happily writes a file at the traversed path.
+    val beforeWav = profilesDir.listFiles { f -> f.extension == "wav" }?.size ?: 0
     manager.saveProfile(samples, 1600, "../etc/passwd")
-    val after = profilesDir.listFiles()?.toList() ?: emptyList()
-    // DOCUMENTED GAP: the file did NOT land in profilesDir; it landed one level up.
-    // If production is hardened, this test flips to assertEquals(before, after).
-    val didNotEscape = before.size == after.size
+    val afterWav = profilesDir.listFiles { f -> f.extension == "wav" }?.toList() ?: emptyList()
+    // Sanitized id "___etc_passwd" lands as a direct child of profilesDir (plus .meta sidecar).
+    assertEquals("sanitized wav created inside profilesDir", beforeWav + 1, afterWav.size)
     assertTrue(
-      "DOCUMENTED SECURITY GAP: saveProfile with id='../etc/passwd' currently writes " +
-        "outside profilesDir. " +
-        "before=${before.size} after=${after.size} didNotEscape=$didNotEscape",
-      // We're pinning the gap, so the assertion is intentionally weak: just no crash.
-      true,
+      "sanitized file exists",
+      afterWav.any { it.name == "___etc_passwd.wav" },
     )
-    // Cleanup: remove the escaped file so the test doesn't pollute the temp dir.
+    // No file escaped outside profilesDir.
     val escaped = File(filesDir.parentFile, "etc/passwd.wav")
+    assertFalse("escaped file must not exist", escaped.exists())
     if (escaped.exists()) escaped.delete()
   }
 
-  // ----- SECURITY: id with forward slash.
+  // ----- SECURITY: id with forward slash is sanitized to a single filename.
   @Test
-  fun `saveProfile_idWithSlash_documentedGap`() {
+  fun `saveProfile_idWithSlash_sanitizedToFlatFile`() {
     val samples = ShortArray(1600) { 0 }
-    // Don't crash; document the behavior.
     manager.saveProfile(samples, 1600, "foo/bar")
-    // The file would be at profilesDir/foo/bar.wav — foo would be created as a directory.
+    val profilesDir = File(filesDir, "voice_profiles").canonicalFile
+    val after = profilesDir.listFiles()?.toList() ?: emptyList()
+    assertTrue(
+      "sanitized file exists",
+      after.any { it.name == "foo_bar.wav" },
+    )
     val fooDir = File(filesDir, "voice_profiles/foo")
-    if (fooDir.exists()) {
-      // Document the gap: directory was created. Cleanup.
-      fooDir.deleteRecursively()
-    }
+    assertFalse("subdirectory must not be created", fooDir.exists())
+    if (fooDir.exists()) fooDir.deleteRecursively()
   }
 
   // ----- Empty id: should NOT crash.
   @Test
-  fun `saveProfile_emptyId_createsEmptyWavFile`() {
+  fun `saveProfile_emptyId_fallsBackToDefaultProfile`() {
     val samples = ShortArray(1600) { 0 }
-    try {
-      manager.saveProfile(samples, 1600, "")
-      // Currently: writes ".wav" in profilesDir. No crash.
-      val dotWav = File(File(filesDir, "voice_profiles"), ".wav")
-      assertTrue("empty id wrote '.wav' (gap, but no crash)", dotWav.exists())
-      dotWav.delete()
-    } catch (e: Exception) {
-      // If prod is hardened, throwing is fine.
-      assertTrue("documented: empty id may throw", true)
-    }
+    manager.saveProfile(samples, 1600, "")
+    assertTrue(manager.hasProfile("default"))
+    val defaultWav = File(File(filesDir, "voice_profiles"), "default.wav")
+    assertTrue("empty id maps to default profile", defaultWav.exists())
   }
 
   // ----- Unicode profile id: must not crash, file naming works on all major filesystems.
@@ -259,16 +248,16 @@ class VoiceProfileManagerTest {
     manager.deleteProfile("does_not_exist")
   }
 
-  // ----- getVoicePath with path-traversal id: documented gap.
+  // ----- getVoicePath with path-traversal id: sanitized to a flat filename.
   @Test
-  fun `getVoicePath_pathTraversal_documentedGap`() {
+  fun `getVoicePath_pathTraversal_returnsSanitizedPath`() {
+    val samples = ShortArray(1600) { 0 }
+    manager.saveProfile(samples, 1600, "../etc/passwd")
     val path = manager.getVoicePath("../etc/passwd")
-    // Production does `File(profilesDir, "../etc/passwd.wav").takeIf { it.exists() }`.
-    // The path will be a non-null string for a file that doesn't exist (takeIf returns
-    // null only if !exists), OR null. Pin the contract.
-    if (path != null) {
-      assertTrue("returned path should end with the id.wav", path.endsWith("../etc/passwd.wav"))
-    }
+    assertNotNull(path)
+    assertTrue("returned path should end with sanitized filename", path!!.endsWith("___etc_passwd.wav"))
+    val profilesDir = File(filesDir, "voice_profiles").canonicalFile
+    assertEquals("path must be inside profilesDir", profilesDir, File(path!!).canonicalFile.parentFile)
   }
 
   // ----- Speaker embedding roundtrip: 256 floats.

@@ -1,5 +1,6 @@
 package com.google.ai.edge.gallery.customtasks.baotranslate
 
+import android.annotation.SuppressLint
 import android.app.Application
 import com.google.ai.edge.gallery.common.BaoLog
 import androidx.annotation.VisibleForTesting
@@ -9,8 +10,11 @@ import com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioDevice
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioRouter
 import com.google.ai.edge.gallery.customtasks.baotranslate.bluetooth.BleConversationManager
 import com.google.ai.edge.gallery.customtasks.baotranslate.data.Participant
+import com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioCache
+import com.google.ai.edge.gallery.customtasks.baotranslate.audio.EncryptedBlobStore
 import com.google.ai.edge.gallery.customtasks.baotranslate.data.SupportedLanguages
 import com.google.ai.edge.gallery.customtasks.baotranslate.data.TranslationMessage
+import com.google.ai.edge.gallery.customtasks.baotranslate.data.VoiceProfile
 import com.google.ai.edge.gallery.customtasks.baotranslate.data.VoiceProfileManager
 import com.google.ai.edge.gallery.customtasks.baotranslate.translate.TranslationOutcome
 import com.google.ai.edge.gallery.data.BaoTranslateStoredSettings
@@ -24,6 +28,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
@@ -48,6 +53,12 @@ data class BaoTranslateUiState(
   val targetLanguage: String = SupportedLanguages.DEFAULT_TARGET_KEY,
   val voiceProfileEnrolled: Boolean = false,
   val voiceProfilePath: String? = null,
+  // Active voice profile id. "default" is the original single-profile id; additional profiles
+  // use user-provided names. Enables multiple voice enrollment — user can switch between profiles
+  // without re-recording.
+  val activeVoiceProfileId: String = "default",
+  // All enrolled voice profiles available for selection.
+  val voiceProfiles: List<VoiceProfile> = emptyList(),
   val errorMessage: String? = null,
   val modelsReady: Boolean = false,
   val modelStatuses: Map<String, ModelStatus> = emptyMap(),
@@ -70,6 +81,14 @@ data class BaoTranslateUiState(
   // bidirectional pair. STT auto-detects each turn and the engine routes to the OTHER language, so two
   // people sharing one phone are each understood without a second device (cf. the BLE multi-device path).
   val faceToFaceMode: Boolean = false,
+  val replayMessageId: String? = null,
+  /** When true and source is AUTO, adopt Whisper's detected language as the source without a tap. */
+  val autoAcceptDetectedLanguage: Boolean = false,
+  /**
+   * Live hands-free turn phase mirrored from [ConversationManager] so the UI can surface
+   * Listening / Translating / Speaking without polling the controller.
+   */
+  val conversationPhase: ConversationPhase = ConversationPhase.Idle,
 ) {
   val isRecording: Boolean get() = pipelineStatus == PipelineStatus.Recording
   val isStartingRecording: Boolean get() = pipelineStatus == PipelineStatus.StartingRecording
@@ -95,6 +114,7 @@ data class BaoTranslateUiState(
     get() = modelStatuses.values.all { it == ModelStatus.Ready }
 }
 
+@SuppressLint("RestrictedApi")
 @HiltViewModel
 class BaoTranslateViewModel @Inject constructor(
   application: Application,
@@ -102,13 +122,23 @@ class BaoTranslateViewModel @Inject constructor(
 ) : AndroidViewModel(application) {
 
   private val _uiState = MutableStateFlow(BaoTranslateUiState())
-  val uiState: StateFlow<BaoTranslateUiState> = _uiState
+  val uiState: StateFlow<BaoTranslateUiState> = _uiState.asStateFlow()
 
   val bleManager = BleConversationManager(application)
   val audioRouter = AudioRouter(application)
-  private val voiceProfileManager = VoiceProfileManager(application)
+  private val voiceProfileEncryptedStore = EncryptedBlobStore(
+    application,
+    EncryptedBlobStore.voiceProfilesDir(application),
+  )
+  private val voiceProfileManager = VoiceProfileManager(
+    application,
+    encryptedStore = voiceProfileEncryptedStore,
+  )
 
-  private val pipelines = PipelineLifecycleManager()
+  private val pipelines = PipelineLifecycleManager(
+    voiceProfileManager = voiceProfileManager,
+    activeProfileId = { _uiState.value.activeVoiceProfileId },
+  )
   private val localParticipantId = UUID.randomUUID().toString()
   private val modelManager = BaoTranslateModelManager
 
@@ -143,6 +173,13 @@ class BaoTranslateViewModel @Inject constructor(
     uiState = _uiState,
     viewModelScope = viewModelScope,
     getApp = { getApplication() },
+    voiceProfileManager = voiceProfileManager,
+    onAutoAcceptDetectedLanguage = { language ->
+      if (!_uiState.value.faceToFaceMode) {
+        voiceLanguageCoordinator.setSourceLanguage(language)
+        persistBaoTranslateSettings()
+      }
+    },
   )
 
   private val downloadCoordinator = ModelDownloadCoordinator(
@@ -153,8 +190,10 @@ class BaoTranslateViewModel @Inject constructor(
     getApp = { getApplication() },
     refreshLocalRuntimeState = participantStateManager::refreshLocalRuntimeState,
     resolveTranslationModel = ::resolveAndPersistTranslationModel,
+    reinitializePipeline = ::reinitializePipeline,
   )
 
+  @SuppressLint("RestrictedApi")
   internal companion object {
     // Test-only overrides: when set, the ViewModel ignores the corresponding persisted setting.
     // Lets instrumentation pin a deterministic, fast config (qwen25_1b + English->Spanish)
@@ -185,11 +224,16 @@ class BaoTranslateViewModel @Inject constructor(
         targetLanguage = testForcedTargetLanguage
           ?: storedSettings?.targetLanguage?.takeIf { l -> l.isNotBlank() } ?: it.targetLanguage,
         wifiOnlyDownloads = storedSettings?.wifiOnlyDownloads ?: it.wifiOnlyDownloads,
+        autoAcceptDetectedLanguage = storedSettings?.autoAcceptDetectedLanguage ?: it.autoAcceptDetectedLanguage,
       )
     }
 
     modelManager.refreshStatuses(application)
     _uiState.update { it.copy(storageBreakdown = modelManager.getStorageBreakdown(application)) }
+    AudioCache.attachDiskStore(
+      EncryptedBlobStore(application, EncryptedBlobStore.ttsCacheDir(application)),
+    )
+    refreshVoiceProfiles()
 
     viewModelScope.launch {
       modelManager.modelStatuses.collect { statuses ->
@@ -392,6 +436,12 @@ class BaoTranslateViewModel @Inject constructor(
             pipelines.kokoroTts = null
           }
         }
+        "supertonic_tts" -> {
+          pipelines.pipelineMutex.withLock {
+            pipelines.supertonicTts?.cleanup()
+            pipelines.supertonicTts = null
+          }
+        }
       }
       modelManager.deleteModel(app, modelId)
       // If the deleted model was the active translation model, fall back to one that still exists
@@ -449,6 +499,25 @@ class BaoTranslateViewModel @Inject constructor(
 
   fun stopRecording() = recordingController.stopRecording()
 
+  fun cancelRecording() = recordingController.cancelRecording()
+
+  fun replayAudio(message: TranslationMessage) {
+    viewModelScope.launch(Dispatchers.IO) {
+      _uiState.update { it.copy(replayMessageId = message.id) }
+      val result = runCatching {
+        recordingController.synthesizeSpeech(
+          text = message.translatedText,
+          language = message.targetLanguage,
+          preserveRecordingStatus = true,
+        )
+      }
+      _uiState.update { s ->
+        if (s.replayMessageId == message.id) s.copy(replayMessageId = null) else s
+      }
+      result.getOrThrow()
+    }
+  }
+
   // Clears this device's conversation transcript and any in-flight preview. Local-only: it does NOT
   // touch BLE participants/connection state, the enrolled voice profile, downloaded models, or the
   // recording session. No-op while recording so it can't race RecordingController's append path.
@@ -489,6 +558,11 @@ class BaoTranslateViewModel @Inject constructor(
    */
   fun setFaceToFaceMode(enabled: Boolean) {
     if (_uiState.value.faceToFaceMode == enabled) return
+    if (!enabled) {
+      // Face-to-face is hands-free with no silence auto-stop; leaving the mode is the session
+      // boundary, so close the live mic here instead of leaving it running headless.
+      stopRecording()
+    }
     val source = _uiState.value.sourceLanguage.takeIf { it != SupportedLanguages.AUTO.key }
       ?: SupportedLanguages.keyForCode("en")
       ?: SupportedLanguages.TRANSLATION_TARGETS.first().key
@@ -515,9 +589,41 @@ class BaoTranslateViewModel @Inject constructor(
 
   fun onVoiceEnrolled(audioPath: String) = voiceLanguageCoordinator.onVoiceEnrolled(audioPath)
 
-  fun startEnrollmentRecording(audioPcm: ShortArray, sampleRate: Int) = voiceLanguageCoordinator.startEnrollmentRecording(audioPcm, sampleRate)
+  fun startEnrollmentRecording(audioPcm: ShortArray, sampleRate: Int, profileName: String? = null) {
+    voiceLanguageCoordinator.startEnrollmentRecording(audioPcm, sampleRate, profileName)
+    refreshVoiceProfiles()
+  }
 
-  fun deleteVoiceProfile() = voiceLanguageCoordinator.deleteVoiceProfile()
+  fun deleteVoiceProfile(profileId: String? = null) {
+    voiceLanguageCoordinator.deleteVoiceProfile(profileId)
+    refreshVoiceProfiles()
+  }
+
+  /** Switch the active voice profile. Loads the speaker embedding for the selected profile. */
+  fun switchVoiceProfile(profileId: String) {
+    voiceLanguageCoordinator.switchVoiceProfile(profileId)
+  }
+
+  /** Refresh the list of enrolled voice profiles from disk. */
+  fun refreshVoiceProfiles() {
+    viewModelScope.launch(Dispatchers.IO) {
+      val profiles = voiceProfileManager.listProfiles()
+      val activeId = _uiState.value.activeVoiceProfileId
+        .takeIf { id -> profiles.any { it.id == id } }
+        ?: profiles.firstOrNull()?.id
+        ?: VoiceProfileManager.DEFAULT_PROFILE_ID
+      val profile = voiceProfileManager.loadProfile(activeId)
+      pipelines.openVoiceTargetSe = voiceProfileManager.loadSpeakerEmbedding(activeId)
+      _uiState.update { state ->
+        state.copy(
+          voiceProfiles = profiles,
+          activeVoiceProfileId = activeId,
+          voiceProfileEnrolled = profile != null,
+          voiceProfilePath = profile?.wavPath,
+        )
+      }
+    }
+  }
 
   fun setSttModel(model: String) = voiceLanguageCoordinator.setSttModel(model)
 
@@ -531,6 +637,11 @@ class BaoTranslateViewModel @Inject constructor(
     persistBaoTranslateSettings()
   }
 
+  fun setAutoAcceptDetectedLanguage(enabled: Boolean) {
+    _uiState.update { it.copy(autoAcceptDetectedLanguage = enabled) }
+    persistBaoTranslateSettings()
+  }
+
   private fun persistBaoTranslateSettings() {
     val s = _uiState.value
     viewModelScope.launch(Dispatchers.IO) {
@@ -540,6 +651,7 @@ class BaoTranslateViewModel @Inject constructor(
           sourceLanguage = s.sourceLanguage,
           targetLanguage = s.targetLanguage,
           wifiOnlyDownloads = s.wifiOnlyDownloads,
+          autoAcceptDetectedLanguage = s.autoAcceptDetectedLanguage,
         )
       )
     }
@@ -635,7 +747,7 @@ class BaoTranslateViewModel @Inject constructor(
   override fun onCleared() {
     super.onCleared()
     if (testInstance === this) testInstance = null
-    recordingController.recordingJob?.cancel()
+    recordingController.cancelRecording()
     viewModelJob.cancel()
     val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     cleanupScope.launch {

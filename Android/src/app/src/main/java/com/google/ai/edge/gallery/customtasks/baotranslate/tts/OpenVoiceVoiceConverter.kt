@@ -1,5 +1,6 @@
 package com.google.ai.edge.gallery.customtasks.baotranslate.tts
 
+import ai.onnxruntime.OrtException
 import com.google.ai.edge.gallery.common.BaoLog
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioResampler
 import java.io.File
@@ -66,7 +67,7 @@ class OpenVoiceVoiceConverter {
       ready = true
       BaoLog.i(TAG, "OpenVoice converter + ref_enc loaded (ONNX Runtime)")
       true
-    } catch (e: Exception) {
+    } catch (e: OrtException) {
       BaoLog.e(TAG, "OpenVoice load failed (corrupt/unsupported model): ${e.message}")
       converter?.close(); converter = null
       refEnc?.close(); refEnc = null

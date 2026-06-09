@@ -25,7 +25,8 @@ limitations under the License.
     <title>Interactive map</title>
   </head>
   <body>
-    <script>
+    <script type="module">
+      import { fail } from '../../_shared/result.js';
       window['ai_edge_gallery_get_result'] = async (data) => {
         try {
           const jsonData = JSON.parse(data);
@@ -38,7 +39,7 @@ limitations under the License.
             },
           });
         } catch (e) {
-          console.error(e);
+          fail('interactive-map.topLevel', e);
           return JSON.stringify({error: `Failed to query location on map: ${e.message}`});
         }
       };

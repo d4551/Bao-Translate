@@ -66,7 +66,31 @@ object BaoLog {
   fun e(tag: String, message: String) { log("e", tag, message) }
   fun e(tag: String, message: String, throwable: Throwable) { log("e", tag, message, throwable) }
 
-  internal fun normalize(tag: String): String =
-    if (tag.length <= TAG_MAX) tag else tag.substring(0, TAG_MAX)
+  internal fun normalize(tag: String): String {
+    // Android 7+ silently drops log entries whose tags contain control characters.
+    val sanitized = buildString(tag.length) {
+      for (ch in tag) {
+        append(if (ch.code in 0..0x1F || ch.code == 0x7F) '_' else ch)
+      }
+    }
+    if (sanitized.length <= TAG_MAX) return sanitized
+    // Codepoint-aware truncation: never split a surrogate pair.
+    val sb = StringBuilder()
+    var codepoints = 0
+    var i = 0
+    while (i < sanitized.length && codepoints < TAG_MAX) {
+      val c = sanitized[i]
+      if (c.isHighSurrogate() && i + 1 < sanitized.length && sanitized[i + 1].isLowSurrogate()) {
+        sb.append(c)
+        sb.append(sanitized[i + 1])
+        i += 2
+      } else {
+        sb.append(c)
+        i += 1
+      }
+      codepoints++
+    }
+    return sb.toString()
+  }
 
 }

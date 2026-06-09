@@ -1,0 +1,7 @@
+{
+  "id": "send-email",
+  "version": "1.0.0",
+  "minHostVersion": "1.0.15",
+  "name": "Send Email",
+  "category": "built-in"
+}

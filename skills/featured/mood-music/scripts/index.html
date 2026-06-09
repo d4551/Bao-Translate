@@ -19,7 +19,9 @@ limitations under the License.
 <!doctype html>
 <html lang="en">
   <body>
-    <script>
+    <script type="module">
+      import { log } from '../../_shared/log.js';
+      import { fail } from '../../_shared/result.js';
       window["ai_edge_gallery_get_result"] = async (data, secret) => {
         try {
           const jsonData = JSON.parse(data);
@@ -37,7 +39,7 @@ limitations under the License.
           const apiKey = secret || "YOUR_API_KEY_HERE";
 
           if (apiKey === "YOUR_API_KEY_HERE") {
-            console.warn("Using placeholder API Key, calls to Loudly will likely fail.");
+            log.warn('mood-music.apiKey', 'Using placeholder API Key, calls to Loudly will likely fail.');
           }
 
           // 2. Prepare FormData as expected by the Loudly API
@@ -75,7 +77,7 @@ limitations under the License.
             },
           });
         } catch (e) {
-          console.error(e);
+          fail('mood-music.topLevel', e);
           return JSON.stringify({ error: `Music generation failed: ${e.message}` });
         }
       };

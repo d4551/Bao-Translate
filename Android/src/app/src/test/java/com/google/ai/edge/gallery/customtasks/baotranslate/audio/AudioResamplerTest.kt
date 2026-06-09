@@ -90,30 +90,51 @@ class AudioResamplerTest {
     assertEquals(0, out.size)
   }
 
-  // ----- srcRate = dstRate = 0: edge case. Production guards on srcRate == dstRate
-  // BEFORE the divide-by-zero. Verify the documented behavior.
+  // ----- srcRate = dstRate = 0: invalid rates are rejected before any math runs.
   @Test
-  fun `resample_zeroRates_documentedBehavior`() {
-    val src = FloatArray(16) { 0f }
-    val out = AudioResampler.resample(src, 0, 0)
-    // srcRate == dstRate == 0 -> the `srcRate == dstRate` short-circuit returns
-    // a copy. Pin that.
-    assertEquals(16, out.size)
-  }
-
-  // ----- srcRate = 0, dstRate = 16000: divide by zero. Document as a gap.
-  @Test
-  fun `resample_zeroSrcRate_currentlyCrashes_documentedGap`() {
+  fun `resample_zeroRates_rejectedByRequire`() {
     val src = FloatArray(16) { 0f }
     try {
-      val out = AudioResampler.resample(src, 0, 16000)
-      // If prod guards against srcRate=0, this branch is reached. Pin whatever
-      // safe default it returns.
-      assertTrue("if returned, length is sane", out.size in 0..1024)
-    } catch (e: ArithmeticException) {
-      // Currently expected: production divides by srcRate without a guard.
-      // Document the gap.
-      assertTrue("documented gap: srcRate=0 throws ArithmeticException", true)
+      AudioResampler.resample(src, 0, 0)
+      assertTrue("zero rates must be rejected", false)
+    } catch (e: IllegalArgumentException) {
+      assertTrue(true)
+    }
+  }
+
+  // ----- srcRate = 0, dstRate = 16000: must throw IllegalArgumentException.
+  @Test
+  fun `resample_zeroSrcRate_rejectedByRequire`() {
+    val src = FloatArray(16) { 0f }
+    try {
+      AudioResampler.resample(src, 0, 16000)
+      assertTrue("srcRate=0 must throw IllegalArgumentException", false)
+    } catch (e: IllegalArgumentException) {
+      assertTrue("rejected", true)
+    }
+  }
+
+  // ----- dstRate = 0: must throw IllegalArgumentException.
+  @Test
+  fun `resample_zeroDstRate_rejectedByRequire`() {
+    val src = FloatArray(16) { 0f }
+    try {
+      AudioResampler.resample(src, 16000, 0)
+      assertTrue("dstRate=0 must throw IllegalArgumentException", false)
+    } catch (e: IllegalArgumentException) {
+      assertTrue("rejected", true)
+    }
+  }
+
+  // ----- Negative rate: must throw IllegalArgumentException.
+  @Test
+  fun `resample_negativeRate_rejectedByRequire`() {
+    val src = FloatArray(16) { 0f }
+    try {
+      AudioResampler.resample(src, -1, 16000)
+      assertTrue("negative srcRate must throw IllegalArgumentException", false)
+    } catch (e: IllegalArgumentException) {
+      assertTrue("rejected", true)
     }
   }
 

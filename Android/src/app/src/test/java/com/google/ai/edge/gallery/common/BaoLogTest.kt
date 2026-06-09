@@ -39,57 +39,24 @@ class BaoLogTest {
 
   // ----- BRUTALISATION -----
 
-  // ----- The TAG_MAX contract: any input over 23 chars is truncated to the first 23
-  // characters. This is a UTF-16 unit count, NOT a codepoint count — a real production
-  // bug surface when tags contain CJK / emoji.
+  // ----- Codepoint-aware truncation: CJK has no surrogate pairs, so length == codepoints.
   @Test
-  fun `normalize_unicodeTruncation_usesUtf16UnitCountNotCodepointCount`() {
+  fun `normalize_unicodeTruncation_usesCodepointCount`() {
     val cjk = CorpusFixture.cjk.repeat(20) // 20 codepoints, 20 UTF-16 units, 40 chars total
     val out = BaoLog.normalize(cjk)
-    // Current prod: takes substring(0, TAG_MAX) on the UTF-16 string, NOT on codepoints.
-    // .length == 23 (UTF-16 units), .codePointCount == 23 (no surrogate pairs in CJK).
-    // Pin the current behavior.
-    assertEquals("tag length is TAG_MAX UTF-16 units", BaoLog.TAG_MAX, out.length)
+    // Production now truncates at codepoint boundary, not UTF-16 unit boundary.
+    assertEquals("tag length is TAG_MAX codepoints", BaoLog.TAG_MAX, out.codePointCount(0, out.length))
     assertEquals("CJK has no surrogate pairs; codepoint count == UTF-16 count",
       out.length, out.codePointCount(0, out.length))
   }
 
-  // ----- Surrogate pairs: each emoji 🎉 is 1 codepoint = 2 UTF-16 units. Truncating
-  // at 23 UTF-16 units can cut a surrogate pair in half if the boundary is between
-  // pairs. Document the current behavior.
+  // ----- Surrogate pairs: truncation must never split a pair.
   @Test
-  fun `normalize_surrogatePairTruncation_documentedGap`() {
-    val input = CorpusFixture.emoji.repeat(20) // 20 codepoints = 40 UTF-16 units
+  fun `normalize_surrogatePairTruncation_noBrokenSurrogates`() {
+    val input = CorpusFixture.emoji.repeat(30) // 30 codepoints — must truncate to TAG_MAX
     val out = BaoLog.normalize(input)
-    // 23 UTF-16 units, which is 11 complete emoji (22 units) + 1 high-surrogate half (1 unit).
-    // This is a MALFORMED Java String — many downstream ops break on it.
-    assertEquals("currently truncates mid-codepoint (gap)", BaoLog.TAG_MAX, out.length)
-    // codepointCount will still be 12 (11 complete + 1 unpaired high surrogate)
-    // — but the string is malformed. We assert that this is the current behavior so a
-    // future prod fix to "truncate at codepoint boundary" flips the assertion.
-    val isWellFormed = runCatching {
-      // codePoints() never throws on a well-formed string; on malformed it might still
-      // return values. Best cheap check: no unpaired surrogate by counting.
-      val chars = out.toCharArray()
-      var i = 0
-      var unpairedHigh = 0
-      while (i < chars.size) {
-        val c = chars[i]
-        if (c.isHighSurrogate() && (i + 1 >= chars.size || !chars[i + 1].isLowSurrogate())) {
-          unpairedHigh++
-        } else if (c.isHighSurrogate()) {
-          i++ // skip the low surrogate too
-        }
-        i++
-      }
-      unpairedHigh == 0
-    }.getOrDefault(false)
-    assertTrue(
-      "DOCUMENTED GAP: truncation can leave an unpaired high surrogate in the tag. " +
-        "Android may drop or display the entire tag. isWellFormed=$isWellFormed",
-      // We intentionally do NOT assert !isWellFormed — pinning the current gap.
-      true,
-    )
+    BaoStrictRules.assertNoBrokenSurrogates(out, "normalized tag")
+    assertEquals("truncated to TAG_MAX codepoints", BaoLog.TAG_MAX, out.codePointCount(0, out.length))
   }
 
   // ----- Edge: empty string input.
@@ -120,27 +87,20 @@ class BaoLogTest {
     assertTrue(out.all { it == 'A' })
   }
 
-  // ----- Document: newline characters in tags. Android 7+ silently drops these.
-  // Current prod: pass-through (no filter). Pin the gap.
+  // ----- Newline characters in tags are replaced with '_' so Android 7+ does not drop them.
   @Test
-  fun `normalize_newlineNotStripped_documentedGap`() {
+  fun `normalize_newlineStripped`() {
     val withNewline = "Tag\nWithNewline"
     val out = BaoLog.normalize(withNewline)
-    // Current prod does NOT strip newlines. The resulting tag, if sent to Android Log,
-    // is silently dropped.
-    assertEquals(
-      "DOCUMENTED GAP: newline not stripped — Android log entry is silently dropped",
-      withNewline,
-      out,
-    )
+    assertEquals("Tag_WithNewline", out)
   }
 
-  // ----- Document: control characters in tags. Android 7+ silently drops these.
+  // ----- Control characters in tags are replaced with '_'.
   @Test
-  fun `normalize_controlCharsNotStripped_documentedGap`() {
+  fun `normalize_controlCharsStripped`() {
     val input = "Tag\u0000With\u0001Ctrl"
     val out = BaoLog.normalize(input)
-    assertEquals(input, out)
+    assertEquals("Tag_With_Ctrl", out)
   }
 
   // ----- Determinism: normalize is a pure function. Call twice, get same result.

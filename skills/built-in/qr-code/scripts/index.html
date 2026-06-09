@@ -22,14 +22,15 @@ limitations under the License.
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QR Code Generator</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
+    <script src="../assets/vendor/qrcode.min.js" defer></script>
 </head>
 <body>
     <div id="qrcode-container" style="display: none;"></div>
     <canvas id="qr-canvas" style="display: none;"></canvas>
 
 
-    <script>
+    <script type="module">
+        import { fail } from '../../_shared/result.js';
         window['ai_edge_gallery_get_result'] = async function(data, secret) {
     try {
         const params = JSON.parse(data);
@@ -100,6 +101,7 @@ limitations under the License.
         });
 
     } catch (err) {
+        fail('qr-code.topLevel', err);
         return JSON.stringify({ result: null, image: null, error: err.message });
     }
 };

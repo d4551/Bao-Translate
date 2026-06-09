@@ -20,6 +20,8 @@ import android.Manifest
 import android.os.Build
 import androidx.annotation.StringRes
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsToggleable
 import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -103,6 +105,18 @@ class SmokeE2eTest {
     composeRule.waitForText(R.string.bao_translate_settings)
     composeRule.onNodeWithText(composeRule.stringResource(R.string.bao_translate_settings))
       .assertIsDisplayed()
+    composeRule.onNodeWithText(composeRule.stringResource(R.string.bao_translate_settings_language))
+      .performScrollTo()
+      .assertIsDisplayed()
+    composeRule.onNodeWithText(composeRule.stringResource(R.string.bao_translate_auto_accept_detected_language))
+      .performScrollTo()
+      .assertIsDisplayed()
+    composeRule.onNodeWithContentDescription(
+        composeRule.stringResource(R.string.cd_bao_translate_auto_accept_switch),
+      )
+      .performScrollTo()
+      .assertIsToggleable()
+      .assertIsOff()
     composeRule.onNodeWithText(composeRule.stringResource(R.string.bao_translate_settings_models))
       .performScrollTo()
       .assertIsDisplayed()
@@ -115,6 +129,8 @@ class SmokeE2eTest {
     if (composeRule.hasContentDescription(settingsEnrollVoice)) {
       composeRule.onNodeWithContentDescription(settingsEnrollVoice).performScrollTo().performClick()
       composeRule.waitForText(R.string.bao_translate_record_voice_title)
+      composeRule.onNodeWithText(composeRule.stringResource(R.string.bao_translate_voice_profile_name_label))
+        .assertIsDisplayed()
       composeRule.onNodeWithText(composeRule.stringResource(R.string.bao_translate_record_prompt))
         .assertIsDisplayed()
       composeRule.onNodeWithContentDescription(composeRule.stringResource(R.string.cd_bao_translate_start_recording))

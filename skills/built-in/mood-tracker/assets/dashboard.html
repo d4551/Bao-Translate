@@ -23,7 +23,7 @@ limitations under the License.
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Mood Tracker Dashboard</title>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="vendor/chart.min.js" defer></script>
   <style>
     :root {
       --bg-gradient: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
@@ -336,12 +336,12 @@ limitations under the License.
     </header>
 
     <div class="date-navigator">
-      <button class="date-button" id="prev-date">
-        <svg fill="currentColor" viewBox="0 0 24 24"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z"/></svg>
+      <button class="date-button" id="prev-date" data-i18n-aria="nav.prevDay" aria-label="Previous day">
+        <svg fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z"/></svg>
       </button>
       <div id="current-date-display">...</div>
-      <button class="date-button" id="next-date">
-        <svg fill="currentColor" viewBox="0 0 24 24"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/></svg>
+      <button class="date-button" id="next-date" data-i18n-aria="nav.nextDay" aria-label="Next day">
+        <svg fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/></svg>
       </button>
     </div>
 
@@ -371,15 +371,21 @@ limitations under the License.
 
     <!-- Raw Data Section -->
     <div style="margin-top: 30px; text-align: center;">
-        <button id="toggle-raw-btn" style="background: transparent; border: 1px solid var(--glass-border); color: var(--text-dim); padding: 8px 15px; border-radius: 10px; cursor: pointer; font-size: 0.8rem;">View Raw Data (Developer)</button>
+        <button id="toggle-raw-btn" data-i18n="mood.viewRaw" style="background: transparent; border: 1px solid var(--glass-border); color: var(--text-dim); padding: 8px 15px; border-radius: 10px; cursor: pointer; font-size: 0.8rem;">View raw data (developer)</button>
         <div id="raw-data-container" style="display: none; margin-top: 15px; text-align: left; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 12px; border: 1px solid var(--glass-border); overflow-x: auto; position: relative;">
-            <button id="copy-raw-btn" style="position: absolute; top: 10px; right: 10px; background: var(--accent-primary); border: none; color: #1a1a2e; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 0.7rem; font-weight: 600;">Copy</button>
+            <button id="copy-raw-btn" data-i18n="mood.copy" style="position: absolute; top: 10px; right: 10px; background: var(--accent-primary); border: none; color: #1a1a2e; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 0.7rem; font-weight: 600;">Copy</button>
             <pre id="raw-json" style="font-family: monospace; font-size: 0.75rem; color: #4ecca3;"></pre>
         </div>
     </div>
   </div>
 
-  <script>
+  <script type="module">
+    import { log } from '../../_shared/log.js';
+    import { storage } from '../../_shared/storage.js';
+    import { t, hydrate } from '../../_shared/i18n.js';
+
+    hydrate();
+
     const STORAGE_KEY = 'mood_tracker_data';
     let currentDate = new Date();
 
@@ -405,14 +411,14 @@ limitations under the License.
 
     function formatDateDisplay(date) {
       const options = { weekday: 'long', month: 'short', day: 'numeric' };
-      return date.toLocaleDateString('en-US', options);
+      return date.toLocaleDateString(undefined, options);
     }
 
     function loadData() {
       const isoDate = getISODate(currentDate);
       document.getElementById('current-date-display').textContent = formatDateDisplay(currentDate);
 
-      const allData = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      const allData = JSON.parse(storage.get(STORAGE_KEY) || '{}');
       const entry = allData[isoDate];
 
       const scoreEl = document.getElementById('current-score');
@@ -420,14 +426,14 @@ limitations under the License.
 
       if (entry) {
         scoreEl.textContent = entry.score;
-        commentEl.textContent = entry.comment || 'Feeling Zen.';
+        commentEl.textContent = entry.comment || t('mood.feelingZen');
 
         // Color based on score
         const hue = (entry.score -1) * 12; // 0 to 108 (red-ish to green-ish)
         document.querySelector('.mood-score-circle').style.background = `radial-gradient(circle, hsl(${hue}, 70%, 60%), hsl(${hue + 20}, 70%, 50%))`;
       } else {
         scoreEl.textContent = '-';
-        commentEl.textContent = 'No entry for this date.';
+        commentEl.textContent = t('mood.noEntry');
         document.querySelector('.mood-score-circle').style.background = 'rgba(255,255,255,0.1)';
       }
 
@@ -438,25 +444,42 @@ limitations under the License.
       const sortedDates = Object.keys(allData).sort().reverse().slice(0, 5);
 
       if (sortedDates.length === 0) {
-        historyList.innerHTML = '<div class="empty-state">Your journey starts here. Log your first mood!</div>';
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.textContent = t('mood.journeyStart');
+        historyList.appendChild(empty);
       } else {
         sortedDates.forEach(d => {
           const item = allData[d];
           const li = document.createElement('li');
           li.className = 'history-item';
 
-          // Format date for list e.g. "Mar 24"
+          // Format date for list e.g. "Mar 24" in the device locale
           const dateObj = parseISODate(d);
-          const dateLabel = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          const dateLabel = dateObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
-          li.innerHTML = `
-            <div class="history-date">${dateLabel}</div>
-            <div class="history-score-pill" style="background: hsl(${(item.score-1)*12}, 70%, 60%)">${item.score}</div>
-            <div class="history-comment">${item.comment || 'No notes.'}</div>
-            <button class="delete-btn" onclick="deleteEntry('${d}')" title="Delete entry">
-                <svg fill="currentColor" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-            </button>
-          `;
+          const dateEl = document.createElement('div');
+          dateEl.className = 'history-date';
+          dateEl.textContent = dateLabel;
+
+          const pill = document.createElement('div');
+          pill.className = 'history-score-pill';
+          pill.style.background = `hsl(${(item.score - 1) * 12}, 70%, 60%)`;
+          pill.textContent = item.score;
+
+          // textContent only: comment is user-entered content, never markup.
+          const comment = document.createElement('div');
+          comment.className = 'history-comment';
+          comment.textContent = item.comment || t('mood.noNotes');
+
+          const deleteBtn = document.createElement('button');
+          deleteBtn.className = 'delete-btn';
+          deleteBtn.title = t('entry.delete');
+          deleteBtn.setAttribute('aria-label', t('entry.delete'));
+          deleteBtn.innerHTML = '<svg fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>';
+          deleteBtn.addEventListener('click', () => deleteEntry(d));
+
+          li.append(dateEl, pill, comment, deleteBtn);
           historyList.appendChild(li);
         });
       }
@@ -555,10 +578,10 @@ limitations under the License.
     }
 
     function deleteEntry(date) {
-        if (confirm(`Delete mood entry for ${date}?`)) {
-            const allData = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+        if (confirm(t('entry.deleteConfirm', { date }))) {
+            const allData = JSON.parse(storage.get(STORAGE_KEY) || '{}');
             delete allData[date];
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(allData));
+            storage.set(STORAGE_KEY, JSON.stringify(allData));
             loadData();
         }
     }
@@ -567,7 +590,7 @@ limitations under the License.
         const container = document.getElementById('raw-data-container');
         const isHidden = container.style.display === 'none';
         container.style.display = isHidden ? 'block' : 'none';
-        document.getElementById('toggle-raw-btn').textContent = isHidden ? 'Hide Raw Data' : 'View Raw Data (Developer)';
+        document.getElementById('toggle-raw-btn').textContent = isHidden ? t('mood.hideRaw') : t('mood.viewRaw');
     });
 
     document.getElementById('copy-raw-btn').addEventListener('click', () => {
@@ -575,15 +598,23 @@ limitations under the License.
         navigator.clipboard.writeText(rawJson).then(() => {
             const btn = document.getElementById('copy-raw-btn');
             const originalText = btn.textContent;
-            btn.textContent = 'Copied!';
+            btn.textContent = t('mood.copied');
             btn.style.background = '#4ecca3';
             setTimeout(() => {
                 btn.textContent = originalText;
                 btn.style.background = 'var(--accent-primary)';
             }, 2000);
         }).catch(err => {
-            console.error('Failed to copy: ', err);
-            alert('Failed to copy to clipboard.');
+            log.error('mood-tracker.clipboard', err);
+            const pre = document.getElementById('raw-json');
+            if (pre) {
+              const range = document.createRange();
+              range.selectNodeContents(pre);
+              const sel = window.getSelection();
+              sel.removeAllRanges();
+              sel.addRange(range);
+            }
+            alert(t('error.clipboard'));
         });
     });
 

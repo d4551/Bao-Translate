@@ -1,5 +1,6 @@
 package com.google.ai.edge.gallery.customtasks.baotranslate
 
+import android.annotation.SuppressLint
 import android.Manifest
 import android.app.Application
 import android.content.pm.PackageManager
@@ -11,6 +12,7 @@ import android.media.audiofx.NoiseSuppressor
 import androidx.core.content.ContextCompat
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.common.BaoLog
+import com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioCache
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioDevice
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioRouter
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.BluetoothTransport
@@ -29,6 +31,8 @@ import com.google.ai.edge.gallery.customtasks.baotranslate.bluetooth.BleConversa
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
@@ -50,7 +54,21 @@ private const val AUDIO_READ_EMPTY_SLEEP_MS = 20L
 private const val AUDIO_READ_STALL_TIMEOUT_MS = 3_000L
 // Extra window, past the end of TTS playback, during which the mic stays gated so the speaker's
 // acoustic decay isn't captured as the next conversational turn (echo/feedback guard).
-private const val PLAYBACK_TAIL_MUTE_MS = 150L
+// Increased from 150ms to 300ms to prevent cutoff of dual-speaker transitions and allow
+// sufficient acoustic decay tail before the mic re-opens.
+private const val PLAYBACK_TAIL_MUTE_MS = 300L
+// Silence timeout for continuous conversation mode: if no speech is detected (no live segments
+// queued) for this duration after the last translation, auto-stop recording. Enables buttonless
+// conversation — user starts once, speaks, pauses, system translates, then auto-stops.
+private const val SILENCE_AUTO_STOP_MS = 15_000L
+// Mic frame amplitude above which a frame counts as speech activity (shared by the silence
+// auto-stop timer and face-to-face turn endpointing). Silero VAD remains the authority on what
+// is actually speech — this only gates WHEN a captured turn is handed to it.
+private const val SPEECH_AMPLITUDE_THRESHOLD = 0.01f
+// Face-to-face turn endpoint: after speech was heard, this much trailing quiet ends the turn and
+// flushes the whole utterance as ONE segment. Turn-based capture (instead of the 8s/4s overlapped
+// live windows) is what stops the same sentence being re-transcribed and re-spoken per window.
+private const val F2F_TURN_END_SILENCE_MS = 700L
 
 enum class SpeechTimbre {
   /** Use [speakerSe] when provided; otherwise fall back to the locally-enrolled timbre. */
@@ -59,6 +77,7 @@ enum class SpeechTimbre {
   PeerOnly,
 }
 
+@SuppressLint("RestrictedApi")
 internal class RecordingController(
   private val pipelines: PipelineLifecycleManager,
   private val audioRouter: AudioRouter,
@@ -66,6 +85,8 @@ internal class RecordingController(
   private val uiState: MutableStateFlow<BaoTranslateUiState>,
   private val viewModelScope: CoroutineScope,
   private val getApp: () -> Application,
+  private val voiceProfileManager: com.google.ai.edge.gallery.customtasks.baotranslate.data.VoiceProfileManager? = null,
+  private val onAutoAcceptDetectedLanguage: ((String) -> Unit)? = null,
 ) {
   private val recordingMutex = Mutex()
   private val segmentProcessingMutex = Mutex()
@@ -74,10 +95,10 @@ internal class RecordingController(
   var recordingJob: Job? = null
   var audioRecord: AudioRecord? = null
 
-  // Live-window translation segments are launched as independent coroutines. Track them so
-  // stopRecording() can cancel any that are queued-but-unstarted (or mid-flight at a suspension
-  // point), preventing TTS/transcripts from firing after the user has stopped.
-  private val liveSegmentJobs = mutableListOf<Job>()
+  // Dedicated scope for the recording session and its live-window translation segments.
+  // Cancelling this scope stops the mic loop AND any queued-but-unstarted (or mid-flight)
+  // translation/TTS jobs, preventing stale transcripts from firing after the user stops.
+  private var recordingScope: CoroutineScope? = null
 
   // Hands-free conversation guard: true while the app is playing a translation aloud. The capture
   // loop discards mic input during that window, so continuous (no-button) listening never re-hears
@@ -85,6 +106,23 @@ internal class RecordingController(
   // face-to-face mode. This is the portable guarantee; hardware AEC (below) handles residual leakage.
   @Volatile private var capturePaused = false
 
+  @Volatile private var discardRecordingOnStop = false
+
+  private val conversationManager = ConversationManager()
+
+  // Single seam for phase changes: every transition is mirrored into UiState so the UI surfaces
+  // the live Listening / Translating / Speaking turn state without a second source of truth.
+  private fun conversationEvent(event: ConversationManager.() -> Unit) {
+    val before = conversationManager.phase
+    conversationManager.event()
+    val phase = conversationManager.phase
+    if (phase != before) {
+      BaoLog.i(REC_TAG, "Conversation phase $before -> $phase")
+    }
+    uiState.update { if (it.conversationPhase == phase) it else it.copy(conversationPhase = phase) }
+  }
+
+  @SuppressLint("RestrictedApi")
   internal companion object {
     // Test-only injection point. When non-null, the next startRecording() sources audio from this
     // 16 kHz mono PCM instead of the microphone, then clears it. Set only by instrumentation tests
@@ -122,6 +160,8 @@ internal class RecordingController(
     holdsRecordingLock = true
     val recordingSessionId = currentRecordingSessionId + 1
     currentRecordingSessionId = recordingSessionId
+    discardRecordingOnStop = false
+    conversationEvent { onRecordingStart() }
 
     uiState.update {
       it.copy(
@@ -140,13 +180,17 @@ internal class RecordingController(
     val injectedPcm = testPcmSource
     if (injectedPcm != null) {
       testPcmSource = null
-      recordingJob = viewModelScope.launch(Dispatchers.IO) {
+      val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+      recordingScope = scope
+      recordingJob = scope.launch {
         runInjectedLiveTranslationForTest(recordingSessionId, injectedPcm)
       }
       return
     }
 
-    recordingJob = viewModelScope.launch(Dispatchers.IO) {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    recordingScope = scope
+    recordingJob = scope.launch {
       try {
       if (ContextCompat.checkSelfPermission(app, Manifest.permission.RECORD_AUDIO) !=
         PackageManager.PERMISSION_GRANTED
@@ -242,6 +286,13 @@ internal class RecordingController(
       var recordingFailed = false
       var publishedRecordingState = false
       var lastPositiveReadAt = System.currentTimeMillis()
+      // Silence auto-stop: tracks when speech activity was last detected (live segment queued or
+      // non-silent mic frame). If SILENCE_AUTO_STOP_MS elapses with no activity, recording stops
+      // automatically — enables buttonless continuous conversation.
+      var lastSpeechActivityAt = System.currentTimeMillis()
+      // Face-to-face turn endpointing: true once the current turn has heard speech, so a trailing
+      // F2F_TURN_END_SILENCE_MS of quiet flushes the whole utterance as one segment.
+      var turnSpeechHeard = false
 
       recorder.startRecording()
 
@@ -295,19 +346,47 @@ internal class RecordingController(
         else null
       try {
       readLoop@ while (isActive && uiState.value.isRecordingActive) {
+        // Silence auto-stop: if no speech activity for SILENCE_AUTO_STOP_MS after at least one
+        // translation was committed, stop recording. This enables buttonless conversation — the
+        // user starts once, speaks, and the system auto-stops after a natural pause.
+        // Face-to-face mode is fully hands-free: the session stays live across long pauses for as
+        // long as the screen is open (leaving the screen stops it), so neither speaker ever has to
+        // re-arm the mic mid-conversation.
+        if (queuedLiveSegment && !capturePaused && !uiState.value.faceToFaceMode) {
+          val silenceMs = System.currentTimeMillis() - lastSpeechActivityAt
+          if (silenceMs >= SILENCE_AUTO_STOP_MS) {
+            BaoLog.i(
+              REC_TAG,
+              "Silence auto-stop after ${silenceMs}ms session=$recordingSessionId f2f=${uiState.value.faceToFaceMode}",
+            )
+            break
+          }
+        }
+
         val readCount = recorder.read(buffer, 0, buffer.size, AudioRecord.READ_NON_BLOCKING)
 
         when {
           readCount > 0 -> {
+            lastPositiveReadAt = System.currentTimeMillis()
             if (capturePaused) {
               // App is speaking its own translation: drop this audio and reset the live window so the
               // echo (and any half-captured pre-playback speech) never mixes into the next speaker's
               // turn. This is what makes continuous, no-button bidirectional conversation usable.
               sampleCount = 0
               samplesSinceLastLiveWindow = 0
+              turnSpeechHeard = false
               continue@readLoop
             }
-            lastPositiveReadAt = System.currentTimeMillis()
+
+            // Track speech activity: if the mic frame has meaningful amplitude, update the
+            // last-speech timestamp. This prevents silence auto-stop during quiet but active speech.
+            val frameAmplitude = waveformAmplitude(buffer, readCount)
+            if (frameAmplitude > SPEECH_AMPLITUDE_THRESHOLD) {
+              lastSpeechActivityAt = System.currentTimeMillis()
+              turnSpeechHeard = true
+            }
+            val faceToFace = uiState.value.faceToFaceMode
+
             var bufferOffset = 0
             while (bufferOffset < readCount) {
               val copyCount = minOf(readCount - bufferOffset, liveWindowSamples - sampleCount)
@@ -317,18 +396,48 @@ internal class RecordingController(
               bufferOffset += copyCount
 
               if (sampleCount == liveWindowSamples) {
-                queueRealtimeTranslationSegment(recordingSessionId, pendingSamples.copyOf(sampleCount))
-                queuedLiveSegment = true
-                val overlapSamples = liveWindowSamples - liveStrideSamples
-                System.arraycopy(pendingSamples, liveStrideSamples, pendingSamples, 0, overlapSamples)
-                sampleCount = overlapSamples
-                samplesSinceLastLiveWindow = 0
+                if (faceToFace) {
+                  // Buffer full mid-monologue: flush the whole window as one turn, no overlap.
+                  // Overlapping windows re-transcribe and re-speak the shared 4s — the duplicate
+                  // spam this turn-based path exists to eliminate.
+                  if (turnSpeechHeard) {
+                    queueRealtimeTranslationSegment(recordingSessionId, pendingSamples.copyOf(sampleCount))
+                    queuedLiveSegment = true
+                    lastSpeechActivityAt = System.currentTimeMillis()
+                  }
+                  sampleCount = 0
+                  samplesSinceLastLiveWindow = 0
+                  turnSpeechHeard = false
+                } else {
+                  queueRealtimeTranslationSegment(recordingSessionId, pendingSamples.copyOf(sampleCount))
+                  queuedLiveSegment = true
+                  lastSpeechActivityAt = System.currentTimeMillis()
+                  val overlapSamples = liveWindowSamples - liveStrideSamples
+                  System.arraycopy(pendingSamples, liveStrideSamples, pendingSamples, 0, overlapSamples)
+                  sampleCount = overlapSamples
+                  samplesSinceLastLiveWindow = 0
+                }
               }
             }
 
+            // Face-to-face turn endpoint: speech followed by a natural pause flushes the whole
+            // utterance as ONE segment, which is then translated and spoken before the next turn.
+            if (
+              faceToFace &&
+              turnSpeechHeard &&
+              sampleCount >= minSegmentSamples &&
+              System.currentTimeMillis() - lastSpeechActivityAt >= F2F_TURN_END_SILENCE_MS
+            ) {
+              BaoLog.i(REC_TAG, "F2F turn endpoint samples=$sampleCount session=$recordingSessionId")
+              queueRealtimeTranslationSegment(recordingSessionId, pendingSamples.copyOf(sampleCount))
+              queuedLiveSegment = true
+              sampleCount = 0
+              samplesSinceLastLiveWindow = 0
+              turnSpeechHeard = false
+            }
+
             val elapsed = (System.currentTimeMillis() - startTime) / 1000f
-            val amplitude = waveformAmplitude(buffer, readCount)
-            val newAmplitudes = (uiState.value.amplitudes + amplitude).takeLast(WAVEFORM_HISTORY)
+            val newAmplitudes = (uiState.value.amplitudes + frameAmplitude).takeLast(WAVEFORM_HISTORY)
             if (!publishedRecordingState) {
               val stats = buffer.copyOf(readCount).audioStats()
               BaoLog.i(
@@ -352,6 +461,15 @@ internal class RecordingController(
           }
           readCount == 0 -> {
             val now = System.currentTimeMillis()
+            if (capturePaused) {
+              // The device audio HAL can starve the mic while the app's own TTS plays through the
+              // speaker. Capture is deliberately gated during playback anyway, so an empty read
+              // here is expected — keep the stall reference fresh or the watchdog kills the
+              // hands-free session at the first spoken translation longer than the timeout.
+              lastPositiveReadAt = now
+              delay(AUDIO_READ_EMPTY_SLEEP_MS)
+              continue@readLoop
+            }
             if (now - lastPositiveReadAt >= AUDIO_READ_STALL_TIMEOUT_MS) {
               BaoLog.e(
                 REC_TAG,
@@ -364,7 +482,7 @@ internal class RecordingController(
               recordingFailed = true
               break
             }
-            Thread.sleep(AUDIO_READ_EMPTY_SLEEP_MS)
+            delay(AUDIO_READ_EMPTY_SLEEP_MS)
           }
           readCount < 0 -> {
             BaoLog.e(REC_TAG, "AudioRecord read returned error: $readCount")
@@ -379,6 +497,9 @@ internal class RecordingController(
       }
 
       if (recordingFailed) {
+        // The watchdog/read-error exits skip the normal end-of-loop stop event; without this the
+        // turn control keeps showing a live phase for a session whose mic is already dead.
+        conversationEvent { onRecordingStop() }
         return@launch
       }
 
@@ -386,7 +507,7 @@ internal class RecordingController(
       // final flush on a full stride (4s) silently dropped the last <4s of speech: that tail past
       // the last window boundary was never part of any emitted window, so use the 1s minimum.
       val finalSampleCount = if (queuedLiveSegment) samplesSinceLastLiveWindow else sampleCount
-      if (finalSampleCount >= minSegmentSamples) {
+      if (!discardRecordingOnStop && finalSampleCount >= minSegmentSamples) {
         val finalStart = sampleCount - finalSampleCount
         segmentProcessingMutex.withLock {
           processAudioSegment(
@@ -396,8 +517,14 @@ internal class RecordingController(
             reportEmptySpeech = !queuedLiveSegment,
           )
         }
-      } else if (sampleCount > 0 && !queuedLiveSegment) {
+      } else if (!discardRecordingOnStop && sampleCount > 0 && !queuedLiveSegment) {
         uiState.update { it.copy(errorMessage = getApp().getString(R.string.bao_translate_error_recording_short)) }
+      }
+      conversationEvent { onRecordingStop() }
+      // The loop can exit on its own (silence auto-stop) while UiState still says Recording —
+      // without this the mic icon would show a live session whose AudioRecord is already released.
+      uiState.update {
+        if (it.isRecordingActive) it.copy(pipelineStatus = PipelineStatus.Idle) else it
       }
       } finally {
         echoCanceler?.release()
@@ -458,14 +585,32 @@ internal class RecordingController(
 
   fun stopRecording() {
     if (!uiState.value.isRecordingActive) return
+    discardRecordingOnStop = false
     uiState.update { it.copy(pipelineStatus = PipelineStatus.Idle) }
-    // Cancel queued/in-flight live-window segments so their transcribe→translate→TTS does not fire
-    // after the user has stopped. The recordingJob's final-segment flush is intentionally left
-    // running (it is not in this list) so the tail of speech is still translated.
-    synchronized(liveSegmentJobs) {
-      liveSegmentJobs.forEach { it.cancel() }
-      liveSegmentJobs.clear()
+    recordingScope?.cancel()
+    recordingScope = null
+    recordingJob = null
+    // Scope cancellation kills the read loop before its own onRecordingStop line runs, so the
+    // phase must be closed out here or the UI stays stuck on Listening/Speaking.
+    conversationEvent { onRecordingStop() }
+  }
+
+  /** Cancel recording and discard in-flight audio — no final-segment flush. */
+  fun cancelRecording() {
+    if (!uiState.value.isRecordingActive) return
+    discardRecordingOnStop = true
+    uiState.update {
+      it.copy(
+        pipelineStatus = PipelineStatus.Idle,
+        liveTranslationPreview = null,
+        elapsedSeconds = 0f,
+        amplitudes = emptyList(),
+      )
     }
+    recordingScope?.cancel()
+    recordingScope = null
+    recordingJob = null
+    conversationEvent { onRecordingStop() }
   }
 
   private fun unlockRecordingIfHeld() {
@@ -480,7 +625,8 @@ internal class RecordingController(
       REC_TAG,
       "Queue live segment session=$recordingSessionId ${audioSamples.audioStats()}",
     )
-    val job = viewModelScope.launch(Dispatchers.IO) {
+    val scope = recordingScope ?: return
+    scope.launch(Dispatchers.IO) {
       segmentProcessingMutex.withLock {
         processAudioSegment(
           audioSamples = audioSamples,
@@ -489,13 +635,6 @@ internal class RecordingController(
           reportEmptySpeech = false,
         )
       }
-    }
-    synchronized(liveSegmentJobs) {
-      liveSegmentJobs.removeAll { it.isCompleted }
-      liveSegmentJobs.add(job)
-    }
-    job.invokeOnCompletion {
-      synchronized(liveSegmentJobs) { liveSegmentJobs.remove(job) }
     }
   }
 
@@ -516,6 +655,23 @@ internal class RecordingController(
     reportEmptySpeech: Boolean = true,
 	  ) {
 	    if (isStaleRecordingSegment(recordingSessionId)) return
+    conversationEvent { onProcessingStart() }
+    try {
+      runSegmentPipeline(audioSamples, recordingSessionId, preserveRecordingStatus, reportEmptySpeech)
+    } finally {
+      // Segments that end without playback (VAD-empty, blank decode, errors) return the phase to
+      // Listening while the mic loop is still live; after playback the tail-mute chain already
+      // landed on Listening, and after a session stop the Idle phase makes this a no-op.
+      conversationEvent { onSegmentComplete() }
+    }
+  }
+
+  private suspend fun runSegmentPipeline(
+    audioSamples: ShortArray,
+    recordingSessionId: Long?,
+    preserveRecordingStatus: Boolean,
+    reportEmptySpeech: Boolean,
+	  ) {
 	    val inputStats = audioSamples.audioStats()
 	    BaoLog.i(
 	      REC_TAG,
@@ -578,6 +734,9 @@ internal class RecordingController(
     }
 
     for (segment in speechSegments) {
+      // Re-arm per segment: a previous segment's playback chain lands the phase back on
+      // Listening, and this transition (Listening -> Processing) marks the next STT pass.
+      conversationEvent { onProcessingStart() }
       val transcriptionResult = whisper.transcribeBlocking(segment.toShortArray())
       BaoLog.i(REC_TAG, "STT done success=${transcriptionResult.isSuccess} chars=${transcriptionResult.getOrNull()?.text?.length ?: 0}")
       if (isStaleRecordingSegment(recordingSessionId)) return
@@ -625,11 +784,12 @@ internal class RecordingController(
 
       if (autoDetected) {
         if (isStaleRecordingSegment(recordingSessionId)) return
-        uiState.update {
-          it.copy(
-            detectedLanguage = SupportedLanguages.keyForCode(sourceLang)
-              ?.takeIf { key -> key != SupportedLanguages.AUTO.key },
-          )
+        val detectedKey = SupportedLanguages.keyForCode(sourceLang)
+          ?.takeIf { key -> key != SupportedLanguages.AUTO.key }
+        val shouldAutoAccept = !twoWay && uiState.value.autoAcceptDetectedLanguage
+        uiState.update { it.copy(detectedLanguage = detectedKey) }
+        if (detectedKey != null && shouldAutoAccept) {
+          onAutoAcceptDetectedLanguage?.invoke(detectedKey)
         }
       }
 
@@ -680,8 +840,14 @@ internal class RecordingController(
             )
           }
 
+          // Live playback policy: one-shot mode always speaks on stop; headset routes speak live.
+          // Face-to-face speaks live ON the phone speaker too — that is the product: the
+          // capturePaused gate plus hardware AEC (both set up in the read loop) exist precisely so
+          // speaker playback cannot feed back into continuous capture.
           val shouldPlayNow =
-            !preserveRecordingStatus || uiState.value.currentAudioDevice !is AudioDevice.Speaker
+            !preserveRecordingStatus ||
+              uiState.value.faceToFaceMode ||
+              uiState.value.currentAudioDevice !is AudioDevice.Speaker
           val audioPlayed = if (shouldPlayNow) {
             synthesizeSpeech(
               text = translatedText,
@@ -758,41 +924,63 @@ internal class RecordingController(
     }
 
     val state = uiState.value
-    val kokoro = pipelines.kokoroTts
     val ovConverter = pipelines.openVoiceConverter
 
-    // Pronunciation source: Kokoro for the languages it voices natively, else the device platform
-    // TTS for the rest (de/ko/ru/ar/ja). Speaking those with an English Kokoro voice would be
-    // wrong-language gibberish (e.g. ja → espeak-ng English → "Japanese Letter" character-name
-    // fallback). The supportsLanguage() predicate is the SSOT for which languages Kokoro can
-    // phonemize on the bundled sherpa-onnx kokoro-multi-lang-v1_0 model; it is pinned by
-    // KokoroTtsPipelineTest so a future regression re-adding ja here would fail the build.
-    val nativeToKokoro = KokoroTtsPipeline.supportsLanguage(language)
-    val base = if (nativeToKokoro) {
-      kokoro?.synthesizeAudio(text, KokoroTtsPipeline.getVoiceForLanguage(language))
-    } else {
-      pipelines.platformTts?.synthesizeAudio(text, language)
+    // Cache key: voice profile enrollment state determines whether cloning is applied, so include
+    // a fingerprint of the enrolled embedding so cache hits are correct across profile changes.
+    val voiceId = when {
+      timbre == SpeechTimbre.PeerOnly -> "peer"
+      state.voiceProfileEnrolled -> state.activeVoiceProfileId
+      else -> "default"
     }
 
-    // Voice clone: the OpenVoice tone-color converter re-times the base audio into a target timbre.
-    // It is language- AND source-agnostic, so this clones EVERY supported language — including the
-    // platform-TTS fallback languages (de/ko/ru/ar), not just Kokoro's. [speakerSe] (a peer's shared
-    // timbre) takes precedence so a multi-speaker conversation is heard in each speaker's own voice;
-    // otherwise the locally-enrolled user's timbre is used when enrolled. Falls back to the un-cloned
-    // base when no timbre applies or a conversion fails.
-    val targetSe = when (timbre) {
-      SpeechTimbre.PeerOnly -> speakerSe
-      SpeechTimbre.LocalEnrolled ->
-        speakerSe ?: pipelines.openVoiceTargetSe?.takeIf { state.voiceProfileEnrolled }
-    }
-    if (targetSe != null) {
-      testLastCloneTargetSe = targetSe.copyOf()
-    }
-    val audio = if (ovConverter != null && targetSe != null && base != null) {
-      testLastWasCloned = true
-      ovConverter.convert(base, targetSe) ?: base
+    // Prosody speed adjustment: when a voice profile is enrolled, use the user's natural speaking
+    // rate to adjust Kokoro's speed parameter. This makes the cloned output sound more natural by
+    // matching the user's cadence rather than Kokoro's default rate.
+    val prosodySpeed = if (state.voiceProfileEnrolled && timbre != SpeechTimbre.PeerOnly) {
+      val profileId = state.activeVoiceProfileId
+      voiceProfileManager?.loadProsody(profileId)?.speedMultiplier ?: 1.0f
+    } else 1.0f
+
+    // Check cache BEFORE synthesis so replay of previously translated messages is instant.
+    val cached = AudioCache.get(text = text, language = language, voiceId = voiceId, speed = prosodySpeed)
+    val audio = if (cached != null) {
+      cached
     } else {
-      base
+      val kokoroVoice = KokoroTtsPipeline.getVoiceForLanguage(language)
+      val base = pipelines.ttsRouter().synthesize(
+        text = text,
+        language = language,
+        kokoroVoiceId = kokoroVoice,
+        speed = prosodySpeed,
+      )
+
+      // Voice clone: the OpenVoice tone-color converter re-times the base audio into a target timbre.
+      // It is language- AND source-agnostic, so this clones EVERY supported language — including the
+      // platform-TTS fallback languages (de/ko/ru/ar), not just Kokoro's. [speakerSe] (a peer's shared
+      // timbre) takes precedence so a multi-speaker conversation is heard in each speaker's own voice;
+      // otherwise the locally-enrolled user's timbre is used when enrolled. Falls back to the un-cloned
+      // base when no timbre applies or a conversion fails.
+      val targetSe = when (timbre) {
+        SpeechTimbre.PeerOnly -> speakerSe
+        SpeechTimbre.LocalEnrolled ->
+          speakerSe ?: pipelines.openVoiceTargetSe?.takeIf { state.voiceProfileEnrolled }
+      }
+      if (targetSe != null) {
+        testLastCloneTargetSe = targetSe.copyOf()
+      }
+      val synthesized = if (ovConverter != null && targetSe != null && base != null) {
+        testLastWasCloned = true
+        ovConverter.convert(base, targetSe) ?: base
+      } else {
+        base
+      }
+
+      // Store in cache for instant replay later.
+      if (synthesized != null) {
+        AudioCache.put(text = text, language = language, voiceId = voiceId, speed = prosodySpeed, audio = synthesized)
+      }
+      synthesized
     }
 
     var played = false
@@ -803,10 +991,16 @@ internal class RecordingController(
         // live mic never hears and re-translates this output. finally guarantees the gate reopens even
         // if playback is interrupted, otherwise the mic would stay deaf for the rest of the session.
         capturePaused = true
+        conversationEvent { onPlaybackStart() }
         try {
           audioRouter.play(audio.samples, sampleRate = audio.sampleRate)
+          conversationEvent { onPlaybackEnd() }
           delay(PLAYBACK_TAIL_MUTE_MS)
         } finally {
+          // Cancellation can skip onPlaybackEnd above; emit it here first so the
+          // Speaking -> Cooldown -> Listening chain stays valid on every exit path.
+          conversationEvent { onPlaybackEnd() }
+          conversationEvent { onTailMuteComplete() }
           capturePaused = false
         }
       }

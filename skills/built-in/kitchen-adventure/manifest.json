@@ -1,0 +1,7 @@
+{
+  "id": "kitchen-adventure",
+  "version": "1.0.0",
+  "minHostVersion": "1.0.15",
+  "name": "Kitchen Adventure",
+  "category": "built-in"
+}

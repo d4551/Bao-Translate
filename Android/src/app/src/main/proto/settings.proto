@@ -93,6 +93,8 @@ message Settings {
   string bao_translate_target_language = 15;
   bool bao_translate_wifi_only_downloads = 16;
   bool bao_translate_settings_initialized = 17;
+  // When true and source is Auto-detect, apply Whisper's detected language as the source language.
+  bool bao_translate_auto_accept_detected_language = 18;
 }
 
 message McpAuth {

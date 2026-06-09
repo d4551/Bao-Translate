@@ -1,0 +1,7 @@
+{
+  "id": "read-calendar-events",
+  "version": "1.0.0",
+  "minHostVersion": "1.0.15",
+  "name": "Read Calendar Events",
+  "category": "built-in"
+}

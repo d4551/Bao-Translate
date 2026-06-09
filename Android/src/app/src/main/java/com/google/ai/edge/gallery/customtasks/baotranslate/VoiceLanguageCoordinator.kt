@@ -2,6 +2,8 @@ package com.google.ai.edge.gallery.customtasks.baotranslate
 
 import android.app.Application
 import com.google.ai.edge.gallery.R
+import com.google.ai.edge.gallery.common.BaoLog
+import com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioCache
 import com.google.ai.edge.gallery.customtasks.baotranslate.bluetooth.BleConversationManager
 import com.google.ai.edge.gallery.customtasks.baotranslate.data.Participant
 import com.google.ai.edge.gallery.customtasks.baotranslate.data.SupportedLanguages
@@ -59,25 +61,41 @@ internal class VoiceLanguageCoordinator(
     applyLocalParticipantUpdate { it.copy(voiceProfileEnrolled = true, voiceProfilePath = audioPath) }
   }
 
-  fun startEnrollmentRecording(audioPcm: ShortArray, sampleRate: Int) {
+  fun startEnrollmentRecording(audioPcm: ShortArray, sampleRate: Int, profileName: String? = null) {
     viewModelScope.launch(Dispatchers.IO) {
-      val profile = voiceProfileManager.saveProfile(audioPcm, sampleRate)
+      val displayName = profileName?.trim()?.takeIf { it.isNotBlank() }
+      val profileId = displayName?.let { VoiceProfileManager.sanitizeProfileId(it) }
+        ?: VoiceProfileManager.DEFAULT_PROFILE_ID
+      val profile = voiceProfileManager.saveProfile(
+        audioPcm,
+        sampleRate,
+        profileId,
+        displayName = displayName,
+      )
+      // Refresh the profiles list so the UI reflects the newly enrolled profile immediately.
+      val profiles = voiceProfileManager.listProfiles()
       uiState.update { state ->
         val updated = state.copy(
           voiceProfileEnrolled = true,
           voiceProfilePath = profile.wavPath,
+          activeVoiceProfileId = profileId,
+          voiceProfiles = profiles,
         )
         val participant = updateLocalParticipant(updated.copy(localParticipant = updated.localParticipant?.copy(id = profile.id)))
         updated.copy(localParticipant = participant)
       }
       uiState.value.localParticipant?.let { bleManager.setLocalParticipant(it) }
 
+      // Invalidate audio cache: a newly enrolled voice profile produces different cloned audio for
+      // the same text, so cached audio from before enrollment is stale and must be re-synthesized.
+      AudioCache.invalidate()
+
       // OpenVoice cross-lingual clone: derive + persist the speaker embedding from the enrollment
       // clip so the synth path can speak any target language in the user's timbre.
       pipelines.openVoiceConverter?.let { converter ->
         val floats = FloatArray(audioPcm.size) { audioPcm[it] / 32768f }
         converter.computeSpeakerEmbedding(floats, sampleRate)?.let { embedding ->
-          voiceProfileManager.saveSpeakerEmbedding(embedding)
+          voiceProfileManager.saveSpeakerEmbedding(embedding, profileId)
           pipelines.openVoiceTargetSe = embedding
           // Re-broadcast metadata so connected peers hear THIS user in their own voice.
           bleManager.rebroadcastMetadata()
@@ -86,19 +104,69 @@ internal class VoiceLanguageCoordinator(
     }
   }
 
-  fun deleteVoiceProfile() {
+  /** Switch to a different enrolled voice profile without re-recording. */
+  fun switchVoiceProfile(profileId: String) {
     viewModelScope.launch(Dispatchers.IO) {
-      voiceProfileManager.deleteProfile()
-      pipelines.openVoiceTargetSe = null
+      val profile = voiceProfileManager.loadProfile(profileId)
+      if (profile == null) {
+        BaoLog.w("VoiceLanguageCoordinator", "Profile '$profileId' not found")
+        return@launch
+      }
+      val embedding = voiceProfileManager.loadSpeakerEmbedding(profileId)
+      pipelines.openVoiceTargetSe = embedding
+      AudioCache.invalidate()
       bleManager.rebroadcastMetadata()
       uiState.update { state ->
         val updated = state.copy(
-          voiceProfileEnrolled = false,
-          voiceProfilePath = null,
+          voiceProfileEnrolled = true,
+          voiceProfilePath = profile.wavPath,
+          activeVoiceProfileId = profileId,
         )
         val participant = updateLocalParticipant(updated)
         updated.copy(localParticipant = participant)
       }
+      uiState.value.localParticipant?.let { bleManager.setLocalParticipant(it) }
+    }
+  }
+
+  fun deleteVoiceProfile(profileId: String? = null) {
+    viewModelScope.launch(Dispatchers.IO) {
+      val targetId = profileId ?: uiState.value.activeVoiceProfileId
+      voiceProfileManager.deleteProfile(targetId)
+      // If deleting the active profile, fall back to default or clear
+      val isActive = targetId == uiState.value.activeVoiceProfileId
+      if (isActive) {
+        val remaining = voiceProfileManager.listProfiles()
+        if (remaining.isNotEmpty()) {
+          val fallback = remaining.first()
+          val embedding = voiceProfileManager.loadSpeakerEmbedding(fallback.id)
+          pipelines.openVoiceTargetSe = embedding
+          uiState.update { state ->
+            val updated = state.copy(
+              voiceProfileEnrolled = true,
+              voiceProfilePath = fallback.wavPath,
+              activeVoiceProfileId = fallback.id,
+            )
+            val participant = updateLocalParticipant(updated)
+            updated.copy(localParticipant = participant)
+          }
+        } else {
+          pipelines.openVoiceTargetSe = null
+          uiState.update { state ->
+            val updated = state.copy(
+              voiceProfileEnrolled = false,
+              voiceProfilePath = null,
+              activeVoiceProfileId = "default",
+            )
+            val participant = updateLocalParticipant(updated)
+            updated.copy(localParticipant = participant)
+          }
+        }
+      }
+      val profiles = voiceProfileManager.listProfiles()
+      uiState.update { it.copy(voiceProfiles = profiles) }
+      bleManager.rebroadcastMetadata()
+      AudioCache.invalidate()
       uiState.value.localParticipant?.let { bleManager.setLocalParticipant(it) }
     }
   }

@@ -1,0 +1,7 @@
+{
+  "id": "schedule-notification",
+  "version": "1.0.0",
+  "minHostVersion": "1.0.15",
+  "name": "Schedule Notification",
+  "category": "built-in"
+}

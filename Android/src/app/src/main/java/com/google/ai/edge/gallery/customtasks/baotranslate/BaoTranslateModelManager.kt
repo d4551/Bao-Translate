@@ -110,6 +110,12 @@ object BaoTranslateModelManager {
       category = ModelCategory.VOICE_CLONE,
       estimatedSizeMb = 125,
     ),
+    ModelInfo(
+      id = "supertonic_tts",
+      displayNameRes = R.string.bao_model_supertonic_tts,
+      category = ModelCategory.TTS,
+      estimatedSizeMb = 80,
+    ),
   )
 
   // The required model set — the SINGLE SOURCE OF TRUTH for auto-provisioning, "Required" settings
@@ -155,6 +161,22 @@ object BaoTranslateModelManager {
         "kokoro-multi-lang-v1_0/espeak-ng-data",
       ),
       extractDir = "kokoro-multi-lang-v1_0",
+    ),
+    ArchiveSpec(
+      modelId = "supertonic_tts",
+      archiveFileName = "sherpa-onnx-supertonic-3-tts-int8-2026-05-11.tar.bz2",
+      downloadUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/sherpa-onnx-supertonic-3-tts-int8-2026-05-11.tar.bz2",
+      sizeBytes = 80_000_000L,
+      requiredFiles = listOf(
+        "sherpa-onnx-supertonic-3-tts-int8-2026-05-11/duration_predictor.int8.onnx",
+        "sherpa-onnx-supertonic-3-tts-int8-2026-05-11/text_encoder.int8.onnx",
+        "sherpa-onnx-supertonic-3-tts-int8-2026-05-11/vector_estimator.int8.onnx",
+        "sherpa-onnx-supertonic-3-tts-int8-2026-05-11/vocoder.int8.onnx",
+        "sherpa-onnx-supertonic-3-tts-int8-2026-05-11/tts.json",
+        "sherpa-onnx-supertonic-3-tts-int8-2026-05-11/unicode_indexer.bin",
+        "sherpa-onnx-supertonic-3-tts-int8-2026-05-11/voice.bin",
+      ),
+      extractDir = "sherpa-onnx-supertonic-3-tts-int8-2026-05-11",
     ),
   )
 
@@ -214,6 +236,9 @@ object BaoTranslateModelManager {
 
   fun getKokoroModelDir(context: Context): File =
     File(getSherpaOnnxDir(context), "kokoro-multi-lang-v1_0")
+
+  fun getSupertonicModelDir(context: Context): File =
+    File(getSherpaOnnxDir(context), "sherpa-onnx-supertonic-3-tts-int8-2026-05-11")
 
   fun getVadModelPath(context: Context): String =
     File(getSherpaOnnxDir(context), "silero_vad.onnx").absolutePath
@@ -286,6 +311,11 @@ object BaoTranslateModelManager {
         if (isOpenVoiceCloneAvailable(context)) ModelStatus.Ready
         else ModelStatus.NotDownloaded
       }
+      "supertonic_tts" -> {
+        val archive = ARCHIVES.first { it.modelId == modelId }
+        if (isArchiveExtracted(context, archive)) ModelStatus.Ready
+        else ModelStatus.NotDownloaded
+      }
       else -> ModelStatus.NotDownloaded
     }
   }
@@ -307,6 +337,7 @@ object BaoTranslateModelManager {
         "whisper_base" -> dirSize(getWhisperModelDir(context))
         "qwen25_1b", "gemma4_e2b" -> dirSize(getTranslationModelDir(context, model.id))
         "openvoice" -> dirSize(getOpenVoiceDir(context))
+        "supertonic_tts" -> dirSize(getSupertonicModelDir(context))
         else -> 0L
       }
       model.id to size
@@ -347,6 +378,10 @@ object BaoTranslateModelManager {
         "whisper_base" -> downloadWhisperModel(context, modelId)
         "qwen25_1b", "gemma4_e2b" -> downloadTranslationModel(context, modelId)
         "openvoice" -> downloadOpenVoiceModels(context, modelId)
+        "supertonic_tts" -> {
+          val archive = ARCHIVES.first { it.modelId == modelId }
+          downloadAndExtractArchive(context, archive, modelId)
+        }
         else -> Result.failure(
           IllegalArgumentException(context.getString(R.string.bao_translate_error_unknown_model, modelId))
         )
@@ -385,6 +420,7 @@ object BaoTranslateModelManager {
       "whisper_base" -> getWhisperModelDir(context).deleteRecursively()
       "qwen25_1b", "gemma4_e2b" -> getTranslationModelDir(context, modelId).deleteRecursively()
       "openvoice" -> getOpenVoiceDir(context).deleteRecursively()
+      "supertonic_tts" -> getSupertonicModelDir(context).deleteRecursively()
     }
     _modelStatuses.update { it + (modelId to ModelStatus.NotDownloaded) }
     BaoLog.i(TAG, "Deleted model: $modelId")

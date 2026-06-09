@@ -15,6 +15,8 @@ import kotlin.math.sin
 object AudioResampler {
 
   fun resample(samples: FloatArray, srcRate: Int, dstRate: Int): FloatArray {
+    require(srcRate > 0) { "srcRate must be > 0 (got $srcRate)" }
+    require(dstRate > 0) { "dstRate must be > 0 (got $dstRate)" }
     if (samples.isEmpty() || srcRate == dstRate) return samples.copyOf()
     // Band-limit before the linear interpolation in BOTH directions (margin below Nyquist):
     //  - downsample: anti-alias below the destination Nyquist so content above it does not fold back;

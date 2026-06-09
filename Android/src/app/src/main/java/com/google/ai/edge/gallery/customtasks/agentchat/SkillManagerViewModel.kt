@@ -205,11 +205,30 @@ constructor(
         }
         BaoLog.d(TAG, "data store built-in skills selection map: $builtInSelectionMap")
 
-        // 3. Read and parse SKILL.md files from assets/skills directories.
+        // 3. Mirror the bundled _shared runtime modules (log/result/storage/i18n)
+        // into filesDir so imported/featured skills — served via
+        // InternalStoragePathHandler from filesDir/skills/<name>/ — can resolve
+        // the same ../../_shared/*.js module URLs as asset-backed skills.
+        // Re-copied on every load so the files always match the installed APK.
+        runCatching {
+          val sharedDest = context.filesDir.resolve("skills/_shared")
+          sharedDest.mkdirs()
+          for (fileName in context.assets.list("skills/_shared").orEmpty()) {
+            context.assets.open("skills/_shared/$fileName").use { input ->
+              sharedDest.resolve(fileName).outputStream().use { output -> input.copyTo(output) }
+            }
+          }
+        }.onFailure { e ->
+          BaoLog.e(TAG, "Error installing skills/_shared runtime modules", e)
+        }
+
+        // 4. Read and parse SKILL.md files from assets/skills directories.
         val builtInSkills = mutableListOf<Skill>()
         runCatching {
           val skillAssetDirs = context.assets.list("skills") ?: emptyArray()
           for (dirName in skillAssetDirs) {
+            // Infrastructure directories (_shared) are not skills.
+            if (dirName.startsWith("_")) continue
             val skillMdPath = "skills/$dirName/SKILL.md"
             runCatching {
               context.assets.open(skillMdPath).use { inputStream ->
@@ -255,7 +274,7 @@ constructor(
           "Final built-in skills:\n${builtInSkills.joinToString(separator = "\n") { "${it.name}(${it.selected})" }}",
         )
 
-        // 4. Combine the updated built-in skills with the existing custom skills.
+        // 5. Combine the updated built-in skills with the existing custom skills.
         val finalSkills = builtInSkills.toMutableList()
         for (customSkill in dataStoreCustomSkills) {
           if (!finalSkills.any { it.name == customSkill.name }) {
@@ -263,10 +282,10 @@ constructor(
           }
         }
 
-        // 5. Update the DataStore with the combined list of skills.
+        // 6. Update the DataStore with the combined list of skills.
         dataStoreRepository.setSkills(finalSkills)
 
-        // 6. Update UI State with the final set of skills.
+        // 7. Update UI State with the final set of skills.
         _uiState.update { currentState ->
           currentState.copy(skills = finalSkills.map { SkillState(skill = it) })
         }

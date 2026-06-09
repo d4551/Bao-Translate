@@ -29,10 +29,16 @@ pluginManagement {
   resolutionStrategy {
     eachPlugin {
       if (requested.id.id == "com.google.android.gms.oss-licenses-plugin") {
-        useModule("com.google.android.gms:oss-licenses-plugin:0.10.6")
+        useModule("com.google.android.gms:oss-licenses-plugin:0.10.8")
       }
     }
   }
+}
+
+plugins {
+  // Auto-provision JDK toolchains (compile @ 17, daemon may run on JDK 26).
+  // Ref: https://developer.android.com/build/jdks#toolchain
+  id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 
 dependencyResolutionManagement {

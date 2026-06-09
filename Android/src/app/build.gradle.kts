@@ -14,30 +14,18 @@
  * limitations under the License.
  */
 
+import java.util.Properties
+import org.gradle.api.tasks.Exec
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.gradle.api.tasks.testing.Test
+import org.gradle.jvm.toolchain.JavaLanguageVersion
 
-// com.google.protobuf:protobuf-gradle-plugin:0.9.5 transitively pulls com.android.tools.build:gradle
-// 7.1.0 onto this module's plugin classpath. Its pre-8.0 CommonExtension shadows AGP 8.8.2's and
-// breaks the Kotlin-DSL `android { packaging { ... } }` accessor. Force the build tools to this
-// project's AGP so a single, correct CommonExtension is on the classpath.
-buildscript {
-  configurations.all {
-    resolutionStrategy.eachDependency {
-      if (requested.group == "com.android.tools.build" &&
-        (requested.name == "gradle" || requested.name == "gradle-api")
-      ) {
-        useVersion(libs.versions.agp.get())
-      }
-    }
-  }
-}
-
+// AGP 9+ provides built-in Kotlin — do not apply org.jetbrains.kotlin.android.
+// Ref: https://developer.android.com/build/migrate-to-built-in-kotlin
 plugins {
   alias(libs.plugins.android.application)
   // Note: set apply to true to enable google-services (requires google-services.json).
   alias(libs.plugins.google.services) apply false
-  alias(libs.plugins.kotlin.android)
   alias(libs.plugins.kotlin.compose)
   alias(libs.plugins.kotlin.serialization)
   alias(libs.plugins.protobuf)
@@ -46,9 +34,20 @@ plugins {
   alias(libs.plugins.ksp)
 }
 
+// Host JDK 26 compiles Java 17 bytecode for Android (compileSdk 35). No separate JDK 17 install required.
+// Ref: https://developer.android.com/build/jdks#toolchain
+java {
+  toolchain {
+    languageVersion.set(JavaLanguageVersion.of(26))
+  }
+}
+
 kotlin {
-  // Modern KGP DSL (the legacy `android { kotlinOptions { ... } }` was removed in Kotlin 2.4).
-  compilerOptions { jvmTarget = JvmTarget.JVM_11 }
+  compilerOptions {
+    jvmTarget.set(JvmTarget.JVM_17)
+    // Material3 tooltip/menu APIs are stable in production but still marked experimental.
+    optIn.add("androidx.compose.material3.ExperimentalMaterial3Api")
+  }
 }
 
 android {
@@ -81,8 +80,8 @@ android {
     }
   }
   compileOptions {
-    sourceCompatibility = JavaVersion.VERSION_11
-    targetCompatibility = JavaVersion.VERSION_11
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
   }
   buildFeatures {
     compose = true
@@ -100,6 +99,7 @@ android {
 dependencies {
   implementation(libs.androidx.core.ktx)
   implementation(libs.androidx.lifecycle.runtime.ktx)
+  implementation(libs.androidx.lifecycle.runtime.compose)
   implementation(libs.androidx.activity.compose)
   implementation(platform(libs.androidx.compose.bom))
   implementation(libs.androidx.ui)
@@ -213,13 +213,63 @@ tasks.named("verifyReleaseReady") {
   dependsOn("testDebugUnitTestStrict")
 }
 
-tasks.register("smokeE2e") {
+// Smoke subset: only SmokeE2eTest — not the full connectedDebugAndroidTest matrix (language
+// matrix, live mic, OpenVoice, etc. require models + minutes of runtime).
+tasks.register<Exec>("smokeE2e") {
   group = "verification"
-  description = "Install and run the debug instrumentation smoke test on connected devices."
-  dependsOn("connectedDebugAndroidTest")
+  description = "Install and run SmokeE2eTest on a connected device or emulator."
+  dependsOn("assembleDebug", "assembleDebugAndroidTest", "installDebug", "installDebugAndroidTest")
+  val localPropertiesFile = rootProject.file("local.properties")
+  val appId = android.defaultConfig.applicationId
+  doFirst {
+    val props = Properties()
+    check(localPropertiesFile.exists()) {
+      "local.properties missing — set sdk.dir to run smokeE2e"
+    }
+    localPropertiesFile.inputStream().use { props.load(it) }
+    val sdkDir =
+      props.getProperty("sdk.dir")
+        ?: System.getenv("ANDROID_HOME")
+        ?: error("sdk.dir not found in local.properties and ANDROID_HOME unset")
+    commandLine(
+      "$sdkDir/platform-tools/adb",
+      "shell",
+      "am",
+      "instrument",
+      "-w",
+      "-e",
+      "class",
+      "com.google.ai.edge.gallery.SmokeE2eTest",
+      "$appId.test/androidx.test.runner.AndroidJUnitRunner",
+    )
+  }
 }
 
 protobuf {
   protoc { artifact = "com.google.protobuf:protoc:4.26.1" }
   generateProtoTasks { all().forEach { it.plugins { create("java") { option("lite") } } } }
+}
+
+// Sync skills/ into the app bundle as a pre-build step.
+// skills/ is the single source of truth; the Android copy is gitignored.
+// Layout must stay FLAT (assets/skills/<id>/SKILL.md) — SkillManagerViewModel
+// lists assets.list("skills") and reads skills/<dir>/SKILL.md directly.
+// Ships built-in skills + _shared runtime modules only: featured/ skills are
+// not bundled (host-app parity with the pre-sync asset set) and _vendor/ is a
+// 32 MB package mirror whose needed files are already vendored per-skill.
+tasks.register<Copy>("syncSkills") {
+  group = "build"
+  description = "Copy skills/built-in + skills/_shared into Android assets before build."
+  val skillsDir = file("../../../skills")
+  into(file("src/main/assets/skills"))
+  from(skillsDir.resolve("built-in"))
+  from(skillsDir.resolve("_shared")) { into("_shared") }
+}
+
+tasks.named("preBuild") {
+  dependsOn("syncSkills")
+}
+
+tasks.withType<Test>().configureEach {
+  jvmArgs("-Dnet.bytebuddy.experimental=true")
 }

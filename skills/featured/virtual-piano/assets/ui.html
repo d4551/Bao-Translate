@@ -150,20 +150,69 @@ limitations under the License.
         background: #111;
         box-shadow: inset 0 3px 6px rgba(0, 0, 0, 0.9);
       }
+
+      .key:focus-visible {
+        outline: 3px solid #45b7d1;
+        outline-offset: -3px;
+      }
+
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+      }
+
+      #tap-overlay {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.7);
+        color: #fff;
+        font-size: 1.5rem;
+        font-family: sans-serif;
+        border: none;
+        width: 100%;
+        z-index: 1000;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
+    <h1 class="visually-hidden" data-i18n="piano.title">88-key virtual piano</h1>
     <div id="piano-scroll-container">
       <div id="piano">
-        <div id="key-container"></div>
-        <div id="scroll-lip">⟷ SLIDE HERE TO SCROLL ⟷</div>
+        <div id="key-container" role="group" data-i18n-aria="piano.keys" aria-label="Piano keys"></div>
+        <div id="scroll-lip" data-i18n="piano.scrollHint" aria-hidden="true">⟷ SLIDE HERE TO SCROLL ⟷</div>
       </div>
     </div>
 
-    <script>
+    <script type="module">
+      import { log } from '../../_shared/log.js';
+      import { t, hydrate } from '../../_shared/i18n.js';
+
       const keyContainer = document.getElementById("key-container");
       let noteNumber = 1;
       const noteNamesArray = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+      hydrate();
+
+      // Keys are role=button with a roving tabindex: one tab stop for the
+      // whole instrument, ArrowLeft/ArrowRight move between notes,
+      // Enter/Space play. Accessible name is the note name (C4, C#4, ...).
+      function makeKey(className, note, label) {
+        const key = document.createElement("div");
+        key.className = className;
+        key.setAttribute("data-note", note);
+        key.setAttribute("role", "button");
+        key.setAttribute("aria-label", label);
+        key.setAttribute("tabindex", note === 40 ? "0" : "-1"); // middle C is the tab stop
+        return key;
+      }
 
       // 1. GENERATE THE KEYS (No more biased Z-Index loop!)
       while (noteNumber <= 88) {
@@ -174,18 +223,15 @@ limitations under the License.
         const noteName = noteNamesArray[cOffset];
         const octave = Math.floor((noteNumber + 8) / 12);
 
-        const whiteKey = document.createElement("div");
-        whiteKey.className = "key white";
-        whiteKey.setAttribute("data-note", noteNumber);
+        const whiteKey = makeKey("key white", noteNumber, noteName + octave);
         whiteKey.innerText = noteName + octave;
         group.appendChild(whiteKey);
 
         if (cOffset !== 4 && cOffset !== 11 && noteNumber !== 88) {
           noteNumber++;
-          const blackKey = document.createElement("div");
-          blackKey.className = "key black";
-          blackKey.setAttribute("data-note", noteNumber);
-          group.appendChild(blackKey);
+          const blackName = noteNamesArray[(noteNumber + 8) % 12];
+          const blackOctave = Math.floor((noteNumber + 8) / 12);
+          group.appendChild(makeKey("key black", noteNumber, blackName + blackOctave));
         }
 
         keyContainer.appendChild(group);
@@ -199,26 +245,33 @@ limitations under the License.
         audioNotes[i] = new Audio(audioUrl);
       }
 
-      const keys = document.querySelectorAll(".key");
+      const keys = Array.from(document.querySelectorAll(".key"));
 
-      keys.forEach((key) => {
+      function playKey(keyEl) {
+        const note = keyEl.getAttribute("data-note");
+        const audio = audioNotes[note];
+        if (!audio) return;
+
+        audio.currentTime = 0;
+        audio.play().catch((e) => {
+          if (e.name === 'NotAllowedError') {
+            showTapToPlayOverlay();
+          } else {
+            log.error('virtual-piano.audio', e);
+          }
+        });
+
+        keyEl.classList.add("active");
+        setTimeout(() => {
+          audio.pause();
+          audio.currentTime = 0;
+        }, 2000);
+      }
+
+      keys.forEach((key, index) => {
         key.addEventListener("pointerdown", function (event) {
           event.stopPropagation();
-
-          const note = this.getAttribute("data-note");
-          const audio = audioNotes[note];
-
-          if (audio) {
-            audio.currentTime = 0;
-            audio.play().catch((e) => console.warn("Waiting for audio:", e));
-
-            this.classList.add("active");
-
-            setTimeout(() => {
-              audio.pause();
-              audio.currentTime = 0;
-            }, 2000);
-          }
+          playKey(this);
         });
 
         key.addEventListener("pointerup", function () {
@@ -230,7 +283,41 @@ limitations under the License.
         key.addEventListener("pointercancel", function () {
           this.classList.remove("active");
         });
+
+        key.addEventListener("keydown", function (event) {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            playKey(this);
+            return;
+          }
+          const dir = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+          if (dir === 0) return;
+          event.preventDefault();
+          const next = keys[index + dir];
+          if (!next) return;
+          this.setAttribute("tabindex", "-1");
+          next.setAttribute("tabindex", "0");
+          next.focus();
+          next.scrollIntoView({ behavior: "auto", inline: "nearest", block: "nearest" });
+        });
+
+        key.addEventListener("keyup", function (event) {
+          if (event.key === "Enter" || event.key === " ") {
+            this.classList.remove("active");
+          }
+        });
       });
+
+      function showTapToPlayOverlay() {
+        if (document.getElementById('tap-overlay')) return;
+        const overlay = document.createElement('button');
+        overlay.id = 'tap-overlay';
+        overlay.textContent = t('piano.tapToEnable');
+        overlay.addEventListener('pointerdown', () => overlay.remove(), { once: true });
+        overlay.addEventListener('click', () => overlay.remove(), { once: true });
+        document.body.appendChild(overlay);
+        overlay.focus();
+      }
 
       // 3. AUTO-SCROLL TO MIDDLE C
       setTimeout(() => {

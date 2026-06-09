@@ -31,6 +31,21 @@ data class VoiceProfile(
   val wavPath: String,
   val enrolledAt: Long = System.currentTimeMillis(),
   val durationSec: Float = 0f,
+  val prosody: VoiceProsody? = null,
+)
+
+/**
+ * Prosody metadata extracted from a voice enrollment clip. Used to adjust TTS synthesis parameters
+ * so the cloned voice preserves the user's natural speaking characteristics:
+ * - [speakingRate]: syllables per second (approximated from energy envelope zero-crossings)
+ * - [averagePitchHz]: average fundamental frequency (F0) in Hz
+ * - [speedMultiplier]: derived Kokoro speed parameter (1.0 = default, <1 = slower, >1 = faster)
+ */
+@Serializable
+data class VoiceProsody(
+  val speakingRate: Float = 0f,
+  val averagePitchHz: Float = 0f,
+  val speedMultiplier: Float = 1.0f,
 )
 
 @Serializable

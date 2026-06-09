@@ -41,7 +41,7 @@ limitations under the License.
         box-sizing: border-box;
       }
 
-      h2 {
+      h1 {
         margin: 0 0 20px 0;
         text-align: center;
         font-size: 20px;
@@ -51,6 +51,29 @@ limitations under the License.
         margin: 0 0 20px 0;
         color: #aaa;
         font-size: 14px;
+      }
+
+      /* Empty / error / setup state panel */
+      #state-panel {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding: 0 24px;
+        max-width: 420px;
+      }
+      #state-panel[data-visible="true"] {
+        display: flex;
+      }
+      #state-title {
+        font-size: 20px;
+        font-weight: bold;
+        margin: 0 0 8px 0;
+      }
+      #state-desc {
+        color: #aaa;
+        font-size: 15px;
+        margin: 0;
       }
 
       /* The perfectly sized, compact wheel container */
@@ -159,7 +182,12 @@ limitations under the License.
     </style>
   </head>
   <body>
-    <h2 id="title">Loading...</h2>
+    <h1 id="title">Loading...</h1>
+
+    <div id="state-panel" role="status">
+      <p id="state-title"></p>
+      <p id="state-desc"></p>
+    </div>
 
     <div id="wheel-container">
       <div id="pointer"></div>
@@ -167,40 +195,57 @@ limitations under the License.
       <canvas id="wheelCanvas" width="600" height="600"></canvas>
     </div>
 
-    <button id="spin-btn" aria-label="Spin roulette wheel">SPIN ROULETTE</button>
+    <button id="spin-btn" data-i18n="roulette.spin">Spin roulette</button>
 
     <div id="winner-overlay" role="dialog" aria-modal="true" aria-labelledby="winner-title winner-name">
-      <div id="winner-title">🎉 WINNER! 🎉</div>
+      <div id="winner-title"></div>
       <div id="winner-name">Restaurant Name</div>
-      <button
-        id="close-modal"
-        onclick="document.getElementById('winner-overlay').style.display='none'"
-        aria-label="Close winner and spin again"
-      >
-        Spin Again
-      </button>
+      <button id="close-modal" data-i18n="roulette.spinAgain">Spin again</button>
     </div>
 
-    <script>
+    <script type="module">
+      import { log } from '../../_shared/log.js';
+      import { t, hydrate } from '../../_shared/i18n.js';
+
+      hydrate();
+      document.getElementById('winner-title').textContent = `🎉 ${t('roulette.winner')} 🎉`;
+
       const params = new URLSearchParams(window.location.search);
       const cuisine = params.get("c") || "Food";
       const locationStr = params.get("l") || "Nearby";
       const compressedData = params.get("data");
+      const errorParam = params.get("error");
 
-      let places = [];
-      if (compressedData) {
-        try {
-          const placeString = decodeURIComponent(escape(atob(compressedData)));
-          places = placeString.split("|");
-        } catch (e) {
-          console.error("Failed to decode data", e);
-          places = ["Error Loading Data"];
-        }
-      } else {
-        places = ["No Options Found"];
+      // Non-spinnable states: setup required, decode failure, or no data.
+      // The wheel and spin button hide; a real state panel renders instead.
+      function showState(titleKey, descKey) {
+        document.getElementById('state-title').textContent = t(titleKey);
+        document.getElementById('state-desc').textContent = t(descKey);
+        document.getElementById('state-panel').setAttribute('data-visible', 'true');
+        document.getElementById('wheel-container').style.display = 'none';
+        document.getElementById('spin-btn').style.display = 'none';
       }
 
-      document.getElementById("title").innerText = `${cuisine} spots in ${locationStr}`;
+      let places = [];
+      if (errorParam === 'missing_key') {
+        document.getElementById('title').textContent = t('roulette.setupTitle');
+        showState('roulette.setupTitle', 'roulette.setupDesc');
+      } else if (compressedData) {
+        try {
+          const placeString = decodeURIComponent(escape(atob(compressedData)));
+          places = placeString.split("|").filter((p) => p.trim().length > 0);
+        } catch (e) {
+          log.error('restaurant-roulette.decode', e);
+          showState('roulette.errorTitle', 'roulette.errorDesc');
+        }
+      }
+      if (places.length === 0 && !document.getElementById('state-panel').hasAttribute('data-visible')) {
+        showState('roulette.emptyTitle', 'roulette.emptyDesc');
+      }
+
+      if (errorParam !== 'missing_key') {
+        document.getElementById("title").textContent = t('roulette.title', { cuisine, location: locationStr });
+      }
 
       const canvas = document.getElementById("wheelCanvas");
       const wheelContainer = document.getElementById("wheel-container");
@@ -277,15 +322,46 @@ limitations under the License.
         ctx.restore();
       }
 
-      draw();
+      if (places.length > 0) draw();
+
+      const overlay = document.getElementById("winner-overlay");
+      const closeBtn = document.getElementById("close-modal");
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+      function settleOnWinner() {
+        isSpinning = false;
+
+        let p = (-Math.PI / 2 - angle) % (2 * Math.PI);
+        if (p < 0) p += 2 * Math.PI;
+        const winnerIndex = Math.floor(p / arc);
+
+        document.getElementById("winner-name").textContent = places[winnerIndex];
+        overlay.style.display = "flex";
+        closeBtn.focus();
+
+        spinBtn.textContent = t('roulette.spin');
+        spinBtn.disabled = false;
+      }
 
       function triggerSpin() {
-        if (isSpinning) return;
+        if (isSpinning || places.length === 0) return;
         isSpinning = true;
         spinBtn.disabled = true;
-        spinBtn.innerText = "SPINNING...";
+        spinBtn.textContent = t('roulette.spinning');
 
-        let velocity = Math.random() * 0.2 + 0.35;
+        let velocity = (performance.now() % 1000 / 1000) * 0.2 + 0.35;
+
+        if (reducedMotion.matches) {
+          // Same physics integrated without animation frames: identical
+          // winner distribution, no spinning motion.
+          while (velocity >= 0.002) {
+            angle += velocity;
+            velocity *= 0.985;
+          }
+          draw();
+          settleOnWinner();
+          return;
+        }
 
         function animate() {
           angle += velocity;
@@ -293,18 +369,7 @@ limitations under the License.
           draw();
 
           if (velocity < 0.002) {
-            isSpinning = false;
-
-            let p = (-Math.PI / 2 - angle) % (2 * Math.PI);
-            if (p < 0) p += 2 * Math.PI;
-            const winnerIndex = Math.floor(p / arc);
-            const winner = places[winnerIndex];
-
-            document.getElementById("winner-name").innerText = winner;
-            document.getElementById("winner-overlay").style.display = "flex";
-
-            spinBtn.innerText = "SPIN ROULETTE";
-            spinBtn.disabled = false;
+            settleOnWinner();
           } else {
             requestAnimationFrame(animate);
           }
@@ -312,8 +377,17 @@ limitations under the License.
         animate();
       }
 
+      function closeOverlay() {
+        overlay.style.display = "none";
+        spinBtn.focus();
+      }
+
       spinBtn.addEventListener("click", triggerSpin);
       wheelContainer.addEventListener("click", triggerSpin);
+      closeBtn.addEventListener("click", closeOverlay);
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && overlay.style.display === "flex") closeOverlay();
+      });
     </script>
   </body>
 </html>

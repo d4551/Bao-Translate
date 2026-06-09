@@ -33,8 +33,9 @@ internal class ParticipantStateManager(
   fun refreshLocalRuntimeState(app: Application) {
     val currentDevice = audioRouter.detectCurrentDevice()
     val availableDevices = audioRouter.getAvailableOutputDevices()
-    val enrolled = voiceProfileManager.hasProfile()
-    val profile = voiceProfileManager.loadProfile()
+    val profileId = uiState.value.activeVoiceProfileId
+    val enrolled = voiceProfileManager.hasProfile(profileId)
+    val profile = voiceProfileManager.loadProfile(profileId)
 
     uiState.update { state ->
       val participant = Participant(

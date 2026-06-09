@@ -62,11 +62,12 @@ limitations under the License.
   </div>
 
   <script type="module">
-    // Using the .mjs bundle which is the current standard for MediaPipe Tasks
+    import { log } from '../../_shared/log.js';
+    import { fail } from '../../_shared/result.js';
     import {
       FaceLandmarker,
       FilesetResolver
-    } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs";
+    } from "./vendor/vision_bundle.mjs";
 
     let faceLandmarker;
     let rotationZ = 0;
@@ -83,12 +84,12 @@ limitations under the License.
       try {
         // Pointing to the WASM folder explicitly
         const filesetResolver = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm"
+          "./vendor/wasm"
         );
 
         faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
           baseOptions: {
-            modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
+            modelAssetPath: `./vendor/face_landmarker.task`,
             delegate: "CPU"
           },
           runningMode: "VIDEO",
@@ -109,7 +110,7 @@ limitations under the License.
 
       } catch (err) {
         statusDiv.innerText = "Init Error: " + err.message;
-        console.error(err);
+        fail('text-spinner.init', err);
       }
     }
 

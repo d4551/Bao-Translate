@@ -1,0 +1,7 @@
+{
+  "id": "create-calendar-event",
+  "version": "1.0.0",
+  "minHostVersion": "1.0.15",
+  "name": "Create Calendar Event",
+  "category": "built-in"
+}

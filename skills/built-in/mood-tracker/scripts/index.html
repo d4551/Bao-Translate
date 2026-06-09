@@ -19,7 +19,11 @@ limitations under the License.
 <!DOCTYPE html>
 <html lang="en">
 <body>
-  <script>
+  <script type="module">
+    import { log } from '../../_shared/log.js';
+    import { fail } from '../../_shared/result.js';
+    import { storage } from '../../_shared/storage.js';
+
     const STORAGE_KEY = 'mood_tracker_data';
 
     const toLocalISO = (d) => {
@@ -60,12 +64,12 @@ limitations under the License.
     }
 
     function getData() {
-      const data = localStorage.getItem(STORAGE_KEY);
+      const data = storage.get(STORAGE_KEY);
       return data ? JSON.parse(data) : {};
     }
 
     function saveData(data) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      storage.set(STORAGE_KEY, JSON.stringify(data));
     }
 
     window['ai_edge_gallery_get_result'] = async (dataStr) => {
@@ -120,7 +124,7 @@ limitations under the License.
         } else if (action === 'export_data') {
           resultMessage = `Here is your raw mood data for backup (Copy and save this JSON): \n\n${JSON.stringify(allData, null, 2)}`;
         } else if (action === 'wipe_data') {
-          localStorage.removeItem(STORAGE_KEY);
+          storage.remove(STORAGE_KEY);
           resultMessage = "All your mood history has been deleted. You can now start fresh!";
         } else {
           throw new Error(`Unknown action: ${action}`);
@@ -141,7 +145,7 @@ limitations under the License.
         return JSON.stringify(response);
 
       } catch (e) {
-        console.error(e);
+        fail('mood-tracker.topLevel', e);
         return JSON.stringify({ error: `Mood Tracker error: ${e.message}` });
       }
     };

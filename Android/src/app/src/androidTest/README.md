@@ -52,7 +52,7 @@ connected Android device or emulator and run via `./gradlew :app:connectedDebugA
 # All E2E tests (slow; requires a connected device)
 ./gradlew :app:connectedDebugAndroidTest
 
-# Smoke subset (faster)
+# Smoke subset (faster; runs only SmokeE2eTest, not the full E2E matrix)
 ./gradlew :app:smokeE2e
 
 # Single test

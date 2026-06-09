@@ -16,7 +16,8 @@ limitations under the License.
 ==============================================================================
 -->
 
-<script>
+<script type="module">
+  import { fail } from '../../_shared/result.js';
   window["ai_edge_gallery_get_result"] = async (data, secret) => {
     const apiKey = secret || "YOUR_API_KEY_HERE";
     try {
@@ -28,6 +29,7 @@ limitations under the License.
       // Feed the list directly back to the LLM
       return JSON.stringify({ available_genres: mappedGenres });
     } catch (e) {
+      fail('mood-music.genres', e);
       return JSON.stringify({ error: "Could not fetch genres." });
     }
   };

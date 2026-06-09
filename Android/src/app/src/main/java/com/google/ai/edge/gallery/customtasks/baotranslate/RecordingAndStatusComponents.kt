@@ -15,6 +15,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,14 +30,24 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.activity.compose.BackHandler
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -102,14 +113,12 @@ internal fun RecordingInfoColumn(
       color = MaterialTheme.customColors.recordButtonBgColor,
     )
 
-    if (elapsedSeconds > 0f) {
-      Text(
-        text = formatDuration(elapsedSeconds),
-        style = if (isTablet) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineMedium,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurface,
-      )
-    }
+    Text(
+      text = formatDuration(elapsedSeconds.coerceAtLeast(0f)),
+      style = if (isTablet) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineMedium,
+      fontWeight = FontWeight.SemiBold,
+      color = MaterialTheme.colorScheme.onSurface,
+    )
 
     WaveformRenderer(
       modifier = Modifier
@@ -146,6 +155,7 @@ internal fun RecordingInfoColumn(
   }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun RecordingOverlay(
   amplitudes: List<Float>,
@@ -153,6 +163,7 @@ internal fun RecordingOverlay(
   liveTranslationPreview: String?,
   isTablet: Boolean,
   modifier: Modifier = Modifier,
+  onCancel: (() -> Unit)? = null,
 ) {
   val reduceMotion = isReducedMotion
   val infiniteTransition = rememberInfiniteTransition(label = "recording_pulse")
@@ -180,37 +191,76 @@ internal fun RecordingOverlay(
   val listeningDescription = stringResource(R.string.bao_translate_listening)
   val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
+  // Handle back gesture / tap-outside to dismiss overlay when cancel is available.
+  BackHandler(enabled = onCancel != null) { onCancel?.invoke() }
+
   Box(
     modifier = modifier
       .background(MaterialTheme.colorScheme.background)
-      .semantics { liveRegion = LiveRegionMode.Polite; stateDescription = listeningDescription },
-    contentAlignment = Alignment.Center,
-  ) {
-    if (isLandscape) {
-      Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.large),
-      ) {
-        RecordingPulseCircle(pulseScale = pulseScale, pulseAlpha = pulseAlpha, isTablet = isTablet)
-        RecordingInfoColumn(
-          elapsedSeconds = elapsedSeconds,
-          isTablet = isTablet,
-          amplitudes = amplitudes,
-          liveTranslationPreview = liveTranslationPreview,
-        )
+      .pointerInput(onCancel) {
+        if (onCancel != null) {
+          detectTapGestures(onTap = { onCancel() })
+        }
       }
-    } else {
-      Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.large),
+      .semantics { liveRegion = LiveRegionMode.Polite; stateDescription = listeningDescription },
+  ) {
+    // Cancel button in top-right corner
+    if (onCancel != null) {
+      Box(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(top = Dimensions.Spacing.medium, end = Dimensions.Spacing.medium)
+          .align(Alignment.TopEnd),
       ) {
-        RecordingPulseCircle(pulseScale = pulseScale, pulseAlpha = pulseAlpha, isTablet = isTablet)
-        RecordingInfoColumn(
-          elapsedSeconds = elapsedSeconds,
-          isTablet = isTablet,
-          amplitudes = amplitudes,
-          liveTranslationPreview = liveTranslationPreview,
-        )
+        TooltipBox(
+          positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+          tooltip = { PlainTooltip { Text(stringResource(R.string.bao_translate_dismiss)) } },
+          state = rememberTooltipState(),
+        ) {
+          IconButton(
+            onClick = onCancel,
+            modifier = Modifier.minimumInteractiveComponentSize(),
+          ) {
+            Icon(
+              imageVector = Icons.Default.Close,
+              contentDescription = stringResource(R.string.bao_translate_dismiss),
+              tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          }
+        }
+      }
+    }
+
+    Box(
+      modifier = Modifier.fillMaxSize(),
+      contentAlignment = Alignment.Center,
+    ) {
+      if (isLandscape) {
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.large),
+        ) {
+          RecordingPulseCircle(pulseScale = pulseScale, pulseAlpha = pulseAlpha, isTablet = isTablet)
+          RecordingInfoColumn(
+            elapsedSeconds = elapsedSeconds,
+            isTablet = isTablet,
+            amplitudes = amplitudes,
+            liveTranslationPreview = liveTranslationPreview,
+          )
+        }
+      } else {
+        Column(
+          horizontalAlignment = Alignment.CenterHorizontally,
+          verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.large),
+        ) {
+          RecordingPulseCircle(pulseScale = pulseScale, pulseAlpha = pulseAlpha, isTablet = isTablet)
+          RecordingInfoColumn(
+            elapsedSeconds = elapsedSeconds,
+            isTablet = isTablet,
+            amplitudes = amplitudes,
+            liveTranslationPreview = liveTranslationPreview,
+          )
+        }
       }
     }
   }

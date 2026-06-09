@@ -10,11 +10,15 @@ import com.google.ai.edge.gallery.customtasks.baotranslate.data.VoiceProfileMana
 import com.google.ai.edge.gallery.customtasks.baotranslate.tts.KokoroTtsPipeline
 import com.google.ai.edge.gallery.customtasks.baotranslate.tts.OpenVoiceVoiceConverter
 import com.google.ai.edge.gallery.customtasks.baotranslate.tts.PlatformTtsPipeline
-import java.io.File
+import com.google.ai.edge.gallery.customtasks.baotranslate.tts.SupertonicTtsPipeline
+import com.google.ai.edge.gallery.customtasks.baotranslate.tts.TtsRouter
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-internal class PipelineLifecycleManager {
+internal class PipelineLifecycleManager(
+  private val voiceProfileManager: VoiceProfileManager? = null,
+  private val activeProfileId: () -> String = { VoiceProfileManager.DEFAULT_PROFILE_ID },
+) {
   val pipelineMutex = Mutex()
 
   @Volatile var whisperPipeline: WhisperPipeline? = null
@@ -23,7 +27,10 @@ internal class PipelineLifecycleManager {
   // Fallback TTS for languages Kokoro can't voice (de/ko/ru/ar/...). Lazily initializes the device
   // engine on first use; created alongside Kokoro so the synth path can route non-native languages.
   @Volatile var platformTts: PlatformTtsPipeline? = null
+  @Volatile var supertonicTts: SupertonicTtsPipeline? = null
   @Volatile var vadProcessor: VadProcessor? = null
+
+  fun ttsRouter(): TtsRouter = TtsRouter(kokoroTts, supertonicTts, platformTts)
 
   // OpenVoice cross-lingual clone: converts Kokoro output into the enrolled user's timbre.
   @Volatile var openVoiceConverter: OpenVoiceVoiceConverter? = null
@@ -40,17 +47,17 @@ internal class PipelineLifecycleManager {
       return
     }
     openVoiceConverter = conv
-    val vpm = VoiceProfileManager(app)
-    var se = vpm.loadSpeakerEmbedding()
+    val vpm = voiceProfileManager ?: VoiceProfileManager(app)
+    val profileId = activeProfileId()
+    var se = vpm.loadSpeakerEmbedding(profileId)
     if (se == null) {
       // Migrate: derive the embedding from an existing enrollment clip and cache it.
-      val profile = vpm.loadProfile()
-      if (profile != null) {
-        val bytes = File(profile.wavPath).takeIf { it.exists() }?.readBytes()
+      if (vpm.hasProfile(profileId)) {
+        val bytes = vpm.readWavBytes(profileId)
         if (bytes != null && WavUtils.isValidWav(bytes)) {
           val rate = WavUtils.extractSampleRateFromWav(bytes) ?: 16000
           se = conv.computeSpeakerEmbedding(WavUtils.extractSamplesFromWav(bytes), rate)
-            ?.also { vpm.saveSpeakerEmbedding(it) }
+            ?.also { vpm.saveSpeakerEmbedding(it, profileId) }
         }
       }
     }
@@ -97,6 +104,14 @@ internal class PipelineLifecycleManager {
     }
     platformTts = PlatformTtsPipeline(app)
 
+    val supertonicDir = modelManager.getSupertonicModelDir(app)
+    if (SupertonicTtsPipeline.isModelReady(supertonicDir)) {
+      val supertonic = SupertonicTtsPipeline(app)
+      if (supertonic.initialize(supertonicDir.absolutePath)) {
+        supertonicTts = supertonic
+      }
+    }
+
     val vad = VadProcessor(app)
     if (vad.initialize()) {
       vadProcessor = vad
@@ -142,6 +157,13 @@ internal class PipelineLifecycleManager {
           }
         }
         platformTts = PlatformTtsPipeline(app)
+        val supertonicDir = modelManager.getSupertonicModelDir(app)
+        if (SupertonicTtsPipeline.isModelReady(supertonicDir)) {
+          val supertonic = SupertonicTtsPipeline(app)
+          if (supertonic.initialize(supertonicDir.absolutePath)) {
+            supertonicTts = supertonic
+          }
+        }
         initOpenVoiceLocked(app)
       }
     }
@@ -162,6 +184,8 @@ internal class PipelineLifecycleManager {
     kokoroTts = null
     platformTts?.cleanup()
     platformTts = null
+    supertonicTts?.cleanup()
+    supertonicTts = null
     openVoiceConverter?.cleanup()
     openVoiceConverter = null
     openVoiceTargetSe = null
@@ -187,6 +211,8 @@ internal class PipelineLifecycleManager {
           kokoroTts = null
           platformTts?.cleanup()
           platformTts = null
+          supertonicTts?.cleanup()
+          supertonicTts = null
           openVoiceConverter?.cleanup()
           openVoiceConverter = null
         }

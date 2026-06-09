@@ -20,7 +20,10 @@ limitations under the License.
     <title>Query Wiki</title>
   </head>
   <body>
-    <script>
+    <script type="module">
+      import { log } from '../../_shared/log.js';
+      import { fail } from '../../_shared/result.js';
+
       /**
        * Performs a fuzzy search to get the intro, then fetches Section 0 HTML to parse the infobox.
        * @param {string} topic - The search keywords.
@@ -90,8 +93,8 @@ limitations under the License.
             }
           }
         } catch (e) {
-          console.warn("Failed to parse infobox:", e);
-          // If parsing fails, we just silently continue and return the extract
+          log.warn('query-wikipedia.infobox', e);
+          // If parsing fails, we just continue and return the extract
         }
         // Step 3: Combine Infobox and Extract
         let finalResult = "";
@@ -134,7 +137,7 @@ limitations under the License.
           const wikiResponse = await fetchWikiFuzzyAndInfobox(jsonData.topic, jsonData.lang);
           return JSON.stringify(wikiResponse);
         } catch (e) {
-          console.error(e);
+          fail('query-wikipedia.topLevel', e);
           return JSON.stringify({ error: `Failed to query Wikipedia: ${e.message}` });
         }
       };

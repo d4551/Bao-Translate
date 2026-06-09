@@ -44,9 +44,8 @@ registered via Hilt `@IntoSet` and runs standalone within the app shell.
 ```bash
 cd src
 
-# Use Android Studio's bundled JBR (JDK 21) — matches Gradle 8.10.2 / AGP 8.8.2.
-# The system JDK (26) breaks the Gradle build.
-export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+# Bleeding-edge toolchain: Gradle 9.4.1 + AGP 9.2 + built-in Kotlin on JDK 17–26.
+# JDK 26 (system default) is supported; compile bytecode targets Java 17.
 export PATH="$HOME/Library/Android/sdk/platform-tools:$PATH"
 
 ./gradlew :app:assembleDebug              # build the debug APK

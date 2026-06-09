@@ -297,7 +297,9 @@ limitations under the License.
 
     <audio id="audio-element"></audio>
 
-    <script>
+    <script type="module">
+      import { log } from '../../_shared/log.js';
+
       const params = new URLSearchParams(window.location.search);
       const audioUrl = params.get("url");
       const genre = params.get("genre") || "Ambient";
@@ -327,18 +329,24 @@ limitations under the License.
 
       playBtn.addEventListener("click", () => {
         if (audio.paused) {
-          audio
-            .play()
-            .then(() => {
-              player.classList.add("playing");
-              // Change icon to pause
-              playIconPath.setAttribute("d", "M6 19h4V5H6v14zm8-14v14h4V5h-4z");
-              statusText.textContent = "Now Playing";
-            })
-            .catch((e) => {
-              console.error("Playback failed", e);
-              statusText.textContent = "Playback Error (CORS or Invalid URL)";
-            });
+      audio
+        .play()
+        .then(() => {
+          player.classList.add("playing");
+          // Change icon to pause
+          playIconPath.setAttribute("d", "M6 19h4V5H6v14zm8-14v14h4V5h-4z");
+          statusText.textContent = "Now Playing";
+        })
+        .catch((e) => {
+          if (e.name === 'NotAllowedError') {
+            // Expected: browser blocked autoplay until a user gesture.
+            log.warn('mood-music.playback autoplay blocked', e);
+            statusText.textContent = "Tap play to start";
+          } else {
+            log.error('mood-music.playback', e);
+            statusText.textContent = "Playback Error (CORS or Invalid URL)";
+          }
+        });
         } else {
           audio.pause();
           player.classList.remove("playing");

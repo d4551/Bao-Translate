@@ -62,13 +62,18 @@ fun BaoTranslateSettingsSheet(
   sttModel: String,
   translationModel: String,
   wifiOnlyDownloads: Boolean,
+  autoAcceptDetectedLanguage: Boolean,
+  voiceProfiles: List<VoiceProfile>,
+  activeVoiceProfileId: String,
   storageBreakdown: Map<String, Long>,
   modelStatuses: Map<String, ModelStatus>,
   onSttModelChange: (String) -> Unit,
   onTranslationModelChange: (String) -> Unit,
   onWifiOnlyChange: (Boolean) -> Unit,
+  onAutoAcceptDetectedLanguageChange: (Boolean) -> Unit,
+  onSwitchVoiceProfile: (String) -> Unit,
   onReRecordVoice: () -> Unit,
-  onDeleteVoiceProfile: () -> Unit,
+  onDeleteVoiceProfile: (String) -> Unit,
   onDeleteModels: () -> Unit,
   onDownloadModel: (String) -> Unit,
   onDeleteModel: (String) -> Unit,
@@ -169,6 +174,43 @@ fun BaoTranslateSettingsSheet(
 
       Spacer(modifier = Modifier.height(Dimensions.Spacing.medium))
 
+      SectionHeader(stringResource(R.string.bao_translate_settings_language))
+
+      val autoAcceptSwitchCd = stringResource(R.string.cd_bao_translate_auto_accept_switch)
+      Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+          containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
+      ) {
+        Column(modifier = Modifier.padding(Dimensions.Spacing.medium)) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            Column(modifier = Modifier.weight(1f)) {
+              Text(
+                text = stringResource(R.string.bao_translate_auto_accept_detected_language),
+                style = MaterialTheme.typography.bodyMedium,
+              )
+              Text(
+                text = stringResource(R.string.bao_translate_auto_accept_detected_language_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+              )
+            }
+            Switch(
+              checked = autoAcceptDetectedLanguage,
+              onCheckedChange = onAutoAcceptDetectedLanguageChange,
+              modifier = Modifier.semantics { contentDescription = autoAcceptSwitchCd },
+            )
+          }
+        }
+      }
+
+      Spacer(modifier = Modifier.height(Dimensions.Spacing.medium))
+
       SectionHeader(stringResource(R.string.bao_translate_settings_models))
 
       Card(
@@ -236,7 +278,7 @@ fun BaoTranslateSettingsSheet(
                 style = MaterialTheme.typography.bodyMedium,
               )
               Text(
-                text = if (voiceProfile != null) {
+                text = if (voiceProfiles.isNotEmpty()) {
                   stringResource(R.string.bao_translate_voice_profile_saved)
                 } else {
                   stringResource(R.string.bao_translate_voice_profile_empty)
@@ -246,25 +288,63 @@ fun BaoTranslateSettingsSheet(
               )
             }
 
+            if (voiceProfiles.isNotEmpty()) {
+              Text(
+                text = stringResource(R.string.bao_translate_voice_profiles_title),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
+              )
+              voiceProfiles.forEach { profile ->
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.SpaceBetween,
+                  verticalAlignment = Alignment.CenterVertically,
+                ) {
+                  Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                      text = stringResource(
+                        R.string.bao_translate_voice_profile_chip_format,
+                        profile.name,
+                        profile.durationSec,
+                      ),
+                      style = MaterialTheme.typography.bodyMedium,
+                    )
+                    if (profile.id == activeVoiceProfileId) {
+                      Text(
+                        text = stringResource(R.string.bao_translate_voice_profile_active),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                      )
+                    }
+                  }
+                  Row {
+                    if (profile.id != activeVoiceProfileId) {
+                      TextButton(onClick = { onSwitchVoiceProfile(profile.id) }) {
+                        Text(stringResource(R.string.bao_translate_switch_voice_profile))
+                      }
+                    }
+                    TextButton(onClick = { onDeleteVoiceProfile(profile.id) }) {
+                      Text(stringResource(R.string.bao_translate_unenroll_voice))
+                    }
+                  }
+                }
+              }
+            }
+
             Row(
               modifier = Modifier.fillMaxWidth(),
               horizontalArrangement = Arrangement.End,
             ) {
-              if (voiceProfile != null) {
-                TextButton(onClick = onDeleteVoiceProfile) {
-                  Text(stringResource(R.string.bao_translate_unenroll_voice))
-                }
-              }
               TextButton(
                 onClick = onReRecordVoice,
                 modifier = Modifier.semantics {
-                  if (voiceProfile == null) {
+                  if (voiceProfiles.isEmpty()) {
                     contentDescription = settingsEnrollVoiceContentDescription
                   }
                 },
               ) {
                 Text(
-                  if (voiceProfile != null) {
+                  if (voiceProfiles.isNotEmpty()) {
                     stringResource(R.string.bao_translate_re_record_voice)
                   } else {
                     stringResource(R.string.bao_translate_enroll_voice)

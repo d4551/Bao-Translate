@@ -93,6 +93,7 @@ data class BaoTranslateStoredSettings(
   val sourceLanguage: String,
   val targetLanguage: String,
   val wifiOnlyDownloads: Boolean,
+  val autoAcceptDetectedLanguage: Boolean = false,
 )
 
 /** Repository for managing data using Proto DataStore. */
@@ -312,6 +313,7 @@ class DefaultDataStoreRepository(
         .setBaoTranslateSourceLanguage(settings.sourceLanguage)
         .setBaoTranslateTargetLanguage(settings.targetLanguage)
         .setBaoTranslateWifiOnlyDownloads(settings.wifiOnlyDownloads)
+        .setBaoTranslateAutoAcceptDetectedLanguage(settings.autoAcceptDetectedLanguage)
         .setBaoTranslateSettingsInitialized(true)
         .build()
     }
@@ -328,6 +330,7 @@ class DefaultDataStoreRepository(
           sourceLanguage = s.baoTranslateSourceLanguage,
           targetLanguage = s.baoTranslateTargetLanguage,
           wifiOnlyDownloads = s.baoTranslateWifiOnlyDownloads,
+          autoAcceptDetectedLanguage = s.baoTranslateAutoAcceptDetectedLanguage,
         )
       }
     }

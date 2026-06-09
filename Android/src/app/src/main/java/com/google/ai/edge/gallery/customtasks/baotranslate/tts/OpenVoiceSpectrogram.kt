@@ -30,6 +30,7 @@ object OpenVoiceSpectrogram {
     // frames rather than failing the reflect-pad precondition. (A non-empty but too-short signal,
     // 1..pad samples, still throws from reflectPad — that is a caller error, not "nothing to do".)
     if (samples.isEmpty()) return Array(FREQ_BINS) { FloatArray(0) }
+    require(samples.all { it.isFinite() }) { "Spectrogram input contains non-finite values (NaN/Inf)" }
     val pad = (N_FFT - HOP) / 2 // 384
     val padded = reflectPad(samples, pad)
     val frames = if (padded.size < N_FFT) 0 else 1 + (padded.size - N_FFT) / HOP

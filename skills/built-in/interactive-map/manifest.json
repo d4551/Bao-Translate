@@ -1,0 +1,7 @@
+{
+  "id": "interactive-map",
+  "version": "1.0.0",
+  "minHostVersion": "1.0.15",
+  "name": "Interactive Map",
+  "category": "built-in"
+}

@@ -1,0 +1,7 @@
+{
+  "id": "virtual-piano",
+  "version": "1.1.0",
+  "minHostVersion": "1.0.15",
+  "name": "Virtual Piano",
+  "category": "featured"
+}

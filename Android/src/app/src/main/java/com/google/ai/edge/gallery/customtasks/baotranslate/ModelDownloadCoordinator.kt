@@ -12,6 +12,20 @@ import kotlinx.coroutines.launch
 
 private const val ALL_DOWNLOADS = "__all_downloads__"
 
+/** How to refresh runtime pipelines after a model download completes. */
+internal enum class PostDownloadInit { TtsOnly, FullPipelines }
+
+internal fun postDownloadInitAction(
+  modelId: String,
+  requiredModelsReady: Boolean,
+  pipelinesReady: Boolean,
+): PostDownloadInit =
+  if (modelId == "supertonic_tts" && requiredModelsReady && pipelinesReady) {
+    PostDownloadInit.TtsOnly
+  } else {
+    PostDownloadInit.FullPipelines
+  }
+
 internal class ModelDownloadCoordinator(
   private val pipelines: PipelineLifecycleManager,
   private val modelManager: BaoTranslateModelManager,
@@ -22,6 +36,7 @@ internal class ModelDownloadCoordinator(
   // Resolves the translation model to one whose files are actually present (falling back + persisting
   // when the selected model was deleted), so a post-download init never targets a missing model.
   private val resolveTranslationModel: (Application) -> String,
+  private val reinitializePipeline: (String) -> Unit,
 ) {
   // Maps an in-flight download id (a model id, or ALL_DOWNLOADS) to its Job. A delete cancels and
   // awaits the relevant job(s) before touching files, so a delete can never race a live writer
@@ -74,7 +89,7 @@ internal class ModelDownloadCoordinator(
       result.fold(
         onSuccess = {
           uiState.update { it.copy(storageBreakdown = modelManager.getStorageBreakdown(app)) }
-          initializeIfRequiredDownloadsReady(app)
+          onDownloadSuccess(app, modelId)
         },
         onFailure = { error ->
           val message = error.message ?: app.getString(R.string.bao_translate_error_download_unknown)
@@ -100,7 +115,7 @@ internal class ModelDownloadCoordinator(
       result.fold(
         onSuccess = {
           uiState.update { it.copy(storageBreakdown = modelManager.getStorageBreakdown(app)) }
-          initializeIfRequiredDownloadsReady(app)
+          onDownloadSuccess(app, ALL_DOWNLOADS)
         },
         onFailure = { error ->
           uiState.update { it.copy(
@@ -110,6 +125,26 @@ internal class ModelDownloadCoordinator(
           ) }
         },
       )
+    }
+  }
+
+  private suspend fun onDownloadSuccess(app: Application, modelId: String) {
+    when (
+      postDownloadInitAction(
+        modelId = modelId,
+        requiredModelsReady = modelManager.areRequiredModelsReady(app),
+        pipelinesReady = pipelines.requiredPipelinesReady(),
+      )
+    ) {
+      PostDownloadInit.TtsOnly -> {
+        reinitializePipeline("tts")
+        uiState.update { it.copy(
+          modelsReady = true,
+          pipelineStatus = PipelineStatus.Idle,
+          errorMessage = null,
+        ) }
+      }
+      PostDownloadInit.FullPipelines -> initializeIfRequiredDownloadsReady(app)
     }
   }
 

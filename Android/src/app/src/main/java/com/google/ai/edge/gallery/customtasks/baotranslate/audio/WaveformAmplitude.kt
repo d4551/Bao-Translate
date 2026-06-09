@@ -24,11 +24,12 @@ const val WAVEFORM_HISTORY = 50
  */
 fun waveformAmplitude(buffer: ShortArray, count: Int): Float {
   if (count <= 0) return 0f
+  val effectiveCount = count.coerceAtMost(buffer.size)
   var sumSquares = 0L
-  for (i in 0 until count) {
+  for (i in 0 until effectiveCount) {
     val sample = buffer[i].toLong()
     sumSquares += sample * sample
   }
-  val rms = sqrt(sumSquares.toDouble() / count) / 32768.0
+  val rms = sqrt(sumSquares.toDouble() / effectiveCount) / 32768.0
   return (sqrt(rms).toFloat() * WAVEFORM_VISUAL_GAIN).coerceIn(0f, 1f)
 }

@@ -61,6 +61,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FabPosition
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -78,6 +79,7 @@ import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -100,6 +102,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.google.ai.edge.gallery.R
@@ -120,7 +123,7 @@ import com.google.ai.edge.gallery.ui.theme.isReducedMotion
 fun BaoTranslateScreen(
   viewModel: BaoTranslateViewModel = hiltViewModel(),
 ) {
-  val uiState by viewModel.uiState.collectAsState()
+  val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   val windowInfo = LocalWindowInfo.current
   val density = androidx.compose.ui.platform.LocalDensity.current
   val isTablet = with(density) { windowInfo.containerSize.width.toDp() > Dimensions.Breakpoint.tablet }
@@ -148,10 +151,19 @@ fun BaoTranslateScreen(
   val defaultVoiceName = stringResource(R.string.bao_translate_default_voice_name)
   val micPermissionDenied = stringResource(R.string.bao_translate_permission_mic_denied)
   val bluetoothPermissionDenied = stringResource(R.string.bao_translate_permission_nearby_denied)
-  val voiceProfile = remember(defaultVoiceName, uiState.voiceProfileEnrolled, uiState.voiceProfilePath) {
-    if (uiState.voiceProfileEnrolled && uiState.voiceProfilePath != null) {
-      uiState.voiceProfilePath?.let { VoiceProfile(name = defaultVoiceName, wavPath = it) }
-    } else null
+  val voiceProfile = remember(
+    uiState.activeVoiceProfileId,
+    uiState.voiceProfiles,
+    uiState.voiceProfileEnrolled,
+    uiState.voiceProfilePath,
+    defaultVoiceName,
+  ) {
+    uiState.voiceProfiles.find { it.id == uiState.activeVoiceProfileId }
+      ?: if (uiState.voiceProfileEnrolled && uiState.voiceProfilePath != null) {
+        VoiceProfile(name = defaultVoiceName, wavPath = uiState.voiceProfilePath!!)
+      } else {
+        null
+      }
   }
 
   LaunchedEffect(Unit) { viewModel.initializeModels() }
@@ -223,6 +235,16 @@ fun BaoTranslateScreen(
     }
   }
 
+  // Hands-free face-to-face: listening starts on mode entry with no tap. Entering the mode kicks
+  // off an STT re-init (auto-detect), so wait for the pipeline to settle back to Idle with models
+  // ready, then arm the mic exactly once per entry — a deliberate user stop afterwards is
+  // respected because this effect has already completed.
+  LaunchedEffect(showFaceToFace) {
+    if (!showFaceToFace) return@LaunchedEffect
+    viewModel.uiState.first { it.modelsReady && it.pipelineStatus == PipelineStatus.Idle }
+    startRecordingWithPermission()
+  }
+
   if (showSettings) {
     BaoTranslateSettingsSheet(
       onDismiss = { showSettings = false },
@@ -232,11 +254,16 @@ fun BaoTranslateScreen(
       sttModel = uiState.sttModel,
       translationModel = uiState.translationModel,
       wifiOnlyDownloads = uiState.wifiOnlyDownloads,
+      autoAcceptDetectedLanguage = uiState.autoAcceptDetectedLanguage,
+      voiceProfiles = uiState.voiceProfiles,
+      activeVoiceProfileId = uiState.activeVoiceProfileId,
       storageBreakdown = uiState.storageBreakdown,
       modelStatuses = uiState.modelStatuses,
       onSttModelChange = viewModel::setSttModel,
       onTranslationModelChange = viewModel::setTranslationModel,
       onWifiOnlyChange = viewModel::setWifiOnly,
+      onAutoAcceptDetectedLanguageChange = viewModel::setAutoAcceptDetectedLanguage,
+      onSwitchVoiceProfile = viewModel::switchVoiceProfile,
       onReRecordVoice = { showSettings = false; showEnrollment = true; enrollmentState = EnrollmentState.READY },
       onDeleteVoiceProfile = viewModel::deleteVoiceProfile,
       onDeleteModels = { viewModel.deleteAllModels(); showSettings = false },
@@ -254,7 +281,9 @@ fun BaoTranslateScreen(
   if (showEnrollment) {
     VoiceEnrollmentSheet(
       onDismiss = { showEnrollment = false; enrollmentState = EnrollmentState.READY },
-      onEnrollComplete = { samples, sampleRate -> viewModel.startEnrollmentRecording(samples, sampleRate) },
+      onEnrollComplete = { samples, sampleRate, name ->
+        viewModel.startEnrollmentRecording(samples, sampleRate, name)
+      },
       enrollmentState = enrollmentState,
       onEnrollmentStateChange = { enrollmentState = it },
       sourceLanguage = uiState.sourceLanguage,
@@ -293,6 +322,7 @@ fun BaoTranslateScreen(
   }
 
   Scaffold(
+    floatingActionButtonPosition = if (showFaceToFace) FabPosition.Center else FabPosition.End,
     topBar = {
       TopAppBar(
         title = {
@@ -319,7 +349,7 @@ fun BaoTranslateScreen(
             val conversationTooltipState = rememberTooltipState(isPersistent = true)
             val conversationTooltipScope = rememberCoroutineScope()
             TooltipBox(
-              positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+              positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
               tooltip = { PlainTooltip { Text(stringResource(R.string.bao_translate_tooltip_conversation)) } },
               state = conversationTooltipState,
             ) {
@@ -383,7 +413,12 @@ fun BaoTranslateScreen(
       )
     },
     floatingActionButton = {
-      if (!showConversationMode && !showFaceToFace && uiState.modelsReady) {
+      // No FAB in face-to-face: each rotated panel owns its ConversationTurnControl, which is the
+      // single start/stop affordance readable from both sides of the table.
+      val showFab = uiState.modelsReady && !showFaceToFace && (
+        !showConversationMode || connectionState == ConnectionState.CONNECTED
+      )
+      if (showFab) {
         val startDesc = stringResource(R.string.cd_bao_translate_start)
         val stopDesc = stringResource(R.string.cd_bao_translate_stop)
         val canUseMic = uiState.modelsReady &&
@@ -396,7 +431,7 @@ fun BaoTranslateScreen(
         val tooltipState = rememberTooltipState(isPersistent = true)
         val tooltipScope = rememberCoroutineScope()
         TooltipBox(
-          positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+          positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
           tooltip = { PlainTooltip { Text(stringResource(R.string.bao_translate_tooltip_record)) } },
           state = tooltipState,
         ) {
@@ -461,6 +496,24 @@ fun BaoTranslateScreen(
           },
           modifier = Modifier.fillMaxWidth().padding(vertical = Dimensions.Spacing.xs),
         )
+
+        // Conversation mode badge: persistent indicator when face-to-face or BLE is active
+        if (showFaceToFace || connectionState == ConnectionState.CONNECTED) {
+          ConversationModeBadge(
+            isFaceToFace = showFaceToFace,
+            connectedCount = participants.count { it.isConnected },
+            onExit = {
+              if (showFaceToFace) {
+                showFaceToFace = false
+                viewModel.setFaceToFaceMode(false)
+              } else {
+                viewModel.leaveConversation()
+              }
+            },
+            modifier = Modifier.fillMaxWidth().padding(vertical = Dimensions.Spacing.xs),
+          )
+        }
+
         uiState.errorMessage?.let { error ->
           ErrorCard(
             message = error,
@@ -516,6 +569,8 @@ fun BaoTranslateScreen(
               if (uiState.isRecording || uiState.isStartingRecording) viewModel.stopRecording()
               else startRecordingWithPermission()
             },
+            onPlayAudio = { message -> viewModel.replayAudio(message) },
+            replayMessageId = uiState.replayMessageId,
             modifier = Modifier.weight(1f).fillMaxWidth(),
             isTablet = isTablet,
           )
@@ -537,22 +592,38 @@ fun BaoTranslateScreen(
             onSwapLanguages = viewModel::swapLanguages,
             detectedLanguage = uiState.detectedLanguage,
             voiceProfileEnrolled = uiState.voiceProfileEnrolled,
+            activeVoiceProfileId = uiState.activeVoiceProfileId,
+            voiceProfiles = uiState.voiceProfiles,
+            onSwitchVoiceProfile = viewModel::switchVoiceProfile,
             onEnrollVoice = { showEnrollment = true; enrollmentState = EnrollmentState.READY },
             isTablet = isTablet,
           )
 
-          TranscriptList(transcripts = uiState.transcripts, modifier = Modifier.weight(1f).fillMaxWidth(), listState = listState, isTablet = isTablet)
+          TranscriptList(
+            transcripts = uiState.transcripts,
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            listState = listState,
+            isTablet = isTablet,
+            replayMessageId = uiState.replayMessageId,
+            onPlayAudio = { message -> viewModel.replayAudio(message) },
+            sourceLanguage = uiState.sourceLanguage,
+            targetLanguage = uiState.targetLanguage,
+          )
           StatusBar(isProcessing = uiState.isProcessing, isSpeaking = uiState.isSpeaking, isTablet = isTablet)
         }
       }
 
-      if (uiState.isRecording) {
+      // The full-screen overlay belongs to the one-shot push-to-talk flow. Face-to-face is a
+      // hands-free continuous session: the dual transcript panels must stay visible while
+      // listening, with the turn state surfaced inline by ConversationTurnControl.
+      if ((uiState.isRecording || uiState.isStartingRecording) && !showFaceToFace) {
         RecordingOverlay(
           amplitudes = uiState.amplitudes,
           elapsedSeconds = uiState.elapsedSeconds,
           liveTranslationPreview = uiState.liveTranslationPreview,
           isTablet = isTablet,
           modifier = Modifier.fillMaxSize(),
+          onCancel = { viewModel.cancelRecording() },
         )
       }
     }

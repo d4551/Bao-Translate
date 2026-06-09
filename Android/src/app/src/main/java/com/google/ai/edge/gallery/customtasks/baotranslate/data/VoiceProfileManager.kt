@@ -2,25 +2,29 @@ package com.google.ai.edge.gallery.customtasks.baotranslate.data
 
 import android.content.Context
 import com.google.ai.edge.gallery.R
+import com.google.ai.edge.gallery.common.BaoLog
+import com.google.ai.edge.gallery.customtasks.baotranslate.audio.EncryptedBlobStore
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.WavUtils
 import java.io.File
 
 private const val PROFILES_DIR = "voice_profiles"
 private const val DEFAULT_PROFILE_ID = "default"
 private const val MAX_VOICE_BYTES = 10 * 1024 * 1024 // 10MB
+private const val WAV_SUFFIX = ".wav"
+private const val SE_SUFFIX = ".se"
+private const val META_SUFFIX = ".meta"
 
 /**
  * Manages voice profile storage for BaoTranslate voice cloning.
  *
- * **Security Notice:** Voice data is biometric data under GDPR (Article 9) and BIPA.
- * Files are stored in the app's private internal storage directory, protected by the
- * Android application sandbox. On rooted or compromised devices, this data may be
- * accessible to other processes. Future hardening should consider Android Keystore
- * with AES-256-GCM encryption at rest.
+ * When [encryptedStore] is provided, WAV clips, speaker embeddings (.se), and display metadata are
+ * stored with AES-256-GCM via Android Keystore ([EncryptedBlobStore] / androidx.security-crypto 1.1.0).
+ * Plaintext files in [profilesDir] are migrated once on first access.
  */
 class VoiceProfileManager(
   private val context: Context,
   private val rootFilesDir: File = context.filesDir,
+  private val encryptedStore: EncryptedBlobStore? = null,
   private val defaultVoiceNameProvider: () -> String = {
     context.getString(R.string.bao_translate_default_voice_name)
   },
@@ -29,31 +33,29 @@ class VoiceProfileManager(
     File(rootFilesDir, PROFILES_DIR).also { it.mkdirs() }
   }
 
-  /**
-   * Resolves a child file inside [profilesDir] for an untrusted [profileId].
-   *
-   * Profile ids originate from user / voice-enrollment input and must never be allowed to
-   * escape the profiles directory via path traversal. Every character that could introduce a
-   * new path segment is neutralised: the directory separators `/` and `\`, and the null byte
-   * (which can truncate paths on some platforms). After neutralisation the id is a single
-   * filename segment, so a leftover `..` (e.g. from `../etc/passwd` collapsing to
-   * `.._etc_passwd`) is just a literal filename and cannot traverse upward. A final
-   * canonical-path containment check guarantees the resolved file's parent is exactly
-   * [profilesDir] before the handle is returned, defending against any platform-specific edge
-   * case.
-   */
+  private val useEncryption: Boolean get() = encryptedStore != null
+
+  private val prosodyCache = java.util.concurrent.ConcurrentHashMap<String, VoiceProsody>()
+
+  init {
+    if (useEncryption) migratePlaintextProfilesIfNeeded()
+  }
+
   private fun profileFile(profileId: String, extension: String): File {
-    val safeId = buildString(profileId.length) {
-      for (ch in profileId) {
-        append(if (ch == '/' || ch == '\\' || ch == '\u0000') '_' else ch)
-      }
-    }
+    val safeId = sanitizeProfileId(profileId)
     val file = File(profilesDir, "$safeId.$extension")
     require(file.canonicalFile.parentFile == profilesDir.canonicalFile) {
       "Voice profile id '$profileId' resolves outside the profiles directory"
     }
     return file
   }
+
+  private fun wavKey(profileId: String) = "${sanitizeProfileId(profileId)}$WAV_SUFFIX"
+  private fun seKey(profileId: String) = "${sanitizeProfileId(profileId)}$SE_SUFFIX"
+  private fun metaKey(profileId: String) = "${sanitizeProfileId(profileId)}$META_SUFFIX"
+
+  private fun logicalWavPath(profileId: String): String =
+    if (useEncryption) "enc://$profileId" else profileFile(profileId, "wav").absolutePath
 
   fun saveVoice(name: String, wavData: ByteArray): VoiceProfile {
     require(wavData.size <= MAX_VOICE_BYTES) {
@@ -64,81 +66,295 @@ class VoiceProfileManager(
       wavPath = "",
       durationSec = WavUtils.computeDurationSec(wavData),
     )
-
-    val wavFile = profileFile(profile.id, "wav")
-    wavFile.writeBytes(wavData)
-
-    return profile.copy(wavPath = wavFile.absolutePath)
+    writeWavBytes(profile.id, wavData)
+    writeMeta(profile.id, name, profile.durationSec)
+    return profile.copy(wavPath = logicalWavPath(profile.id))
   }
 
-  fun saveProfile(audioPcm: ShortArray, sampleRate: Int, profileId: String = DEFAULT_PROFILE_ID): VoiceProfile {
-    val wavFile = profileFile(profileId, "wav")
-    writeWavFile(wavFile, audioPcm, sampleRate)
+  fun saveProfile(
+    audioPcm: ShortArray,
+    sampleRate: Int,
+    profileId: String = DEFAULT_PROFILE_ID,
+    displayName: String? = null,
+  ): VoiceProfile {
+    val safeId = sanitizeProfileId(profileId)
+    val name = displayName?.takeIf { it.isNotBlank() } ?: defaultVoiceNameProvider()
+    val wavBytes = buildWavBytes(audioPcm, sampleRate)
+    writeWavBytes(safeId, wavBytes)
 
     val durationSec = audioPcm.size.toFloat() / sampleRate
+    val prosody = extractProsody(audioPcm, sampleRate)
+    prosodyCache[safeId] = prosody
+    writeMeta(safeId, name, durationSec)
+
     return VoiceProfile(
-      id = profileId,
-      name = defaultVoiceNameProvider(),
-      wavPath = wavFile.absolutePath,
+      id = safeId,
+      name = name,
+      wavPath = logicalWavPath(safeId),
       durationSec = durationSec,
+      prosody = prosody,
     )
   }
 
-  fun hasProfile(profileId: String = DEFAULT_PROFILE_ID): Boolean {
-    return profileFile(profileId, "wav").exists()
+  fun hasProfile(profileId: String = DEFAULT_PROFILE_ID): Boolean = wavExists(sanitizeProfileId(profileId))
+
+  fun readWavBytes(profileId: String = DEFAULT_PROFILE_ID): ByteArray? {
+    val id = sanitizeProfileId(profileId)
+    return readWavBytesInternal(id)
   }
 
   fun loadProfile(profileId: String = DEFAULT_PROFILE_ID): VoiceProfile? {
-    val wavFile = profileFile(profileId, "wav")
-    if (!wavFile.exists()) return null
+    val id = sanitizeProfileId(profileId)
+    if (!wavExists(id)) return null
+
+    val meta = readMeta(id)
+    val prosody = prosodyCache[id] ?: run {
+      try {
+        val bytes = readWavBytesInternal(id) ?: return null
+        if (WavUtils.isValidWav(bytes)) {
+          val rate = WavUtils.extractSampleRateFromWav(bytes) ?: 16000
+          val pcmSamples = WavUtils.extractSamplesFromWav(bytes)
+          val shortPcm = ShortArray(pcmSamples.size) {
+            (pcmSamples[it] * 32768f).toInt().coerceIn(-32768, 32767).toShort()
+          }
+          extractProsody(shortPcm, rate).also { prosodyCache[id] = it }
+        } else null
+      } catch (e: java.io.IOException) {
+        BaoLog.w(TAG, "Failed to extract prosody for profile '$id': ${e.message}")
+        null
+      }
+    }
+
+    val durationSec = meta?.durationSec ?: readWavBytesInternal(id)?.let { WavUtils.computeDurationSec(it) } ?: 0f
 
     return VoiceProfile(
-      id = profileId,
-      name = defaultVoiceNameProvider(),
-      wavPath = wavFile.absolutePath,
-      durationSec = WavUtils.computeDurationSecFromHeader(wavFile),
+      id = id,
+      name = meta?.name ?: id,
+      wavPath = logicalWavPath(id),
+      durationSec = durationSec,
+      prosody = prosody,
     )
   }
 
   fun deleteVoice(profileId: String): Boolean {
-    return profileFile(profileId, "wav").delete()
+    val id = sanitizeProfileId(profileId)
+    val existed = wavExists(id)
+    deleteProfile(id)
+    return existed
   }
 
-  fun deleteProfile(profileId: String = DEFAULT_PROFILE_ID) {
-    profileFile(profileId, "wav").delete()
-    profileFile(profileId, "se").delete()
+  fun deleteProfile(profileId: String = DEFAULT_PROFILE_ID): Boolean {
+    val id = sanitizeProfileId(profileId)
+    val existed = if (useEncryption) {
+      encryptedStore?.exists(wavKey(id)) == true
+    } else {
+      profileFile(id, "wav").exists()
+    }
+    if (useEncryption) {
+      encryptedStore?.delete(wavKey(id))
+      encryptedStore?.delete(seKey(id))
+      encryptedStore?.delete(metaKey(id))
+    } else {
+      profileFile(id, "wav").delete()
+      profileFile(id, "se").delete()
+      profileFile(id, "meta").delete()
+    }
+    prosodyCache.remove(id)
+    return existed
   }
 
-  /** Persists the OpenVoice speaker embedding (256 floats) derived from the enrollment clip. */
   fun saveSpeakerEmbedding(embedding: FloatArray, profileId: String = DEFAULT_PROFILE_ID) {
+    val id = sanitizeProfileId(profileId)
     val buf = java.nio.ByteBuffer.allocate(embedding.size * 4).order(java.nio.ByteOrder.LITTLE_ENDIAN)
     embedding.forEach { buf.putFloat(it) }
-    profileFile(profileId, "se").writeBytes(buf.array())
+    val bytes = buf.array()
+    if (useEncryption) {
+      encryptedStore?.write(seKey(id), bytes)
+    } else {
+      profileFile(id, "se").writeBytes(bytes)
+    }
   }
 
   fun loadSpeakerEmbedding(profileId: String = DEFAULT_PROFILE_ID): FloatArray? {
-    val file = profileFile(profileId, "se")
-    if (!file.exists()) return null
-    val bytes = file.readBytes()
+    val id = sanitizeProfileId(profileId)
+    val bytes = if (useEncryption) {
+      encryptedStore?.read(seKey(id))
+    } else {
+      profileFile(id, "se").takeIf { it.exists() }?.readBytes()
+    } ?: return null
     val buf = java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN)
     return FloatArray(bytes.size / 4) { buf.getFloat() }
   }
 
-  fun getVoicePath(profileId: String): String? {
-    val wavFile = profileFile(profileId, "wav")
-    return wavFile.takeIf { it.exists() }?.absolutePath
-  }
+  fun getVoicePath(profileId: String): String? =
+    logicalWavPath(sanitizeProfileId(profileId)).takeIf { wavExists(sanitizeProfileId(profileId)) }
 
   fun listProfiles(): List<VoiceProfile> {
-    val files = profilesDir.listFiles { file -> file.extension == "wav" } ?: return emptyList()
-    return files.map { file ->
-      VoiceProfile(
-        id = file.nameWithoutExtension,
-        name = file.nameWithoutExtension,
-        wavPath = file.absolutePath,
-        durationSec = WavUtils.computeDurationSecFromHeader(file),
-      )
+    val ids = if (useEncryption) {
+      encryptedStore?.listIdsWithSuffix(WAV_SUFFIX) ?: emptyList()
+    } else {
+      profilesDir.listFiles { file -> file.extension == "wav" }?.map { it.nameWithoutExtension } ?: emptyList()
     }
+    return ids.mapNotNull { loadProfile(it) }
+  }
+
+  fun loadProsody(profileId: String = DEFAULT_PROFILE_ID): VoiceProsody? = loadProfile(profileId)?.prosody
+
+  private fun wavExists(profileId: String): Boolean =
+    if (useEncryption) encryptedStore?.exists(wavKey(profileId)) == true
+    else profileFile(profileId, "wav").exists()
+
+  private fun readWavBytesInternal(profileId: String): ByteArray? =
+    if (useEncryption) encryptedStore?.read(wavKey(profileId))
+    else profileFile(profileId, "wav").takeIf { it.exists() }?.readBytes()
+
+  private fun writeWavBytes(profileId: String, bytes: ByteArray) {
+    if (useEncryption) {
+      encryptedStore?.write(wavKey(profileId), bytes)
+      profileFile(profileId, "wav").delete()
+    } else {
+      profileFile(profileId, "wav").writeBytes(bytes)
+    }
+  }
+
+  private data class ProfileMeta(val name: String, val durationSec: Float)
+
+  private fun writeMeta(profileId: String, name: String, durationSec: Float) {
+    val payload = "$name\n$durationSec".toByteArray(Charsets.UTF_8)
+    if (useEncryption) {
+      encryptedStore?.write(metaKey(profileId), payload)
+    } else {
+      profileFile(profileId, "meta").writeBytes(payload)
+    }
+  }
+
+  private fun readMeta(profileId: String): ProfileMeta? {
+    val bytes = if (useEncryption) {
+      encryptedStore?.read(metaKey(profileId))
+    } else {
+      profileFile(profileId, "meta").takeIf { it.exists() }?.readBytes()
+    } ?: return null
+    val text = bytes.toString(Charsets.UTF_8)
+    val lines = text.lines()
+    if (lines.isEmpty()) return null
+    val name = lines[0]
+    val duration = lines.getOrNull(1)?.toFloatOrNull() ?: 0f
+    return ProfileMeta(name, duration)
+  }
+
+  private fun migratePlaintextProfilesIfNeeded() {
+    val store = encryptedStore ?: return
+    profilesDir.listFiles { f -> f.extension == "wav" }?.forEach { wavFile ->
+      val id = wavFile.nameWithoutExtension
+      if (!store.exists(wavKey(id))) {
+        runCatching { store.write(wavKey(id), wavFile.readBytes()) }
+          .onFailure { BaoLog.w(TAG, "Failed to migrate wav for '$id': ${it.message}") }
+      }
+      profileFile(id, "se").takeIf { it.exists() }?.let { seFile ->
+        if (!store.exists(seKey(id))) {
+          runCatching { store.write(seKey(id), seFile.readBytes()) }
+        }
+        seFile.delete()
+      }
+      wavFile.delete()
+    }
+  }
+
+  private fun buildWavBytes(samples: ShortArray, sampleRate: Int): ByteArray {
+    val temp = File.createTempFile("profile_", ".wav", profilesDir)
+    try {
+      writeWavFile(temp, samples, sampleRate)
+      return temp.readBytes()
+    } finally {
+      temp.delete()
+    }
+  }
+
+  private fun extractProsody(audioPcm: ShortArray, sampleRate: Int): VoiceProsody {
+    if (audioPcm.isEmpty() || sampleRate <= 0) return VoiceProsody()
+
+    val samples = FloatArray(audioPcm.size) { audioPcm[it].toFloat() / 32768f }
+
+    val windowSamples = (sampleRate * 0.03f).toInt().coerceAtLeast(1)
+    val hopSamples = windowSamples / 2
+    val energies = mutableListOf<Float>()
+    var offset = 0
+    while (offset + windowSamples <= samples.size) {
+      var sumSq = 0f
+      for (i in offset until offset + windowSamples) {
+        sumSq += samples[i] * samples[i]
+      }
+      energies.add(kotlin.math.sqrt(sumSq / windowSamples))
+      offset += hopSamples
+    }
+
+    val medianEnergy = if (energies.isNotEmpty()) {
+      val sorted = energies.sorted()
+      sorted[sorted.size / 2]
+    } else 0f
+
+    var peakCount = 0
+    for (i in 1 until energies.size - 1) {
+      if (energies[i] > medianEnergy && energies[i] > energies[i - 1] && energies[i] > energies[i + 1]) {
+        peakCount++
+      }
+    }
+    val durationSec = audioPcm.size.toFloat() / sampleRate
+    val speakingRate = if (durationSec > 0) peakCount / durationSec else 0f
+
+    val pitchWindowSamples = (sampleRate * 0.04f).toInt().coerceAtLeast(1)
+    val minLag = (sampleRate / 500f).toInt().coerceAtLeast(1)
+    val maxLag = (sampleRate / 70f).toInt().coerceAtLeast(2)
+    var pitchSum = 0f
+    var pitchCount = 0
+
+    offset = 0
+    while (offset + pitchWindowSamples <= samples.size) {
+      var frameEnergy = 0f
+      for (i in offset until offset + pitchWindowSamples) {
+        frameEnergy += samples[i] * samples[i]
+      }
+      frameEnergy /= pitchWindowSamples
+
+      if (frameEnergy > medianEnergy * medianEnergy * 0.5f) {
+        var bestLag = 0
+        var bestCorr = 0f
+        for (lag in minLag..minOf(maxLag, pitchWindowSamples - 1)) {
+          var corr = 0f
+          for (i in 0 until pitchWindowSamples - lag) {
+            corr += samples[offset + i] * samples[offset + i + lag]
+          }
+          if (corr > bestCorr) {
+            bestCorr = corr
+            bestLag = lag
+          }
+        }
+        if (bestLag > 0) {
+          val f0 = sampleRate.toFloat() / bestLag
+          if (f0 in 70f..500f) {
+            pitchSum += f0
+            pitchCount++
+          }
+        }
+      }
+      offset += pitchWindowSamples / 2
+    }
+
+    val averagePitchHz = if (pitchCount > 0) pitchSum / pitchCount else 0f
+    val speedMultiplier = when {
+      speakingRate <= 0f -> 1.0f
+      speakingRate < 3.5f -> 0.8f
+      speakingRate < 4.5f -> 0.9f
+      speakingRate > 6.5f -> 1.2f
+      speakingRate > 5.5f -> 1.1f
+      else -> 1.0f
+    }
+
+    return VoiceProsody(
+      speakingRate = speakingRate,
+      averagePitchHz = averagePitchHz,
+      speedMultiplier = speedMultiplier,
+    )
   }
 
   private fun writeWavFile(file: File, samples: ShortArray, sampleRate: Int) {
@@ -183,4 +399,20 @@ class VoiceProfileManager(
     (value and 0xFF).toByte(),
     (value shr 8 and 0xFF).toByte(),
   )
+
+  companion object {
+    const val DEFAULT_PROFILE_ID = "default"
+    private const val TAG = "VoiceProfileManager"
+
+    fun sanitizeProfileId(profileId: String): String = buildString(profileId.length.coerceAtMost(64)) {
+      for (ch in profileId) {
+        when {
+          ch == '/' || ch == '\\' || ch == '\u0000' -> append('_')
+          ch.isLetterOrDigit() || ch == '_' || ch == '-' -> append(ch)
+          ch == ' ' -> append('_')
+          else -> append('_')
+        }
+      }
+    }.ifBlank { DEFAULT_PROFILE_ID }
+  }
 }

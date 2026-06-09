@@ -14,6 +14,7 @@ private const val TAG = "AudioPlayback"
 private const val DEFAULT_SAMPLE_RATE = PipelineConfig.TTS_SAMPLE_RATE
 private const val LOW_LATENCY_SAMPLE_RATE = PipelineConfig.STT_SAMPLE_RATE
 private const val PLAYBACK_DRAIN_GRACE_MS = 2_000L
+private const val FADE_MS = 50L // Fade-in / fade-out duration to prevent clicking on speaker transitions
 
 object AudioPlayback {
   data class RouteResult(
@@ -125,7 +126,7 @@ object AudioPlayback {
           val a = abs(s)
           if (a > peak) peak = a
         }
-        when {
+        val normalized = when {
           hasNonFinite -> {
             val g = if (peak > 1f) 0.99f / peak else 1f
             FloatArray(samples.size) { val s = samples[it]; if (s.isFinite()) s * g else 0f }
@@ -133,6 +134,9 @@ object AudioPlayback {
           peak > 1f -> FloatArray(samples.size) { samples[it] * (0.99f / peak) }
           else -> samples
         }
+        // Apply fade-in / fade-out envelope to prevent clicking during speaker transitions.
+        // Only mutates when the buffer is long enough to hold both fade windows.
+        applyFade(normalized, sampleRate)
       }
       val track: AudioTrack
       val startHeadPosition: Int
@@ -274,6 +278,32 @@ object AudioPlayback {
     if (advanced < writtenFrames) {
       BaoLog.w(TAG, "AudioTrack playback drain timed out: played=$advanced written=$writtenFrames")
     }
+  }
+
+  /**
+   * Applies a fade-in / fade-out envelope to [samples] to prevent audible clicking when a speaker
+   * transition starts or ends. The fade duration is [FADE_MS]. Returns a new array only when a
+   * fade is actually applied; otherwise returns the original reference to avoid allocation.
+   */
+  private fun applyFade(samples: FloatArray, sampleRate: Int): FloatArray {
+    val fadeSamples = (sampleRate * FADE_MS / 1000L).toInt().coerceAtLeast(1)
+    if (samples.size <= fadeSamples * 2) return samples
+    var changed = false
+    val out = FloatArray(samples.size) { i ->
+      val envelope = when {
+        i < fadeSamples -> {
+          changed = true
+          i.toFloat() / fadeSamples
+        }
+        i >= samples.size - fadeSamples -> {
+          changed = true
+          (samples.size - 1 - i).toFloat() / fadeSamples
+        }
+        else -> 1f
+      }
+      samples[i] * envelope
+    }
+    return if (changed) out else samples
   }
 
   private fun framesAdvanced(start: Int, current: Int): Long {

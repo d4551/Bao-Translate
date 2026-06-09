@@ -1,0 +1,7 @@
+{
+  "id": "qr-code",
+  "version": "1.0.0",
+  "minHostVersion": "1.0.15",
+  "name": "QR Code Generator",
+  "category": "built-in"
+}
