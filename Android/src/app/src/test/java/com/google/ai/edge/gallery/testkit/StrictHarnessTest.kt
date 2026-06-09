@@ -21,14 +21,15 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
+import org.junit.experimental.categories.Category
 
 /**
- * Verifies the [BaoStrictTest] harness is wired correctly. If this test class fails to
- * compile or its @Rule is missing, every other strict test inherits the same breakage —
- * fail fast here.
+ * Verifies the strict-test harness ([BaoStrictRules]) is wired correctly. If this class fails to
+ * compile or its assertions break, every other strict test inherits the same breakage — fail fast
+ * here. (Named distinctly from the [BaoStrictTest] abstract base in CorpusFixture.kt.)
  */
-@Strict
-class BaoStrictTest {
+@Category(Strict::class)
+class StrictHarnessTest {
 
   @Test
   fun corpus_cjk_isNotEmpty_andHasNoSurrogates() {
@@ -98,7 +99,7 @@ class BaoStrictTest {
   @Test
   fun assertNoEmptyAfterNormalize_failsOnWhitespaceAfterStrip() {
     try {
-      BaoStrictRules.assertNoEmptyAfterNormalize("$nbsp$nbsp")
+      BaoStrictRules.assertNoEmptyAfterNormalize("${CorpusFixture.nbsp}${CorpusFixture.nbsp}")
       fail("expected AssertionError on NBSP-only input")
     } catch (e: AssertionError) {
       assertTrue(e.message!!.contains("collapsed"))

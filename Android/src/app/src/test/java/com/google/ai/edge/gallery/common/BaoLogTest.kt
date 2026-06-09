@@ -3,11 +3,12 @@ package com.google.ai.edge.gallery.common
 import com.google.ai.edge.gallery.testkit.BaoStrictRules
 import com.google.ai.edge.gallery.testkit.CorpusFixture
 import com.google.ai.edge.gallery.testkit.Strict
+import org.junit.experimental.categories.Category
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-@Strict
+@Category(Strict::class)
 class BaoLogTest {
 
   @Test

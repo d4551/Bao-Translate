@@ -18,6 +18,7 @@ package com.google.ai.edge.gallery
 import android.content.Context
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
+import android.util.Log
 import android.speech.tts.UtteranceProgressListener
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -36,6 +37,7 @@ import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -68,6 +70,7 @@ class BaoTranslateLanguageMatrixE2eTest {
     Lang("ja", "おはよう、お元気ですか？", '぀'..'ヿ'),
     Lang("ko", "안녕하세요, 잘 지내세요?", '가'..'힯'),
     Lang("ar", "صباح الخير، كيف حالك؟", '؀'..'ۿ'),
+    Lang("hi", "सुप्रभात, आप कैसे हैं?", 'ऀ'..'ॿ'), // Devanagari U+0900..U+097F
   )
 
   // Every selectable translation model must translate every language, both directions. Runs the full
@@ -185,10 +188,15 @@ class BaoTranslateLanguageMatrixE2eTest {
   fun nonKokoroLanguages_useDevicePlatformTtsFallback() {
     val ctx = InstrumentationRegistry.getInstrumentation().targetContext
     // Routing predicate: these are NOT Kokoro-native, so synthesizeSpeech routes them to platform TTS.
-    listOf("de", "ko", "ru", "ar").forEach {
-      assertTrue("$it must NOT be Kokoro-native (would speak with English voice)", !KokoroTtsPipeline.supportsLanguage(it))
+    // ja is NOT Kokoro-native: NO sherpa-onnx Kokoro model can phonemize Japanese — the bundled
+    // kokoro-multi-lang-v1_0 ships only English (espeak) + Chinese (jieba) phoneme data (per the
+    // k2-fsa docs), so Japanese text would be voiced as wrong-language gibberish. Production therefore
+    // routes ja (with de/ko/ru/ar) to platform TTS, then OpenVoice clones that into the enrolled
+    // timbre. Pinned by KokoroTtsPipelineTest's routing invariant.
+    listOf("de", "ko", "ru", "ar", "ja").forEach {
+      assertTrue("$it must NOT be Kokoro-native (would speak with a wrong-language voice)", !KokoroTtsPipeline.supportsLanguage(it))
     }
-    listOf("en", "es", "fr", "it", "ja", "pt", "zh", "hi").forEach {
+    listOf("en", "es", "fr", "it", "pt", "zh", "hi").forEach {
       assertTrue("$it must be Kokoro-native", KokoroTtsPipeline.supportsLanguage(it))
     }
 
@@ -198,6 +206,7 @@ class BaoTranslateLanguageMatrixE2eTest {
       "ru" to "Доброе утро, как дела сегодня?",
       "ko" to "안녕하세요, 오늘 기분이 어때요?",
       "ar" to "صباح الخير، كيف حالك اليوم؟",
+      "ja" to "おはようございます、お元気ですか？",
     )
     val spoke = mutableListOf<String>()
     val skipped = mutableListOf<String>()

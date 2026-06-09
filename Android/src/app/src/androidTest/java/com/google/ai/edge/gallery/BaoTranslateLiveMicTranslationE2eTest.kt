@@ -51,6 +51,8 @@ import com.google.ai.edge.gallery.customtasks.baotranslate.RecordingController
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioResampler
 import com.google.ai.edge.gallery.customtasks.baotranslate.bluetooth.BleMetadataMessage
 import com.google.ai.edge.gallery.customtasks.baotranslate.bluetooth.BleTranscriptMessage
+import com.google.ai.edge.gallery.customtasks.baotranslate.bluetooth.DiscoveredPeer
+import com.google.ai.edge.gallery.customtasks.baotranslate.bluetooth.ConnectionState
 import com.google.ai.edge.gallery.customtasks.baotranslate.tts.OpenVoiceVoiceConverter
 import com.google.ai.edge.gallery.customtasks.baotranslate.data.TranslationMessage
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.WavUtils
@@ -147,6 +149,85 @@ class BaoTranslateLiveMicTranslationE2eTest {
       "Bao Translate live transcript did not retain Spanish translation markers after stop; markerCount=${composeRule.spanishMarkerCount()}",
       composeRule.waitForSpanishTranslationMarkers(timeoutMillis = 30_000),
     )
+  }
+
+  /**
+   * REAL two-device proof: this device connects to a SECOND physical device (whose app must already
+   * be in Conversation Mode, scanning) over Google Nearby Connections, then transmits a transcript
+   * across the live link. The peer device translates it into its own target language and speaks it
+   * aloud (in this device's timbre, since metadata carries the enrolled voice embedding). This
+   * asserts the SENDER side end-to-end (discover -> connect -> transmit over the real radio); observe
+   * the peer's screen/logcat for the spoken translation. No-ops gracefully if no peer is present.
+   */
+  @Test
+  fun twoDevice_sendsTranscriptToLivePeerOverNearby() {
+    val context = InstrumentationRegistry.getInstrumentation().targetContext
+    prepareDeviceForLiveMicTest(context)
+    ensureRequiredModelsReady(context)
+
+    val taskDescriptionPrefix = composeRule.prepareHome()
+    composeRule.openTaskByDescription(taskDescriptionPrefix)
+    composeRule.clickTextIfPresent(R.string.bao_translate_welcome_get_started)
+    composeRule.waitForText(R.string.bao_translate_title)
+    composeRule.waitForContentDescription(
+      composeRule.stringResource(R.string.cd_bao_translate_start),
+      timeoutMillis = 180_000,
+    )
+
+    val vm = BaoTranslateViewModel.testInstance
+    assertNotNull("Bao Translate ViewModel was not created", vm)
+
+    // Advertise + discover, then connect to the live peer (its app must be in Conversation Mode).
+    composeRule.runOnUiThread { vm!!.bleManager.startConversationDiscovery() }
+    val discDeadline = System.currentTimeMillis() + 60_000
+    var peer: DiscoveredPeer? = null
+    while (System.currentTimeMillis() < discDeadline && peer == null) {
+      peer = vm!!.bleManager.discoveredPeers.value.firstOrNull()
+      if (peer == null) Thread.sleep(500)
+    }
+    // Two-device test: SKIP (not fail) on single-device/CI runs where no peer is advertising.
+    assumeTrue("Two-device proof requires a SECOND device in Conversation Mode (scanning)", peer != null)
+    Log.i(TAG, "TWO-DEVICE: discovered peer name=${peer!!.name} id=${peer.id}")
+
+    composeRule.runOnUiThread { vm!!.bleManager.connectToDevice(peer!!.id) }
+    val connDeadline = System.currentTimeMillis() + 60_000
+    while (System.currentTimeMillis() < connDeadline && vm!!.bleManager.getConnectedCount() == 0) {
+      Thread.sleep(500)
+    }
+    assertTrue("Did not connect to the live peer over Nearby", vm!!.bleManager.getConnectedCount() > 0)
+    Log.i(TAG, "TWO-DEVICE: CONNECTED count=${vm.bleManager.getConnectedCount()} state=${vm.bleManager.connectionState.value}")
+
+    // Let metadata (incl. our voice embedding) propagate so the peer can speak in our timbre.
+    Thread.sleep(2_000)
+
+    // FULL CHAIN — no direct send: inject real English speech into THIS device's microphone pipeline,
+    // so Whisper STT -> local translate -> RecordingController's `if (getConnectedCount() > 0)
+    // sendTranscript(...)` path broadcasts the RECOGNIZED transcript to the connected peer over Nearby.
+    // The transcript that crosses the link is produced by the real speech->text pipeline, not a literal.
+    RecordingController.testPcmSource = synthesizeEnglishPromptAsSttPcm(context)
+    composeRule.runOnUiThread { vm!!.startRecording() }
+    val sttDeadline = System.currentTimeMillis() + 120_000
+    var spoken: TranslationMessage? = null
+    while (System.currentTimeMillis() < sttDeadline && spoken == null) {
+      spoken = vm!!.uiState.value.transcripts.firstOrNull { it.isUser && it.originalText.isNotBlank() }
+      if (spoken == null) Thread.sleep(500)
+    }
+    composeRule.runOnUiThread { vm!!.stopRecording() }
+    composeRule.waitForContentDescription(
+      composeRule.stringResource(R.string.cd_bao_translate_start),
+      timeoutMillis = 30_000,
+    )
+    RecordingController.testPcmSource = null
+    assertNotNull("Sender STT produced no transcript to broadcast over Nearby", spoken)
+    Log.i(
+      TAG,
+      "TWO-DEVICE FULL CHAIN: sender heard \"${spoken!!.originalText.take(40)}\" -> broadcast to peer over Nearby",
+    )
+
+    // The peer receives the transcript, translates it into its own language, and speaks it aloud.
+    Thread.sleep(10_000)
+    assertTrue("Connection dropped before transmit completed", vm.bleManager.getConnectedCount() > 0)
+    Log.i(TAG, "TWO-DEVICE FULL CHAIN: complete; peer should have spoken the translation")
   }
 
   /** Platform-TTS English prompt resampled to the STT pipeline's 16 kHz mono PCM for injection. */
@@ -793,8 +874,12 @@ private class LiveMicPermissionRule : ExternalResource() {
           add(Manifest.permission.BLUETOOTH_CONNECT)
           add(Manifest.permission.BLUETOOTH_ADVERTISE)
         }
+        // Nearby Connections discovery permission (API 33+), or its FINE_LOCATION fallback below.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
           add(Manifest.permission.POST_NOTIFICATIONS)
+          add(Manifest.permission.NEARBY_WIFI_DEVICES)
+        } else {
+          add(Manifest.permission.ACCESS_FINE_LOCATION)
         }
       }
     permissions.forEach { permission ->

@@ -81,19 +81,6 @@ class KokoroTtsPipeline(private val context: Context) : TtsEngine {
     if (!isReady) return null
     val voice = voiceId ?: currentVoiceId
 
-    // #region agent log
-    BaoLog.i(TAG, "synth voice=$voice textPrefix='${text.take(20)}'")
-    runCatching {
-      val __p = "{\"sessionId\":\"ee8faa\",\"hypothesisId\":\"B\",\"location\":\"KokoroTtsPipeline.kt:80\",\"message\":\"kokoro-synthesize\",\"data\":{\"voice\":\"" + voice + "\",\"sid\":" + sidForVoice(voice) + ",\"textPrefix\":\"" + text.take(20).replace("\"", "'") + "\"},\"timestamp\":" + System.currentTimeMillis() + "}"
-      val c = java.net.URL("http://127.0.0.1:7566/ingest/5b08f3fe-e4b6-4310-a187-ff6b2bcadc44").openConnection()
-      c.connectTimeout = 200; c.readTimeout = 200; c.doOutput = true
-      c.setRequestProperty("Content-Type", "application/json")
-      c.setRequestProperty("X-Debug-Session-Id", "ee8faa")
-      c.outputStream.use { it.write(__p.toByteArray()) }
-      c.getInputStream().close()
-    }
-    // #endregion
-
     // The native sherpa-onnx generate() is a JNI call; a native fault would otherwise escape the
     // recording/peer coroutine (no CoroutineExceptionHandler) and crash the app. Funnel it into a
     // null result so the caller degrades to "TTS not ready" instead — mirroring the Whisper/

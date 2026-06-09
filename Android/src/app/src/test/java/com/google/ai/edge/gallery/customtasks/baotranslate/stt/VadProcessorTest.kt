@@ -3,6 +3,7 @@ package com.google.ai.edge.gallery.customtasks.baotranslate.stt
 import android.content.Context
 import com.google.ai.edge.gallery.testkit.BaoStrictTest
 import com.google.ai.edge.gallery.testkit.Strict
+import org.junit.experimental.categories.Category
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -11,7 +12,7 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.mock
 
-@Strict
+@Category(Strict::class)
 class VadProcessorTest : BaoStrictTest() {
 
   private lateinit var context: Context
@@ -129,7 +130,7 @@ class VadProcessorTest : BaoStrictTest() {
   // returns a single segment with the entire input.
   @Test
   fun `belowOneSecond_returnsSingleSegment`() {
-    val samples = ShortArray(8000) { 500 }  // 0.5s of "speech"
+    val samples = ShortArray(8000) { 2000 }  // 0.5s of clear speech (peak 2000 >= 1000, rms ~0.061 >= 0.015)
     val segments = vad.processAudioSegment(samples)
     assertEquals(1, segments.size)
     assertEquals(8000, segments[0].size)

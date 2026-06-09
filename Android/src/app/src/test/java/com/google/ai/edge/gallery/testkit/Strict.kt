@@ -25,7 +25,7 @@ package com.google.ai.edge.gallery.testkit
  *
  * Promotion rule: every test added during the brutalisation cycle must be `@Category(Strict::class)`.
  */
-@org.junit.experimental.categories.CategoryMarker
-@Retention(AnnotationRetention.RUNTIME)
-@Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION)
-annotation class Strict
+// A JUnit 4 category marker is a plain type referenced by @Category(Strict::class). It is NOT an
+// annotation: JUnit's category filter (Gradle `useJUnit { includeCategories ... }`) matches the
+// marker types named in each test's @Category(...) — a bare custom annotation is invisible to it.
+interface Strict

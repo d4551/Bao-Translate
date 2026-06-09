@@ -253,7 +253,8 @@ class BaoTranslateTranslationTest {
   @Test
   fun translation_qwen_and_gemma_distinctModelFiles() {
     val context = InstrumentationRegistry.getInstrumentation().targetContext
-    ensureModelReady(context, listOf("qwen25_1b", "gemma4_e2b"))
+    ensureModelReady(context, "qwen25_1b")
+    ensureModelReady(context, "gemma4_e2b")
     val qwenFile = BaoTranslateModelManager.getTranslationModelDir(context, "qwen25_1b")
       .listFiles { f -> f.extension == "litertlm" }?.firstOrNull()
     val gemmaFile = BaoTranslateModelManager.getTranslationModelDir(context, "gemma4_e2b")

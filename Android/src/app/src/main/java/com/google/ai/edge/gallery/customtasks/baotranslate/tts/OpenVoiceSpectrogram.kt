@@ -26,6 +26,10 @@ object OpenVoiceSpectrogram {
    * @return spectrogram as [FREQ_BINS][frames] (freq-major, matching torch [513, T]).
    */
   fun compute(samples: FloatArray): Array<FloatArray> {
+    // Empty input has no content to transform: return the [FREQ_BINS] freq-major rows with zero
+    // frames rather than failing the reflect-pad precondition. (A non-empty but too-short signal,
+    // 1..pad samples, still throws from reflectPad — that is a caller error, not "nothing to do".)
+    if (samples.isEmpty()) return Array(FREQ_BINS) { FloatArray(0) }
     val pad = (N_FFT - HOP) / 2 // 384
     val padded = reflectPad(samples, pad)
     val frames = if (padded.size < N_FFT) 0 else 1 + (padded.size - N_FFT) / HOP

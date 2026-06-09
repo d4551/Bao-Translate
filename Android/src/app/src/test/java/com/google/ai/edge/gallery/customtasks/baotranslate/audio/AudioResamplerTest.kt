@@ -2,6 +2,7 @@ package com.google.ai.edge.gallery.customtasks.baotranslate.audio
 
 import com.google.ai.edge.gallery.testkit.BaoStrictRules
 import com.google.ai.edge.gallery.testkit.Strict
+import org.junit.experimental.categories.Category
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import kotlin.math.PI
@@ -10,7 +11,7 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 import org.junit.Test
 
-@Strict
+@Category(Strict::class)
 class AudioResamplerTest {
 
   private fun tone(freq: Double, rate: Int, n: Int): FloatArray =

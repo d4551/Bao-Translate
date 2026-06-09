@@ -1,6 +1,7 @@
 package com.google.ai.edge.gallery.customtasks.baotranslate.audio
 
 import com.google.ai.edge.gallery.testkit.Strict
+import org.junit.experimental.categories.Category
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -8,7 +9,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-@Strict
+@Category(Strict::class)
 class DeviceProbeTest {
 
   @Test

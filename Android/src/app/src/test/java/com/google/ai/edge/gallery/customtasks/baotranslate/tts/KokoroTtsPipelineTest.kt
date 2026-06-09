@@ -1,13 +1,15 @@
 package com.google.ai.edge.gallery.customtasks.baotranslate.tts
 
+import com.google.ai.edge.gallery.customtasks.baotranslate.tts.KokoroTtsPipeline.Companion.AVAILABLE_VOICES
 import com.google.ai.edge.gallery.testkit.Strict
+import org.junit.experimental.categories.Category
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-@Strict
+@Category(Strict::class)
 class KokoroTtsPipelineTest {
 
   @Test

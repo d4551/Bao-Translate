@@ -16,6 +16,7 @@
 package com.google.ai.edge.gallery.testkit
 
 import com.google.ai.edge.gallery.testkit.Strict
+import org.junit.experimental.categories.Category
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -28,7 +29,7 @@ import org.junit.Test
  *    harness itself — the corpus fixture never produces a string that crashes the
  *    production filter.
  */
-@Strict
+@Category(Strict::class)
 class CrossCuttingHardeningTest {
 
   @Test
@@ -44,9 +45,13 @@ class CrossCuttingHardeningTest {
       val stripped = text
         .replace(Regex("""/\*[\s\S]*?\*/"""), "")
         .replace(Regex("""//.*"""), "")
+      // Match actual runBlocking CALLS — runBlocking immediately followed by `{` or `(` and NOT
+      // preceded by a quote or identifier char. This excludes string-literal occurrences (e.g. this
+      // scanner's own `line.contains("runBlocking {")`) so the check never false-positives on itself.
+      val callRegex = Regex("""(^|[^"'\w.])runBlocking\s*[({]""")
       val runBlockingLines = stripped.lineSequence()
         .mapIndexed { idx, line -> idx + 1 to line }
-        .filter { (_, line) -> line.contains("runBlocking {") || line.contains("runBlocking(") }
+        .filter { (_, line) -> callRegex.containsMatchIn(line) }
         .toList()
       for ((lineNum, line) in runBlockingLines) {
         // Look 5 lines above for a withTimeout

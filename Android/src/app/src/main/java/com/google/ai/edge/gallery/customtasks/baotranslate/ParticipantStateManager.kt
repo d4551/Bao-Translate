@@ -1,6 +1,8 @@
 package com.google.ai.edge.gallery.customtasks.baotranslate
 
 import android.app.Application
+import android.os.Build
+import android.provider.Settings
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioRouter
 import com.google.ai.edge.gallery.customtasks.baotranslate.bluetooth.BleConversationManager
@@ -19,6 +21,15 @@ internal class ParticipantStateManager(
   private val getApp: () -> Application,
 ) {
 
+  // Peer-facing identity for this device in a conversation: the user-set device name (e.g.
+  // "Brandon's Phone") so two phones are never both "You", with the model as a fallback. The local
+  // self-card still renders this with the "(You)" suffix; connected peers see the name directly.
+  private fun localDeviceName(): String =
+    Settings.Global.getString(getApp().contentResolver, Settings.Global.DEVICE_NAME)
+      ?.takeIf { it.isNotBlank() }
+      ?: Build.MODEL?.takeIf { it.isNotBlank() }
+      ?: getApp().getString(R.string.bao_translate_you)
+
   fun refreshLocalRuntimeState(app: Application) {
     val currentDevice = audioRouter.detectCurrentDevice()
     val availableDevices = audioRouter.getAvailableOutputDevices()
@@ -28,7 +39,7 @@ internal class ParticipantStateManager(
     uiState.update { state ->
       val participant = Participant(
         id = profile?.id ?: state.localParticipant?.id ?: localParticipantId,
-        name = app.getString(R.string.bao_translate_you),
+        name = localDeviceName(),
         sourceLanguage = state.sourceLanguage,
         targetLanguage = state.targetLanguage,
         isConnected = true,
@@ -50,10 +61,9 @@ internal class ParticipantStateManager(
   // Pure: builds the participant from the given state. Callers broadcast the committed result
   // once, outside any MutableStateFlow.update{} lambda (which may re-run under CAS contention).
   fun updateLocalParticipant(state: BaoTranslateUiState): Participant {
-    val app = getApp()
     return (state.localParticipant ?: Participant(
       id = localParticipantId,
-      name = app.getString(R.string.bao_translate_you),
+      name = localDeviceName(),
       sourceLanguage = state.sourceLanguage,
       targetLanguage = state.targetLanguage,
       isConnected = true,

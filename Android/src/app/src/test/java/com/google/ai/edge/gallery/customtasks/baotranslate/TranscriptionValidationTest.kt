@@ -4,10 +4,11 @@ import com.google.ai.edge.gallery.customtasks.baotranslate.validation.HALLUCINAT
 import com.google.ai.edge.gallery.customtasks.baotranslate.validation.isValidTranscription
 import com.google.ai.edge.gallery.testkit.CorpusFixture
 import com.google.ai.edge.gallery.testkit.Strict
+import org.junit.experimental.categories.Category
 import org.junit.Assert.*
 import org.junit.Test
 
-@Strict
+@Category(Strict::class)
 class TranscriptionValidationTest {
 
     @Test
@@ -74,18 +75,16 @@ class TranscriptionValidationTest {
         assertFalse("mixed case 'aH' rejected", isValidTranscription("aH"))
     }
 
-    // ----- Cyrillic homoglyph filler. STT will produce these for "hmm" in Cyrillic-script
-    // segments. The current production filter uses `^hmm+$` (ASCII only) — this test
-    // documents the gap; if the production code is hardened to use a Unicode-aware
-    // filler list, this test will flip to true and that is the correct outcome.
+    // ----- Cyrillic homoglyph filler. STT produces these for "hmm" in Cyrillic-script
+    // segments. Cyrillic letters are non-ASCII, so they are matched by `\W` (which is ASCII-only
+    // word-char negation) in the `^[\s\d\W]+$` noise pattern: a string of only Cyrillic letters
+    // contains no ASCII word characters and is therefore rejected as content-free noise.
     @Test
     fun filler_unicodeCyrillic_currentlyAcceptsButShouldReject() {
-        // DOCUMENTED OUT-OF-SCOPE: the ASCII regex bypasses Cyrillic. Currently accepted
-        // (regression-only — these are STT-realistic filler words). When the production
-        // filter is hardened, flip this assertion to assertFalse.
-        assertTrue(
-            "Cyrillic 'хмм' currently bypasses the ASCII filler filter (out-of-scope " +
-                "hardening — see out_of_scope_findings.txt). Tracking expected future state.",
+        // Cyrillic-only filler "хмм" is rejected: every Cyrillic letter satisfies the ASCII
+        // `\W` class, so the whole string matches `^[\s\d\W]+$` and is filtered as noise.
+        assertFalse(
+            "Cyrillic 'хмм' must be rejected as content-free noise",
             isValidTranscription(CorpusFixture.cyrillicFiller),
         )
     }

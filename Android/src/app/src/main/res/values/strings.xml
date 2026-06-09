@@ -50,6 +50,8 @@
   <string name="bao_translate_enroll_voice">Enroll voice</string>
   <string name="bao_translate_voice_enrolled">Voice enrolled</string>
   <string name="bao_translate_conversation_mode">Conversation Mode</string>
+  <string name="bao_face_to_face_mode">Face-to-face conversation</string>
+  <string name="bao_face_to_face_speaks">Speaks</string>
   <string name="bao_translate_connect_device">Connect Device</string>
   <string name="bao_translate_disconnect">Disconnect</string>
   <string name="bao_translate_auto_detect">Auto-detect</string>

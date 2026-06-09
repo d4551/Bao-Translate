@@ -404,12 +404,18 @@ object BaoTranslateModelManager {
   // espeak-ng-data present-but-empty, or files zero-length. Require directories to be
   // non-empty and files to be non-zero, so a truncated/partial extraction reports NotDownloaded and
   // re-downloads instead of feeding a corrupt model into native sherpa-onnx (SIGSEGV / garbage TTS).
+  // A trailing slash on a required entry denotes a directory entry (archive convention). Java's
+  // File silently strips the trailing separator, so a path like "model.onnx/" would otherwise match
+  // a regular file. Detect the marker before normalization and require such an entry to resolve to a
+  // non-empty directory, never a file — a directory entry pointing at a plain file is a type mismatch.
   internal fun requiredFilesComplete(baseDir: File, requiredFiles: List<String>): Boolean =
     requiredFiles.all { rel ->
+      val expectsDirectory = rel.endsWith("/") || rel.endsWith(File.separator)
       val f = File(baseDir, rel)
       when {
         !f.exists() -> false
         f.isDirectory -> f.listFiles()?.isNotEmpty() == true
+        expectsDirectory -> false
         else -> f.length() > 0
       }
     }

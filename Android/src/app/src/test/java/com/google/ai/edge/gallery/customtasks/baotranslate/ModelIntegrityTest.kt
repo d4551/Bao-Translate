@@ -1,6 +1,7 @@
 package com.google.ai.edge.gallery.customtasks.baotranslate
 
 import com.google.ai.edge.gallery.testkit.Strict
+import org.junit.experimental.categories.Category
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -16,7 +17,7 @@ import java.nio.file.attribute.PosixFilePermission
  * zero-byte file from a killed write) must report incomplete instead of being accepted as Ready and
  * fed into native sherpa-onnx.
  */
-@Strict
+@Category(Strict::class)
 class ModelIntegrityTest {
 
   @get:Rule

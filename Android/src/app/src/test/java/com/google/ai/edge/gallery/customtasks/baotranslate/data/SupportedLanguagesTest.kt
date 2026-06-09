@@ -1,6 +1,7 @@
 package com.google.ai.edge.gallery.customtasks.baotranslate.data
 
 import com.google.ai.edge.gallery.testkit.Strict
+import org.junit.experimental.categories.Category
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -13,7 +14,7 @@ import org.junit.Test
  * from another (SupportedLanguages.ALL, CODE_MAP) — leaving the user with no way to pick it
  * even though the rest of the stack could speak it.
  */
-@Strict
+@Category(Strict::class)
 class SupportedLanguagesTest {
 
   // ----- The set of selectable target languages. Pin to 12 (Auto + 11) so adding a new language

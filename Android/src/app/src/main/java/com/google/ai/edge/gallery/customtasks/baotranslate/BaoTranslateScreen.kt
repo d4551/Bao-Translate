@@ -3,6 +3,7 @@ package com.google.ai.edge.gallery.customtasks.baotranslate
 import android.Manifest
 import android.content.res.Configuration
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -48,6 +49,7 @@ import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
@@ -129,6 +131,7 @@ fun BaoTranslateScreen(
   var showSettings by remember { mutableStateOf(false) }
   var showEnrollment by remember { mutableStateOf(false) }
   var showConversationMode by remember { mutableStateOf(false) }
+  var showFaceToFace by remember { mutableStateOf(false) }
   var showAudioPicker by remember { mutableStateOf(false) }
   var showWelcome by remember { mutableStateOf(false) }
   var enrollmentState by remember { mutableStateOf(EnrollmentState.READY) }
@@ -170,11 +173,18 @@ fun BaoTranslateScreen(
 
   var pendingBluetoothAction by remember { mutableStateOf<(() -> Unit)?>(null) }
   val bluetoothPermissions = remember {
-    arrayOf(
-      Manifest.permission.BLUETOOTH_SCAN,
-      Manifest.permission.BLUETOOTH_CONNECT,
-      Manifest.permission.BLUETOOTH_ADVERTISE,
-    )
+    buildList {
+      add(Manifest.permission.BLUETOOTH_SCAN)
+      add(Manifest.permission.BLUETOOTH_CONNECT)
+      add(Manifest.permission.BLUETOOTH_ADVERTISE)
+      // Nearby Connections discovery also needs NEARBY_WIFI_DEVICES on API 33+, or FINE_LOCATION on
+      // API 31-32 (the only sub-33 levels this app supports, minSdk = 31).
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        add(Manifest.permission.NEARBY_WIFI_DEVICES)
+      } else {
+        add(Manifest.permission.ACCESS_FINE_LOCATION)
+      }
+    }.toTypedArray()
   }
   val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
     ActivityResultContracts.RequestMultiplePermissions()
@@ -337,6 +347,28 @@ fun BaoTranslateScreen(
               }
             }
           }
+          if (uiState.modelsReady) {
+            val faceToFaceDesc = stringResource(R.string.bao_face_to_face_mode)
+            IconButton(
+              onClick = {
+                if (showFaceToFace) {
+                  showFaceToFace = false
+                  viewModel.setFaceToFaceMode(false)
+                } else {
+                  showConversationMode = false
+                  showFaceToFace = true
+                  viewModel.setFaceToFaceMode(true)
+                }
+              },
+              modifier = Modifier.semantics { contentDescription = faceToFaceDesc },
+            ) {
+              Icon(
+                imageVector = Icons.Default.SwapVert,
+                contentDescription = null,
+                tint = if (showFaceToFace) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+              )
+            }
+          }
           IconButton(
             onClick = {
               viewModel.refreshAudioDevice()
@@ -351,7 +383,7 @@ fun BaoTranslateScreen(
       )
     },
     floatingActionButton = {
-      if (!showConversationMode && uiState.modelsReady) {
+      if (!showConversationMode && !showFaceToFace && uiState.modelsReady) {
         val startDesc = stringResource(R.string.cd_bao_translate_start)
         val stopDesc = stringResource(R.string.cd_bao_translate_stop)
         val canUseMic = uiState.modelsReady &&
@@ -471,6 +503,19 @@ fun BaoTranslateScreen(
             onConnectDevice = { address -> runWithBluetoothPermissions { viewModel.bleManager.connectToDevice(address) } },
             onDisconnectDevice = { address -> viewModel.disconnectPeer(address) },
             onStartConversation = { showConversationMode = false },
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            isTablet = isTablet,
+          )
+        } else if (showFaceToFace) {
+          FaceToFaceConversationScreen(
+            uiState = uiState,
+            isRecording = uiState.isRecording || uiState.isStartingRecording,
+            onSetLanguageA = viewModel::setSourceLanguage,
+            onSetLanguageB = viewModel::setTargetLanguage,
+            onToggleRecording = {
+              if (uiState.isRecording || uiState.isStartingRecording) viewModel.stopRecording()
+              else startRecordingWithPermission()
+            },
             modifier = Modifier.weight(1f).fillMaxWidth(),
             isTablet = isTablet,
           )

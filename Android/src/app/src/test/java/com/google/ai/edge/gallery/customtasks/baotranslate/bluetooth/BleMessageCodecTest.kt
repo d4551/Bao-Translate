@@ -2,7 +2,9 @@ package com.google.ai.edge.gallery.customtasks.baotranslate.bluetooth
 
 import com.google.ai.edge.gallery.customtasks.baotranslate.tts.OpenVoiceVoiceConverter
 import com.google.ai.edge.gallery.testkit.Strict
+import org.junit.experimental.categories.Category
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -13,7 +15,7 @@ import org.junit.Test
  * substring validators but are not parseable JSON. Decoding must return null, never throw — a throw
  * would propagate out of the library's main-thread callback and crash the process.
  */
-@Strict
+@Category(Strict::class)
 class BleMessageCodecTest {
 
   @Test

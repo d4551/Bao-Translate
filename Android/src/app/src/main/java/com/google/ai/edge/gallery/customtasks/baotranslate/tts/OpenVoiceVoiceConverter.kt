@@ -40,6 +40,7 @@ class OpenVoiceVoiceConverter {
     private const val FREQ = OpenVoiceSpectrogram.FREQ_BINS // 513
     private const val TAU = 0.3f // posterior temperature; the converter samples its own noise
     private const val MAX_FRAMES = 4096 // safety cap (~47 s at 22.05 kHz); longer utterances are truncated
+    private const val SILENCE_RMS = 1e-3f // below this RMS a clip carries no extractable speaker identity
   }
 
   // Serializes native run() against close() so converter/refEnc are never freed mid-inference
@@ -56,16 +57,34 @@ class OpenVoiceVoiceConverter {
       BaoLog.w(TAG, "OpenVoice onnx missing: conv=${converterOnnx.exists()} refEnc=${refEncOnnx.exists()}")
       return false
     }
-    converter = OrtOpenVoiceModel.load(converterOnnx)
-    refEnc = OrtOpenVoiceModel.load(refEncOnnx)
-    ready = true
-    BaoLog.i(TAG, "OpenVoice converter + ref_enc loaded (ONNX Runtime)")
-    return true
+    // A corrupt/truncated/unsupported .onnx makes ONNX Runtime's native load throw OrtException. The
+    // caller (BaoTranslateViewModel) treats init as a boolean, so a load failure MUST degrade to
+    // false — never propagate a native exception out of initialize. Roll back any half-loaded handle.
+    return try {
+      converter = OrtOpenVoiceModel.load(converterOnnx)
+      refEnc = OrtOpenVoiceModel.load(refEncOnnx)
+      ready = true
+      BaoLog.i(TAG, "OpenVoice converter + ref_enc loaded (ONNX Runtime)")
+      true
+    } catch (e: Exception) {
+      BaoLog.e(TAG, "OpenVoice load failed (corrupt/unsupported model): ${e.message}")
+      converter?.close(); converter = null
+      refEnc?.close(); refEnc = null
+      ready = false
+      false
+    }
   }
 
   /** Enrollment: derive the speaker's 256-d embedding from a reference clip. */
   fun computeSpeakerEmbedding(wavSamples: FloatArray, sampleRate: Int): FloatArray? = synchronized(inferenceLock) {
     val re = refEnc ?: return null
+    // A speaker identity cannot be derived from silence/near-silence: the ref encoder would emit a
+    // spurious embedding from the spectrogram's epsilon floor. Reject it so enrollment never captures
+    // "the timbre of a quiet room" (and a malformed convert source never yields a fake src_tone).
+    if (isEffectivelySilent(wavSamples)) {
+      BaoLog.w(TAG, "computeSpeakerEmbedding: input below speech level — no speaker identity to extract")
+      return null
+    }
     val (spec, frames) = spectrogram(wavSamples, sampleRate) ?: return null
     if (frames <= 0) return null
     return runRefEnc(re, spec, frames.coerceAtMost(MAX_FRAMES))
@@ -76,6 +95,12 @@ class OpenVoiceVoiceConverter {
     val conv = converter ?: return null
     val re = refEnc ?: return null
     if (!ready) return null
+    // Refuse non-finite input (NaN/Inf from a malformed BLE-peer embedding or an upstream bug) rather
+    // than feed it to the native graph, which would propagate NaN through the entire utterance.
+    if (audio.samples.any { !it.isFinite() } || targetSe.any { !it.isFinite() }) {
+      BaoLog.w(TAG, "convert: non-finite audio/targetSe — refusing")
+      return null
+    }
     val (spec, framesReal) = spectrogram(audio.samples, audio.sampleRate) ?: return null
     if (framesReal <= 0) return null
 
@@ -98,7 +123,10 @@ class OpenVoiceVoiceConverter {
       "audio_length" to (longArrayOf(frames.toLong()) to longArrayOf(1)),
     )
     val (flat, _) = conv.run(floatInputs, longInputs)
-    return if (flat.isEmpty()) null else SynthesizedAudio(samples = flat, sampleRate = OV_RATE)
+    if (flat.isEmpty()) return null
+    // Defensive: scrub any non-finite the native graph might emit so playback never receives NaN/Inf.
+    val clean = if (flat.all { it.isFinite() }) flat else FloatArray(flat.size) { flat[it].takeIf { v -> v.isFinite() } ?: 0f }
+    return SynthesizedAudio(samples = clean, sampleRate = OV_RATE)
   }
 
   fun cleanup() {
@@ -110,6 +138,15 @@ class OpenVoiceVoiceConverter {
   }
 
   // ---- helpers ----
+
+  // True when the clip is silence / near-silence (RMS below speech level) — no speaker identity to
+  // extract. Guards enrollment and the convert source against producing a spurious embedding.
+  private fun isEffectivelySilent(samples: FloatArray): Boolean {
+    if (samples.isEmpty()) return true
+    var sumSq = 0.0
+    for (s in samples) if (s.isFinite()) sumSq += s.toDouble() * s
+    return kotlin.math.sqrt(sumSq / samples.size) < SILENCE_RMS
+  }
 
   // Resamples to 22.05 kHz and computes the magnitude STFT once ([FREQ_BINS][frames]); callers
   // flatten it freq- or time-major as each graph requires.

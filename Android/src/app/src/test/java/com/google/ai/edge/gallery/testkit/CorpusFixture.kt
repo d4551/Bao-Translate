@@ -136,7 +136,7 @@ class BaoStrictRules {
       val it = s.codePointCount(0, s.length)
       val cp = IntArray(it)
       var i = 0
-      s.codePoints().forEachIndexed { idx, c -> cp[idx] = c }
+      s.codePoints().toArray().forEachIndexed { idx, c -> cp[idx] = c }
       assertEquals("$label: codepoint array length", it, cp.size)
       // Every codepoint must be a valid Unicode scalar value.
       for (c in cp) {

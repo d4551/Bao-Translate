@@ -1,6 +1,7 @@
 package com.google.ai.edge.gallery.worker
 
 import com.google.ai.edge.gallery.testkit.Strict
+import org.junit.experimental.categories.Category
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -11,7 +12,7 @@ import org.junit.Test
  * A 200 OK after a Range request means the range was ignored and the full body is being sent from
  * byte 0 — appending it onto the partial would corrupt the file, so the decision must be overwrite.
  */
-@Strict
+@Category(Strict::class)
 class ResumeDecisionTest {
 
   @Test

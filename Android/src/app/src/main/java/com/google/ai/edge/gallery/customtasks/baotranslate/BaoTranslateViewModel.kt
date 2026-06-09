@@ -66,6 +66,10 @@ data class BaoTranslateUiState(
   val localParticipant: Participant? = null,
   val detectedLanguage: String? = null,
   val welcomeDismissed: Boolean = false,
+  // Single-device, 2-speaker "face-to-face" mode: [sourceLanguage] and [targetLanguage] form a
+  // bidirectional pair. STT auto-detects each turn and the engine routes to the OTHER language, so two
+  // people sharing one phone are each understood without a second device (cf. the BLE multi-device path).
+  val faceToFaceMode: Boolean = false,
 ) {
   val isRecording: Boolean get() = pipelineStatus == PipelineStatus.Recording
   val isStartingRecording: Boolean get() = pipelineStatus == PipelineStatus.StartingRecording
@@ -477,6 +481,28 @@ class BaoTranslateViewModel @Inject constructor(
     persistBaoTranslateSettings()
   }
 
+  /**
+   * Enter/exit single-device, 2-speaker face-to-face mode. The two languages form a bidirectional
+   * pair, so [sourceLanguage] must be a concrete language (not AUTO) — defaults a missing/Auto source
+   * to English. Re-initialises STT to auto-detect so either speaker's language is transcribed; the
+   * bidirectional routing lives in RecordingController.processAudioSegment.
+   */
+  fun setFaceToFaceMode(enabled: Boolean) {
+    if (_uiState.value.faceToFaceMode == enabled) return
+    val source = _uiState.value.sourceLanguage.takeIf { it != SupportedLanguages.AUTO.key }
+      ?: SupportedLanguages.keyForCode("en")
+      ?: SupportedLanguages.TRANSLATION_TARGETS.first().key
+    _uiState.update {
+      it.copy(
+        faceToFaceMode = enabled,
+        sourceLanguage = if (enabled) source else it.sourceLanguage,
+        detectedLanguage = null,
+      )
+    }
+    persistBaoTranslateSettings()
+    reinitializePipeline("stt")
+  }
+
   fun onLanguageChanged(source: String, target: String) {
     voiceLanguageCoordinator.onLanguageChanged(source, target)
     persistBaoTranslateSettings()
@@ -524,7 +550,9 @@ class BaoTranslateViewModel @Inject constructor(
   // Whisper decode language for the chosen source: "" (auto-detect) only when the user picks Auto;
   // otherwise force the selected language so recognition isn't corrupted by mis-detection.
   private fun sttLanguageCode(): String =
-    if (_uiState.value.sourceLanguage == SupportedLanguages.AUTO.key) ""
+    // Face-to-face must decode EITHER paired language, so it forces Whisper auto-detect ("") just like
+    // the AUTO source — forcing one side would mis-transcribe the other speaker.
+    if (_uiState.value.faceToFaceMode || _uiState.value.sourceLanguage == SupportedLanguages.AUTO.key) ""
     else SupportedLanguages.codeFor(_uiState.value.sourceLanguage)
 
   private fun reinitializePipeline(component: String) {

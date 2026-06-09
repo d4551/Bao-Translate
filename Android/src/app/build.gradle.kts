@@ -165,7 +165,9 @@ dependencies {
   // 1.24.3 is the exact (byte-identical) ORT build sherpa-onnx 1.13.2 bundles — so the packaging
   // pickFirst on libonnxruntime.so (see android{}) leaves one runtime that satisfies both.
   implementation(libs.onnxruntime.android)
-  implementation(libs.bluetooth.communicator)
+  // Google Nearby Connections: maintained, multi-medium (BLE + Bluetooth Classic + Wi-Fi) P2P
+  // transport for the multi-device conversation mesh (see BleConversationManager).
+  implementation(libs.play.services.nearby)
   implementation(libs.commons.compress)
 }
 
@@ -193,9 +195,17 @@ tasks.register("verifyReleaseReady") {
 tasks.register<Test>("testDebugUnitTestStrict") {
   group = "verification"
   description = "Run the @Category(Strict) subset of unit tests. Gating for release."
-  useJUnit()
-  // JUnit 4's standard property for category filtering.
-  systemProperty("categories", "com.google.ai.edge.gallery.testkit.Strict")
+  // Reuse the EXACT compiled classes + runtime classpath of the full debug unit-test task, so this
+  // runs the same bytecode — just filtered. Lazy files{} resolve at execution (order-independent);
+  // dependsOn guarantees the test classes are compiled first.
+  val full = tasks.named<Test>("testDebugUnitTest")
+  // Lazy files{} carry the producing-task dependencies (compile + resources), so this builds the
+  // test classes WITHOUT running the full suite — the strict gate must stand on its own.
+  testClassesDirs = files({ full.get().testClassesDirs })
+  classpath = files({ full.get().classpath })
+  dependsOn("compileDebugUnitTestKotlin", "processDebugUnitTestJavaRes")
+  // Real JUnit 4 category filtering: only classes/methods tagged @Category(Strict::class) run.
+  useJUnit { includeCategories("com.google.ai.edge.gallery.testkit.Strict") }
 }
 
 tasks.named("verifyReleaseReady") {

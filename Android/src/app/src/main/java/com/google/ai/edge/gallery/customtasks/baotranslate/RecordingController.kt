@@ -6,6 +6,8 @@ import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.NoiseSuppressor
 import androidx.core.content.ContextCompat
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.common.BaoLog
@@ -46,6 +48,9 @@ private const val LIVE_TRANSLATION_STRIDE_SECONDS = 4
 private const val MIN_TRANSLATION_SEGMENT_SECONDS = 1
 private const val AUDIO_READ_EMPTY_SLEEP_MS = 20L
 private const val AUDIO_READ_STALL_TIMEOUT_MS = 3_000L
+// Extra window, past the end of TTS playback, during which the mic stays gated so the speaker's
+// acoustic decay isn't captured as the next conversational turn (echo/feedback guard).
+private const val PLAYBACK_TAIL_MUTE_MS = 150L
 
 enum class SpeechTimbre {
   /** Use [speakerSe] when provided; otherwise fall back to the locally-enrolled timbre. */
@@ -73,6 +78,12 @@ internal class RecordingController(
   // stopRecording() can cancel any that are queued-but-unstarted (or mid-flight at a suspension
   // point), preventing TTS/transcripts from firing after the user has stopped.
   private val liveSegmentJobs = mutableListOf<Job>()
+
+  // Hands-free conversation guard: true while the app is playing a translation aloud. The capture
+  // loop discards mic input during that window, so continuous (no-button) listening never re-hears
+  // and re-translates its own spoken output — the feedback loop that otherwise breaks bidirectional
+  // face-to-face mode. This is the portable guarantee; hardware AEC (below) handles residual leakage.
+  @Volatile private var capturePaused = false
 
   internal companion object {
     // Test-only injection point. When non-null, the next startRecording() sources audio from this
@@ -247,7 +258,7 @@ internal class RecordingController(
       }
       BaoLog.i(
         REC_TAG,
-        "AudioRecord started session=$recordingSessionId source=$audioSource bufferBytes=$bufferSize preferredInputId=${preferredInputInfo?.id}",
+        "AudioRecord started session=$recordingSessionId source=$audioSource captureBufferBytes=$captureBufferBytes minBufferBytes=$minBufferSize preferredInputId=${preferredInputInfo?.id}",
       )
 
       if (preferredInputInfo != null && !recorder.waitForPreferredInputRoute(preferredInputInfo.id)) {
@@ -271,11 +282,31 @@ internal class RecordingController(
       // `isActive` lets the read loop exit on coroutine cancellation (e.g. ViewModel cleared
       // mid-recording) so the AudioRecord below is released and the mic doesn't stay live.
       try {
-      while (isActive && uiState.value.isRecordingActive) {
+      // Hardware echo cancellation + noise suppression on this capture session. Best-effort: the
+      // factory returns null on devices without the effect, in which case the capturePaused gate
+      // (which discards mic input during playback) is the sole — and sufficient — feedback guard.
+      val echoCanceler =
+        if (AcousticEchoCanceler.isAvailable())
+          AcousticEchoCanceler.create(recorder.audioSessionId)?.also { it.enabled = true }
+        else null
+      val noiseSuppressor =
+        if (NoiseSuppressor.isAvailable())
+          NoiseSuppressor.create(recorder.audioSessionId)?.also { it.enabled = true }
+        else null
+      try {
+      readLoop@ while (isActive && uiState.value.isRecordingActive) {
         val readCount = recorder.read(buffer, 0, buffer.size, AudioRecord.READ_NON_BLOCKING)
 
         when {
           readCount > 0 -> {
+            if (capturePaused) {
+              // App is speaking its own translation: drop this audio and reset the live window so the
+              // echo (and any half-captured pre-playback speech) never mixes into the next speaker's
+              // turn. This is what makes continuous, no-button bidirectional conversation usable.
+              sampleCount = 0
+              samplesSinceLastLiveWindow = 0
+              continue@readLoop
+            }
             lastPositiveReadAt = System.currentTimeMillis()
             var bufferOffset = 0
             while (bufferOffset < readCount) {
@@ -367,6 +398,10 @@ internal class RecordingController(
         }
       } else if (sampleCount > 0 && !queuedLiveSegment) {
         uiState.update { it.copy(errorMessage = getApp().getString(R.string.bao_translate_error_recording_short)) }
+      }
+      } finally {
+        echoCanceler?.release()
+        noiseSuppressor?.release()
       }
       } finally {
         if (recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
@@ -569,7 +604,11 @@ internal class RecordingController(
         continue
       }
 
-      val sourceLang = if (uiState.value.sourceLanguage == SupportedLanguages.AUTO.key) {
+      // Face-to-face (single-device, 2-speaker) auto-detects every turn (like AUTO source) so either
+      // person's language is transcribed; STT is already in auto-detect for both.
+      val twoWay = uiState.value.faceToFaceMode
+      val autoDetected = twoWay || uiState.value.sourceLanguage == SupportedLanguages.AUTO.key
+      val sourceLang = if (autoDetected) {
         SupportedLanguages.normalizeDetectedCode(transcription.language)
           ?: SupportedLanguages.CODE_MAP[SupportedLanguages.AUTO.key]
           ?: "auto"
@@ -577,9 +616,14 @@ internal class RecordingController(
         SupportedLanguages.codeFor(uiState.value.sourceLanguage)
       }
 
-      val targetLang = SupportedLanguages.codeFor(uiState.value.targetLanguage)
+      // In face-to-face the two configured languages are a bidirectional pair: a turn spoken in the
+      // target language is translated BACK to the source language, so both speakers are understood on
+      // one device. Everywhere else, translation always goes to the configured target.
+      val langA = SupportedLanguages.codeFor(uiState.value.sourceLanguage)
+      val langB = SupportedLanguages.codeFor(uiState.value.targetLanguage)
+      val targetLang = if (twoWay && sourceLang == langB) langA else langB
 
-      if (uiState.value.sourceLanguage == SupportedLanguages.AUTO.key) {
+      if (autoDetected) {
         if (isStaleRecordingSegment(recordingSessionId)) return
         uiState.update {
           it.copy(
@@ -724,33 +768,9 @@ internal class RecordingController(
     // phonemize on the bundled sherpa-onnx kokoro-multi-lang-v1_0 model; it is pinned by
     // KokoroTtsPipelineTest so a future regression re-adding ja here would fail the build.
     val nativeToKokoro = KokoroTtsPipeline.supportsLanguage(language)
-    // #region agent log
-    com.google.ai.edge.gallery.common.BaoLog.i("BaoDbg", "route lang=$language nativeToKokoro=$nativeToKokoro textPrefix='${text.take(20)}'")
-    runCatching {
-      val __dbgPayload = "{\"sessionId\":\"ee8faa\",\"hypothesisId\":\"A\",\"location\":\"RecordingController.kt:723\",\"message\":\"tts-routing\",\"data\":{\"lang\":\"" + language + "\",\"nativeToKokoro\":" + nativeToKokoro + ",\"textPrefix\":\"" + text.take(20).replace("\"", "'") + "\"},\"timestamp\":" + System.currentTimeMillis() + "}"
-      val c = java.net.URL("http://127.0.0.1:7566/ingest/5b08f3fe-e4b6-4310-a187-ff6b2bcadc44").openConnection()
-      c.connectTimeout = 200; c.readTimeout = 200; c.doOutput = true
-      c.setRequestProperty("Content-Type", "application/json")
-      c.setRequestProperty("X-Debug-Session-Id", "ee8faa")
-      c.outputStream.use { it.write(__dbgPayload.toByteArray()) }
-      c.getInputStream().close()
-    }
-    // #endregion
     val base = if (nativeToKokoro) {
       kokoro?.synthesizeAudio(text, KokoroTtsPipeline.getVoiceForLanguage(language))
     } else {
-      // #region agent log
-      com.google.ai.edge.gallery.common.BaoLog.i("BaoDbg", "route -> platformTts lang=$language")
-      runCatching {
-        val __dbgPayload2 = "{\"sessionId\":\"ee8faa\",\"hypothesisId\":\"A2\",\"location\":\"RecordingController.kt:727\",\"message\":\"route-platformTts\",\"data\":{\"lang\":\"" + language + "\"},\"timestamp\":" + System.currentTimeMillis() + "}"
-        val c = java.net.URL("http://127.0.0.1:7566/ingest/5b08f3fe-e4b6-4310-a187-ff6b2bcadc44").openConnection()
-        c.connectTimeout = 200; c.readTimeout = 200; c.doOutput = true
-        c.setRequestProperty("Content-Type", "application/json")
-        c.setRequestProperty("X-Debug-Session-Id", "ee8faa")
-        c.outputStream.use { it.write(__dbgPayload2.toByteArray()) }
-        c.getInputStream().close()
-      }
-      // #endregion
       pipelines.platformTts?.synthesizeAudio(text, language)
     }
 
@@ -779,7 +799,16 @@ internal class RecordingController(
     if (audio != null) {
       if (isStaleRecordingSegment(recordingSessionId)) return false
       withContext(Dispatchers.Default) {
-        audioRouter.play(audio.samples, sampleRate = audio.sampleRate)
+        // Gate the capture loop for the duration of playback (+ a short acoustic-decay tail) so the
+        // live mic never hears and re-translates this output. finally guarantees the gate reopens even
+        // if playback is interrupted, otherwise the mic would stay deaf for the rest of the session.
+        capturePaused = true
+        try {
+          audioRouter.play(audio.samples, sampleRate = audio.sampleRate)
+          delay(PLAYBACK_TAIL_MUTE_MS)
+        } finally {
+          capturePaused = false
+        }
       }
       played = true
     } else {

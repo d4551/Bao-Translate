@@ -16,7 +16,9 @@ object SupportedLanguages {
   // (BaoTranslateUiState.targetLanguage) both reference a single SSOT instead of a positional
   // index or a duplicated "Spanish" magic string.
   const val DEFAULT_TARGET_KEY = "Spanish"
-  const val DEFAULT_SOURCE_KEY = AUTO.key
+  // Not `const`: it references AUTO.key (a runtime property) to stay a single source of truth rather
+  // than re-typing the "Auto" magic string. A plain val is the correct construct here.
+  val DEFAULT_SOURCE_KEY = AUTO.key
 
   // Default target code (ISO). The first-run user picks Spanish because the LLM translation
   // prompt produces a fast, high-quality Spanish output for short utterances (Qwen2.5 1.5B and

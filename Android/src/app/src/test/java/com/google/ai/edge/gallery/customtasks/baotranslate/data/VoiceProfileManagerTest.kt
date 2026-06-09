@@ -2,6 +2,7 @@ package com.google.ai.edge.gallery.customtasks.baotranslate.data
 
 import android.content.Context
 import com.google.ai.edge.gallery.testkit.Strict
+import org.junit.experimental.categories.Category
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -14,7 +15,7 @@ import org.junit.rules.TemporaryFolder
 import org.mockito.kotlin.mock
 import java.io.File
 
-@Strict
+@Category(Strict::class)
 class VoiceProfileManagerTest {
 
   @get:Rule

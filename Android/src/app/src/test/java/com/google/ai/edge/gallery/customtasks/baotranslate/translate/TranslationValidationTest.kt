@@ -3,10 +3,11 @@ package com.google.ai.edge.gallery.customtasks.baotranslate.translate
 import com.google.ai.edge.gallery.customtasks.baotranslate.validation.isSourceEcho
 import com.google.ai.edge.gallery.customtasks.baotranslate.validation.isValidTranslation
 import com.google.ai.edge.gallery.testkit.Strict
+import org.junit.experimental.categories.Category
 import org.junit.Assert.*
 import org.junit.Test
 
-@Strict
+@Category(Strict::class)
 class TranslationValidationTest {
 
     @Test
@@ -111,16 +112,16 @@ class TranslationValidationTest {
         assertTrue(isSourceEcho("hello world", "HELLO WORLD", "en", "es"))
     }
 
-    // ----- Unicode whitespace edge: NBSP bypasses the trim() check, so "Hola" with NBSP
-    // around the source should NOT be detected as echo (trim fails to strip NBSP).
+    // ----- Unicode whitespace edge: NBSP-only inputs are content-free. Kotlin's Unicode-aware
+    // trim() collapses NBSP to "", so both sides become empty, and empty content has nothing
+    // to echo, so isSourceEcho must NOT flag it.
     @Test
     fun isSourceEcho_unicodeWhitespace_documentedGap() {
-        // DOCUMENTED GAP: trim() removes ASCII whitespace only. NBSP stays → trim-difference
-        // makes the strings unequal → isSourceEcho returns false. If production hardens
-        // trim() to strip Unicode whitespace, this test flips to assertTrue.
+        // Kotlin's trim() strips NBSP (Character.isSpaceChar), so both sides trim to "",
+        // and empty content is never an echo.
         val nbsp = "\u00A0"
         assertFalse(
-            "NBSP-padded source bypasses trim() → not detected as echo (gap)",
+            "NBSP-only inputs trim to empty, so they are never detected as echo",
             isSourceEcho("$nbsp$nbsp$nbsp$nbsp", "$nbsp", "en", "es"),
         )
     }
@@ -155,17 +156,12 @@ class TranslationValidationTest {
         assertTrue(isValidTranslation("Привет, мир", "Hello, world"))
     }
 
-    // ----- Translation: 3-word input at the repetition-threshold edge. The gate fires at
-    // `words.size >= 3 && repetitionRatio < 0.3`. For 3 words all-same, ratio=0.333 — NOT
-    // below 0.3, so the gate does NOT fire. 3 distinct words is fine. Test the exact
-    // threshold so a future "raise the bar to 0.4" change is caught.
+    // ----- Translation: 3 identical words must be REJECTED. The ratio gate (`ratio < 0.3`) does
+    // not fire for 3 all-same words (ratio = 1/3 = 0.333), so the exact-repetition detector must —
+    // it runs at words.size >= 3 and rejects any input that is N>=2 copies of a k-word unit. Pins
+    // the reject contract so a degenerate "word word word" hallucination cannot pass.
     @Test
     fun translation_repetitionThresholdBoundary() {
-        // 3 identical words: ratio = 1/3 = 0.333, NOT below 0.3 → currently passes the
-        // repetition gate. But the unit-repeat detector (>=4 words, unit-size loop) also
-        // doesn't fire for 3 words (`words.size / 2 = 1`, only checks unitSize=1 which
-        // requires the whole array to be the same single word — true here, so it fires).
-        // Empirically: 3 identical words IS rejected. Pin that.
         assertFalse(
             "3 identical words must be rejected",
             isValidTranslation("hello hello hello", "x"),

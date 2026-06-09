@@ -29,6 +29,32 @@ class VoiceProfileManager(
     File(rootFilesDir, PROFILES_DIR).also { it.mkdirs() }
   }
 
+  /**
+   * Resolves a child file inside [profilesDir] for an untrusted [profileId].
+   *
+   * Profile ids originate from user / voice-enrollment input and must never be allowed to
+   * escape the profiles directory via path traversal. Every character that could introduce a
+   * new path segment is neutralised: the directory separators `/` and `\`, and the null byte
+   * (which can truncate paths on some platforms). After neutralisation the id is a single
+   * filename segment, so a leftover `..` (e.g. from `../etc/passwd` collapsing to
+   * `.._etc_passwd`) is just a literal filename and cannot traverse upward. A final
+   * canonical-path containment check guarantees the resolved file's parent is exactly
+   * [profilesDir] before the handle is returned, defending against any platform-specific edge
+   * case.
+   */
+  private fun profileFile(profileId: String, extension: String): File {
+    val safeId = buildString(profileId.length) {
+      for (ch in profileId) {
+        append(if (ch == '/' || ch == '\\' || ch == '\u0000') '_' else ch)
+      }
+    }
+    val file = File(profilesDir, "$safeId.$extension")
+    require(file.canonicalFile.parentFile == profilesDir.canonicalFile) {
+      "Voice profile id '$profileId' resolves outside the profiles directory"
+    }
+    return file
+  }
+
   fun saveVoice(name: String, wavData: ByteArray): VoiceProfile {
     require(wavData.size <= MAX_VOICE_BYTES) {
       "Voice data exceeds maximum allowed size of ${MAX_VOICE_BYTES / (1024 * 1024)}MB"
@@ -39,14 +65,14 @@ class VoiceProfileManager(
       durationSec = WavUtils.computeDurationSec(wavData),
     )
 
-    val wavFile = File(profilesDir, "${profile.id}.wav")
+    val wavFile = profileFile(profile.id, "wav")
     wavFile.writeBytes(wavData)
 
     return profile.copy(wavPath = wavFile.absolutePath)
   }
 
   fun saveProfile(audioPcm: ShortArray, sampleRate: Int, profileId: String = DEFAULT_PROFILE_ID): VoiceProfile {
-    val wavFile = File(profilesDir, "$profileId.wav")
+    val wavFile = profileFile(profileId, "wav")
     writeWavFile(wavFile, audioPcm, sampleRate)
 
     val durationSec = audioPcm.size.toFloat() / sampleRate
@@ -59,11 +85,11 @@ class VoiceProfileManager(
   }
 
   fun hasProfile(profileId: String = DEFAULT_PROFILE_ID): Boolean {
-    return File(profilesDir, "$profileId.wav").exists()
+    return profileFile(profileId, "wav").exists()
   }
 
   fun loadProfile(profileId: String = DEFAULT_PROFILE_ID): VoiceProfile? {
-    val wavFile = File(profilesDir, "$profileId.wav")
+    val wavFile = profileFile(profileId, "wav")
     if (!wavFile.exists()) return null
 
     return VoiceProfile(
@@ -75,24 +101,23 @@ class VoiceProfileManager(
   }
 
   fun deleteVoice(profileId: String): Boolean {
-    val wavFile = File(profilesDir, "$profileId.wav")
-    return wavFile.delete()
+    return profileFile(profileId, "wav").delete()
   }
 
   fun deleteProfile(profileId: String = DEFAULT_PROFILE_ID) {
-    File(profilesDir, "$profileId.wav").delete()
-    File(profilesDir, "$profileId.se").delete()
+    profileFile(profileId, "wav").delete()
+    profileFile(profileId, "se").delete()
   }
 
   /** Persists the OpenVoice speaker embedding (256 floats) derived from the enrollment clip. */
   fun saveSpeakerEmbedding(embedding: FloatArray, profileId: String = DEFAULT_PROFILE_ID) {
     val buf = java.nio.ByteBuffer.allocate(embedding.size * 4).order(java.nio.ByteOrder.LITTLE_ENDIAN)
     embedding.forEach { buf.putFloat(it) }
-    File(profilesDir, "$profileId.se").writeBytes(buf.array())
+    profileFile(profileId, "se").writeBytes(buf.array())
   }
 
   fun loadSpeakerEmbedding(profileId: String = DEFAULT_PROFILE_ID): FloatArray? {
-    val file = File(profilesDir, "$profileId.se")
+    val file = profileFile(profileId, "se")
     if (!file.exists()) return null
     val bytes = file.readBytes()
     val buf = java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN)
@@ -100,7 +125,7 @@ class VoiceProfileManager(
   }
 
   fun getVoicePath(profileId: String): String? {
-    val wavFile = File(profilesDir, "$profileId.wav")
+    val wavFile = profileFile(profileId, "wav")
     return wavFile.takeIf { it.exists() }?.absolutePath
   }
 

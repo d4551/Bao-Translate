@@ -1,6 +1,7 @@
 package com.google.ai.edge.gallery.customtasks.baotranslate.audio
 
 import com.google.ai.edge.gallery.testkit.Strict
+import org.junit.experimental.categories.Category
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -12,7 +13,7 @@ import org.junit.Test
  * curve → 2.5× gain, so moderate speech becomes a clearly visible bar. These assertions pass for the
  * new formula and would FAIL for the old one.
  */
-@Strict
+@Category(Strict::class)
 class WaveformAmplitudeTest {
 
   @Test

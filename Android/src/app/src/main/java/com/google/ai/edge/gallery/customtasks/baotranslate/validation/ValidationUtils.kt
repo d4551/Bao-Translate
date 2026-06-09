@@ -60,9 +60,14 @@ internal fun isValidTranscription(text: String): Boolean {
         return false
     }
 
+    // Filler-word noise. The filler token set is matched case-insensitively, and a whole
+    // transcription made entirely of filler tokens (e.g. "HmM hMm HMM", "oh um") is rejected,
+    // not just a single token. This catches multi-token filler that an STT model emits during
+    // hesitation, which the single-token-anchored variant let through.
+    val fillerToken = "(?:hmm+|uh+|um+|ah+|oh+)"
     val noisePatterns = listOf(
         Regex("^\\d+/\\d+\\s+\\w+$"),
-        Regex("^(hmm+|uh+|um+|ah+|oh+)$", RegexOption.IGNORE_CASE),
+        Regex("^$fillerToken(?:\\s+$fillerToken)*$", RegexOption.IGNORE_CASE),
         Regex("^[\\s\\d\\W]+$"),
     )
 
@@ -87,7 +92,13 @@ internal fun isSourceEcho(
     targetLanguage: String,
 ): Boolean {
     if (sourceLanguage.equals(targetLanguage, ignoreCase = true)) return false
-    return translated.trim().equals(source.trim(), ignoreCase = true)
+    val trimmedTranslated = translated.trim()
+    val trimmedSource = source.trim()
+    // Empty content (including whitespace-only inputs such as NBSP/EM-SPACE, which
+    // Kotlin's Unicode-aware trim() collapses to "") has nothing to echo, so two empty
+    // sides must never be flagged as a verbatim echo failure.
+    if (trimmedTranslated.isEmpty() || trimmedSource.isEmpty()) return false
+    return trimmedTranslated.equals(trimmedSource, ignoreCase = true)
 }
 
 internal fun isValidTranslation(translated: String, source: String): Boolean {
@@ -105,7 +116,10 @@ internal fun isValidTranslation(translated: String, source: String): Boolean {
         }
     }
 
-    if (words.size >= 4) {
+    // Exact-repetition detector: reject a translation that is N>=2 copies of a k-word unit (e.g.
+    // "hello hello hello" = 3x a 1-word unit). Runs at size >= 3 so degenerate 3-word repeated
+    // hallucinations are rejected even though their ratio (0.333) sits just above the ratio gate.
+    if (words.size >= 3) {
         for (unitSize in 1..words.size / 2) {
             if (words.size % unitSize == 0) {
                 val unit = words.take(unitSize)
