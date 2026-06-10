@@ -29,6 +29,7 @@ import com.google.ai.edge.gallery.customtasks.baotranslate.audio.WavUtils
 import com.google.ai.edge.gallery.customtasks.baotranslate.config.PipelineConfig
 import com.google.ai.edge.gallery.customtasks.baotranslate.stt.WhisperPipeline
 import com.google.ai.edge.gallery.customtasks.baotranslate.tts.KokoroTtsPipeline
+import com.google.ai.edge.gallery.customtasks.baotranslate.tts.SupertonicTtsPipeline
 import com.google.ai.edge.gallery.customtasks.baotranslate.tts.PlatformTtsPipeline
 import com.google.ai.edge.gallery.customtasks.baotranslate.translate.TranslationOutcome
 import com.google.ai.edge.gallery.customtasks.baotranslate.translate.TranslationPipeline
@@ -150,9 +151,10 @@ class BaoTranslateLanguageMatrixE2eTest {
     val failures = mutableListOf<String>()
     val skipped = mutableListOf<String>()
     for (c in cases) {
-      val pcm = PlatformTts.synthesizeTo16k(ctx, c.locale, c.phrase)
-      if (pcm == null) { skipped.add("${c.code}"); Log.w(TAG, "RECOG [${c.code}] skipped: no device TTS voice"); continue }
-      val shorts = ShortArray(pcm.size) { (pcm[it].coerceIn(-1f, 1f) * 32767f).toInt().toShort() }
+      // Device platform-TTS is absent on the test fleet, so use the bundled per-language speech prompt
+      // (device-independent). Each prompt is a clear utterance in that language, so the forced-language
+      // Whisper recognition still proves correct-language decode (content words or native script).
+      val shorts = BaoTranslateLiveTestSupport.promptForLanguage(c.code)
 
       val auto = WhisperPipeline(ctx)
       val autoText = try { auto.initialize(whisperDir); auto.transcribeBlocking(shorts).getOrNull()?.text ?: "" } finally { auto.cleanup() }
@@ -168,71 +170,24 @@ class BaoTranslateLanguageMatrixE2eTest {
       if (!ok) failures.add("${c.code}: forced=\"$forcedText\" matched none of ${c.expects}")
     }
     Log.i(TAG, "RECOGNITION SUMMARY failures=$failures skipped=$skipped")
-    // HARDENED: was `skipped.size < cases.size` (5/6 passes). New: at least half of the
-    // cases must have a working TTS voice. The whole point of forcing the language is to
-    // make the audio recognizable — a CI box with zero TTS voices can't prove that.
-    assertTrue(
-      "Less than half the recognition cases had a device TTS voice (skipped=${skipped.size}/${cases.size}); " +
-        "the test premise (forced language works) cannot be verified on this device.",
-      skipped.size <= cases.size / 2,
-    )
     assertTrue("Forced-language recognition failures: $failures", failures.isEmpty())
   }
 
   /**
-   * Languages Kokoro can't voice (de/ko/ru/ar) must route to the device platform-TTS fallback and
-   * produce real audio — not be spoken with an English Kokoro voice. Verifies the routing predicate
-   * and that the fallback actually synthesizes audio for the languages the device supports.
+   * Languages Kokoro can't voice (de/ja/ko/ru/ar) must route to the on-device Supertonic supplemental
+   * TTS (the router tier between Kokoro and the platform-TTS last resort) — NOT be spoken with a
+   * wrong-language Kokoro voice. Verifies the routing predicate; the actual Supertonic audio for each
+   * language is proven by [BaoTranslateSupertonicAudioE2eTest], device-independently.
    */
   @Test
-  fun nonKokoroLanguages_useDevicePlatformTtsFallback() {
-    val ctx = InstrumentationRegistry.getInstrumentation().targetContext
-    // Routing predicate: these are NOT Kokoro-native, so synthesizeSpeech routes them to platform TTS.
-    // ja is NOT Kokoro-native: NO sherpa-onnx Kokoro model can phonemize Japanese — the bundled
-    // kokoro-multi-lang-v1_0 ships only English (espeak) + Chinese (jieba) phoneme data (per the
-    // k2-fsa docs), so Japanese text would be voiced as wrong-language gibberish. Production therefore
-    // routes ja (with de/ko/ru/ar) to platform TTS, then OpenVoice clones that into the enrolled
-    // timbre. Pinned by KokoroTtsPipelineTest's routing invariant.
+  fun nonKokoroLanguages_routeToSupertonicSupplementalTts() {
     listOf("de", "ko", "ru", "ar", "ja").forEach {
       assertTrue("$it must NOT be Kokoro-native (would speak with a wrong-language voice)", !KokoroTtsPipeline.supportsLanguage(it))
+      assertTrue("$it must be a Supertonic supplemental language (the on-device fallback engine)", SupertonicTtsPipeline.supportsLanguage(it))
     }
     listOf("en", "es", "fr", "it", "pt", "zh", "hi").forEach {
       assertTrue("$it must be Kokoro-native", KokoroTtsPipeline.supportsLanguage(it))
     }
-
-    val platform = PlatformTtsPipeline(ctx)
-    val cases = listOf(
-      "de" to "Guten Morgen, wie geht es dir heute?",
-      "ru" to "Доброе утро, как дела сегодня?",
-      "ko" to "안녕하세요, 오늘 기분이 어때요?",
-      "ar" to "صباح الخير، كيف حالك اليوم؟",
-      "ja" to "おはようございます、お元気ですか？",
-    )
-    val spoke = mutableListOf<String>()
-    val skipped = mutableListOf<String>()
-    try {
-      for ((code, text) in cases) {
-        if (!platform.isLanguageAvailable(code)) { skipped.add(code); Log.w(TAG, "FALLBACK [$code] skipped: no device voice"); continue }
-        val audio = platform.synthesizeAudio(text, code)
-        // Some devices report a language "available" but still fail to synthesize it (no actual
-        // voice data installed). That's a device limitation, not a routing bug — skip, don't fail.
-        if (audio == null || audio.samples.isEmpty()) { skipped.add(code); Log.w(TAG, "FALLBACK [$code] skipped: device reported available but synthesized nothing"); continue }
-        val durSec = audio.samples.size.toFloat() / audio.sampleRate
-        Log.i(TAG, "FALLBACK [$code] -> samples=${audio.samples.size} rate=${audio.sampleRate} dur=${durSec}s")
-        assertTrue("Platform TTS audio implausibly short for $code: ${durSec}s", durSec > 0.3f)
-        spoke.add(code)
-      }
-    } finally {
-      platform.cleanup()
-    }
-    Log.i(TAG, "FALLBACK SUMMARY spoke=$spoke skipped=$skipped")
-    // HARDENED: was `spoke.isNotEmpty()` (1/4 passes). New: at least 2 must work — that's
-    // the threshold where we can say "the fallback path is real, not a fluke".
-    assertTrue(
-      "Less than 2 of the non-Kokoro languages produced audio (spoke=$spoke). " +
-        "Fallback routing cannot be verified on this device.",
-      spoke.size >= 2,
-    )
   }
 
   // ----- BRUTALISATION -----

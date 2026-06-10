@@ -655,14 +655,14 @@ internal class RecordingController(
   fun stopRecording() {
     if (!uiState.value.isRecordingActive) return
     discardRecordingOnStop = false
-    uiState.update { it.copy(pipelineStatus = PipelineStatus.Idle) }
-    recordingScope?.cancel()
-    recordingScope = null
-    recordingJob = null
     captioner?.reset()
-    // Scope cancellation kills the read loop before its own onRecordingStop line runs, so the
-    // phase must be closed out here or the UI stays stuck on Listening/Speaking.
-    conversationEvent { onRecordingStop() }
+    // GRACEFUL stop: flip to Idle so the read loop's `while (isRecordingActive)` exits on its next
+    // iteration, runs its trailing-tail flush (committing a short utterance's translation), and
+    // dispatches onRecordingStop itself. We must NOT cancel the scope here — cancelling throws
+    // CancellationException at the loop's next suspend point, unwinding past the tail flush and
+    // silently dropping that final segment (a <8s utterance with no window/endpoint). The loop holds
+    // the recording mutex until it finishes, so a new startRecording waits for the flush to complete.
+    uiState.update { it.copy(pipelineStatus = PipelineStatus.Idle) }
   }
 
   /** Cancel recording and discard in-flight audio — no final-segment flush. */

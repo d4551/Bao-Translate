@@ -10,7 +10,7 @@
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" /></a>
   <img alt="Platform" src="https://img.shields.io/badge/platform-Android%2012%2B-3DDC84.svg" />
   <img alt="Offline" src="https://img.shields.io/badge/network-100%25%20on--device-success.svg" />
-  <img alt="Languages" src="https://img.shields.io/badge/languages-11-orange.svg" />
+  <img alt="Languages" src="https://img.shields.io/badge/languages-12-orange.svg" />
   <a href="https://ai.google.dev/edge"><img alt="Built on Google AI Edge" src="https://img.shields.io/badge/built%20on-Google%20AI%20Edge%20%7C%20LiteRT-4285F4.svg" /></a>
   <a href="https://github.com/d4551/bao-translate/releases"><img alt="Release" src="https://img.shields.io/github/v/release/d4551/bao-translate?include_prereleases" /></a>
 </p>
@@ -27,39 +27,53 @@ come out **sounding like you**. No internet, no accounts, nothing leaves the pho
 
 * **It speaks in _your_ voice.** Enroll your voice once; translations into any supported language are
   spoken in your own timbre — cross-lingual voice cloning that runs entirely on the phone.
-* **It's genuinely offline.** Voice detection, speech-to-text, translation, and speech all run as
-  local models. Airplane mode works. Nothing is uploaded.
-* **It's a real conversation, not a walkie-talkie.** Two phones pair over Bluetooth LE; each person
-  speaks their own language and hears the other in theirs, attributed by speaker.
+* **Live captions as you talk.** A true streaming recognizer surfaces the recognized words
+  token-by-token while you're still speaking — not only at the end of a sentence — in every supported
+  language (a streaming transducer for English, Vosk for the rest).
+* **Every language is spoken on-device.** No reliance on the phone's built-in text-to-speech: Kokoro
+  voices 7 languages and the on-device Supertonic engine voices the other 5 (de/ja/ko/ru/ar).
+* **It's genuinely offline.** Voice detection, streaming captions, speech-to-text, translation, and
+  speech all run as local models. Airplane mode works. Nothing is uploaded.
+* **It's a real conversation, not a walkie-talkie.** Two phones pair over Nearby (Bluetooth LE +
+  Wi-Fi); each person speaks their own language and hears the other in theirs, attributed by speaker.
 
 ## How it works
 
-A fully local pipeline turns each utterance into translated speech. The speaker's language is
-recognized, translated, and re-spoken — as a preset voice, your cloned voice, or a device voice for
-languages without a preset. In **Conversation mode** each translated turn is also relayed to a
-paired phone and spoken there.
+A fully local pipeline turns each utterance into translated speech, with a live caption streaming as
+you speak. The speaker's language is recognized, translated, and re-spoken — as a preset voice, your
+cloned voice, or the on-device Supertonic voice for languages without a Kokoro preset. In
+**Conversation mode** each translated turn is also relayed to a paired phone and spoken there.
 
 ```
-                                   ┌─ Kokoro preset voice (8 languages)
-mic ─▶ VAD ─▶ STT ─▶ Translation ─┼─ YOUR cloned voice (OpenVoice timbre transfer, any language)  ─▶ speaker
-      Silero  Whisper  Qwen2.5-1.5B └─ Device TTS fallback (de/ko/ru/ar/…)                          └─▶ BLE peer ─▶ speaker
-              (forced to the         (LiteRT-LM)
-               selected language)
+                    ┌─▶ live streaming caption (token-by-token, as you speak)
+                    │     sherpa transducer (en) · Vosk (es/fr/de/zh/ja/ko/pt/it/ru/hi)
+mic ─▶ VAD ─▶ STT ──┤
+     Silero  Whisper └─▶ Translation ──┬─ Kokoro preset voice (en/es/fr/hi/it/pt/zh)
+                       (Qwen2.5-1.5B,   ├─ YOUR cloned voice (OpenVoice timbre, any language) ─▶ speaker
+                        LiteRT-LM)      └─ Supertonic on-device voice (de/ja/ko/ru/ar)        └─▶ Nearby peer ─▶ speaker
 ```
 
+* **Live captions** stream from the first detected word via a true streaming recognizer (a sherpa-onnx
+  zipformer **transducer** for English; **Vosk** for the other languages), provisioned per language on
+  first use. The slower Whisper pass still produces the final, highest-quality transcript that drives
+  translation.
 * **STT** uses the **selected source language** (not blind auto-detect) so recognition stays
   accurate across languages; Auto-detect remains available.
-* **Voice cloning** = Kokoro produces correct pronunciation in the target language, then the
-  **OpenVoice** tone-color converter re-times it into your enrolled timbre — so cloning works for
-  every language Kokoro can pronounce, not just English.
+* **Voice cloning** = Kokoro (or Supertonic) produces correct pronunciation in the target language,
+  then the **OpenVoice** tone-color converter re-times it into your enrolled timbre — so cloning works
+  for every language, not just English.
 
 ## Supported languages
 
-English · Spanish · French · German · Italian · Portuguese · Russian · Chinese · Japanese · Korean · Arabic
+English · Spanish · French · German · Italian · Portuguese · Russian · Chinese · Japanese · Korean · Arabic · Hindi
 
-Spoken output uses Kokoro for **en/es/fr/it/pt/zh/ja** (+ Hindi), and automatically falls back to the
-device's own text-to-speech for languages Kokoro can't voice (**de/ko/ru/ar**), so every supported
-language is both translated and spoken.
+All 12 languages are translated, captioned, **and** spoken entirely on-device — no platform
+text-to-speech required:
+
+* **Live captions** — streaming token-by-token via a sherpa-onnx transducer (English) and Vosk
+  (es/fr/de/zh/ja/ko/pt/it/ru/hi); Arabic uses the Whisper caption as a fallback.
+* **Spoken output** — Kokoro voices **en/es/fr/hi/it/pt/zh**; the on-device Supertonic engine voices
+  **de/ja/ko/ru/ar**.
 
 ## Screenshots
 
@@ -74,10 +88,15 @@ language is both translated and spoken.
 ## ✨ Features
 
 * **Real-time speech translation** — a complete on-device VAD → STT → translation → TTS pipeline.
+* **Multilingual streaming captions** — token-by-token live recognition as you speak, in every
+  language: a streaming **zipformer transducer** (English) and **Vosk** (10 more), lazily provisioned
+  per language; works in both face-to-face and single-speaker continuous mode.
+* **Fully on-device speech for every language** — Kokoro (7 languages) + the supplemental
+  **Supertonic** TTS (de/ja/ko/ru/ar), so no language depends on a device text-to-speech engine.
 * **Cross-lingual voice cloning** — enroll once; hear translations in **your own voice** in any
   supported language, computed on-device (no voice data leaves the phone).
-* **Live Conversation mode** — multi-speaker: translated turns sync to a peer device over Bluetooth
-  LE and play aloud on both ends, attributed per speaker.
+* **Live Conversation mode** — multi-speaker: translated turns sync to a peer device over **Nearby
+  Connections** (Bluetooth LE + Wi-Fi) and play aloud on both ends, attributed per speaker.
 * **Per-speaker language selection** — pick each side's source/target language; STT re-configures to
   the chosen language for accurate recognition.
 * **100% on-device & private** — all inference runs on your hardware; no internet, nothing uploaded.
@@ -99,12 +118,16 @@ Downloaded in-app from Hugging Face on first run:
 | --- | --- | --- |
 | Voice activity detection | Silero VAD | 2 MB |
 | Speech-to-text | Whisper Base (sherpa-onnx) | 148 MB |
+| Streaming captions (English) | Streaming Zipformer transducer (sherpa-onnx) | 44 MB |
+| Streaming captions (other languages) | Vosk small models, one per language | 30–86 MB each, on demand |
 | Translation | Qwen2.5 1.5B (LiteRT-LM) — Gemma optional | 1.5 GB |
 | Text-to-speech | Kokoro Multi-Lang | 142 MB |
+| Supplemental TTS (de/ja/ko/ru/ar) | Supertonic TTS (sherpa-onnx) | 80 MB |
 | Voice cloning | OpenVoice tone converter + reference encoder (ONNX) | 131 MB |
 
-Spoken output for the fallback languages uses the platform text-to-speech already on your phone (no
-download).
+The English caption model and core stack are fetched up front; each non-English Vosk caption model is
+downloaded the first time you use that language (and the live caption falls back to the Whisper pass
+until it lands).
 
 ## 🏁 Getting started
 
@@ -122,13 +145,16 @@ Standard Gradle Android project rooted at [`Android/src`](Android/src).
 ```bash
 cd Android/src
 
-# Use Android Studio's bundled JBR (JDK 21) — matches Gradle 8.10.2 / AGP 8.8.2
+# Use Android Studio's bundled JBR (JDK 21) — Gradle 9.5.1 / AGP 9.2.0 / Kotlin 2.4.0
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 export PATH="$HOME/Library/Android/sdk/platform-tools:$PATH"
 
 ./gradlew :app:assembleDebug              # compile + build the debug APK
 ./gradlew :app:testDebugUnitTest          # unit tests
-./gradlew :app:connectedDebugAndroidTest  # on-device E2E (translation, live-mic, cloning, every language)
+./gradlew :app:connectedDebugAndroidTest  # on-device E2E: streaming captions (every language),
+                                          # all-language on-device audio, live translation, voice
+                                          # cloning, and the two-device Nearby conversation round-trip
+./gradlew :app:smokeE2e                    # fast smoke gate (skill WebView + UI navigation)
 
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
@@ -155,7 +181,8 @@ Bao Translate stands on excellent open-source work — thank you to:
 
 * [**Google AI Edge Gallery**](https://github.com/google-ai-edge/gallery) — the app foundation (Apache-2.0)
 * [**LiteRT** / **LiteRT-LM**](https://github.com/google-ai-edge/LiteRT-LM) — on-device model runtime
-* [**sherpa-onnx**](https://github.com/k2-fsa/sherpa-onnx) — on-device STT/TTS engine
+* [**sherpa-onnx**](https://github.com/k2-fsa/sherpa-onnx) — on-device STT, streaming-ASR & TTS engine
+* [**Vosk**](https://github.com/alphacep/vosk-api) — streaming speech recognition for the multilingual live captions
 * [**ONNX Runtime**](https://github.com/microsoft/onnxruntime) — runs the on-device voice-cloning graphs
 * [**Whisper**](https://github.com/openai/whisper) — speech recognition
 * [**Qwen2.5**](https://github.com/QwenLM/Qwen2.5) — translation model
