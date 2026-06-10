@@ -177,21 +177,18 @@ class BaoTranslateLivePipelineE2eTest {
   }
 
   /**
-   * Regression for the non-face-to-face (single-speaker continuous) path through the SAME real read
-   * loop: touching the loop entry (injected frame source, pre-warm) must not break ordinary
-   * translation. No streaming caption is expected here (that is face-to-face only by design) — only a
-   * committed translation.
+   * Non-face-to-face (single-speaker continuous) through the SAME real read loop, proving two things:
+   * (1) streaming captions now appear in continuous mode too (not face-to-face only); and (2) a SHORT
+   * utterance (under the 8s window, no turn endpoint) ended by tapping stop still commits its
+   * translation — the NonCancellable tail flush (regression fix for the silently-dropped utterance).
    */
   @Test
-  fun injectedEnglishSpeech_nonF2f_translatesThroughRealLoop() {
-    // Non-F2F commits a live segment on the 8s sliding window (it has no turn endpoint), so feed
-    // >8s of speech: the base prompt three times (~11s) so a window fires through the real loop.
-    val base = BaoTranslateLiveTestSupport.englishPromptAsSttPcm()
-    val promptPcm = base + base + base + ShortArray(16000)
+  fun injectedEnglishSpeech_nonF2f_streamsCaptionAndTranslatesShortUtteranceOnStop() {
+    // A SHORT prompt (~5s, under the 8s window) so neither a live window nor an endpoint fires — the
+    // translation can only be committed by the stop-triggered tail flush.
+    val promptPcm = paddedEnglishPrompt()
     val vm = reachReadyScreen()
 
-    // Reset to single-speaker mode + a known language pair (independent of any prior test that left
-    // the shared ViewModel in face-to-face / another language).
     instrumentation.runOnMainSync {
       vm.setFaceToFaceMode(false)
       vm.setSourceLanguage("English")
@@ -204,23 +201,42 @@ class BaoTranslateLivePipelineE2eTest {
     }
     assertTrue("Expected non-face-to-face mode", !vm.uiState.value.faceToFaceMode)
 
+    val captions = Collections.synchronizedList(mutableListOf<String>())
+    val collectorScope = CoroutineScope(Dispatchers.Default)
+    val collectorJob =
+      collectorScope.launch {
+        vm.uiState.map { it.liveSourcePreview?.trim() }.distinctUntilChanged().collect { c ->
+          if (!c.isNullOrBlank()) captions.add(c)
+        }
+      }
+
     RecordingController.testPcmSource = promptPcm
     instrumentation.runOnMainSync { vm.startRecording() }
 
+    // Let the ~5s paced prompt play out + captions stream; then stop (commits via the tail flush).
+    val playDeadline = SystemClock.uptimeMillis() + 12_000
+    while (SystemClock.uptimeMillis() < playDeadline && captions.size < 2) SystemClock.sleep(40)
+    SystemClock.sleep(3_000)
+    instrumentation.runOnMainSync { vm.stopRecording() }
+
     var translated: String? = null
-    val deadline = SystemClock.uptimeMillis() + 60_000
-    while (SystemClock.uptimeMillis() < deadline && translated == null) {
+    val transDeadline = SystemClock.uptimeMillis() + 30_000
+    while (SystemClock.uptimeMillis() < transDeadline && translated == null) {
       translated =
         vm.uiState.value.transcripts.firstOrNull { it.isUser && it.translatedText.isNotBlank() }
           ?.translatedText
       SystemClock.sleep(50)
     }
-
-    instrumentation.runOnMainSync { vm.stopRecording() }
+    collectorJob.cancel()
     RecordingController.testPcmSource = null
+    val seen = captions.toList()
 
-    Log.i("BaoLivePipelineTest", "NON_F2F_TRANSLATED='${translated?.take(60)}'")
-    assertTrue("Non-F2F continuous path produced no translation through the real loop", translated != null)
+    Log.i(
+      "BaoLivePipelineTest",
+      "NON_F2F_PARTIALS=${seen.size} first='${seen.firstOrNull()?.take(30)}' translated='${translated?.take(60)}'",
+    )
+    assertTrue("Non-F2F continuous mode streamed no live caption (saw ${seen.size}): $seen", seen.size >= 2)
+    assertTrue("Short non-F2F utterance lost its translation on stop (NonCancellable flush)", translated != null)
   }
 
   /**

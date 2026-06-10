@@ -42,9 +42,13 @@ class VoskStreamingPipeline(private val modelDir: String) : StreamingCaptioner {
     synchronized(lock) {
       if (recognizer != null) return true
       val dir = File(modelDir)
-      // A Vosk model directory carries am/ + conf/ + graph/. Require them so a partial extraction
+      // Vosk ships two layouts: new (am/ + conf/ + graph/) and old-flat (final.mdl + mfcc.conf); both
+      // carry ivector/. Require ivector/ + the acoustic model in either layout so a partial extraction
       // never hands Model() a half-written directory.
-      if (!File(dir, "conf").isDirectory || !File(dir, "graph").isDirectory) {
+      if (
+        !File(dir, "ivector").isDirectory ||
+          !(File(dir, "am").isDirectory || File(dir, "final.mdl").exists())
+      ) {
         BaoLog.w(TAG, "Vosk model not present/complete under $modelDir")
         return false
       }

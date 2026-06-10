@@ -34,6 +34,7 @@ import com.google.ai.edge.gallery.customtasks.baotranslate.bluetooth.BleConversa
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -434,6 +435,8 @@ internal class RecordingController(
               sampleCount = 0
               samplesSinceLastLiveWindow = 0
               turnSpeechHeard = false
+              streamingTurnPrimed = false
+              captioner?.reset()
               continue@readLoop
             }
 
@@ -471,6 +474,10 @@ internal class RecordingController(
                   queueRealtimeTranslationSegment(recordingSessionId, pendingSamples.copyOf(sampleCount))
                   queuedLiveSegment = true
                   lastSpeechActivityAt = System.currentTimeMillis()
+                  // Restart the live caption for the next window so it tracks current speech, not the
+                  // whole session (the recognizer is stateful and would grow unbounded otherwise).
+                  streamingTurnPrimed = false
+                  captioner?.reset()
                   val overlapSamples = liveWindowSamples - liveStrideSamples
                   System.arraycopy(pendingSamples, liveStrideSamples, pendingSamples, 0, overlapSamples)
                   sampleCount = overlapSamples
@@ -480,9 +487,9 @@ internal class RecordingController(
             }
 
             // Streaming partial caption from the FIRST detected speech (not gated on the 1s
-            // translation minimum), so the recognized caption appears word-by-word as you talk
-            // instead of only at the turn endpoint below — industry-standard live captioning.
-            if (faceToFace && turnSpeechHeard) {
+            // translation minimum), so the recognized caption appears word-by-word as you talk — in
+            // BOTH face-to-face and single-speaker continuous mode. Industry-standard live captioning.
+            if (turnSpeechHeard) {
               if (captionLang != null && isCaptionViable(captionLang)) {
                 // TRUE streaming ASR for this language (sherpa for English, Vosk otherwise),
                 // pre-warmed off the audio thread at recording start: prime with everything heard so
@@ -605,13 +612,18 @@ internal class RecordingController(
       val finalSampleCount = if (queuedLiveSegment) samplesSinceLastLiveWindow else sampleCount
       if (!discardRecordingOnStop && finalSampleCount >= minSegmentSamples) {
         val finalStart = sampleCount - finalSampleCount
-        segmentProcessingMutex.withLock {
-          processAudioSegment(
-            pendingSamples.copyOfRange(finalStart, sampleCount),
-            recordingSessionId = recordingSessionId,
-            preserveRecordingStatus = false,
-            reportEmptySpeech = !queuedLiveSegment,
-          )
+        // NonCancellable: stopRecording() cancels this coroutine's scope, but the tail flush is the
+        // ONLY commit path for a short utterance ended by tapping stop (no live window fired, and the
+        // turn endpoint is face-to-face only). Without this, that translation is silently lost.
+        withContext(NonCancellable) {
+          segmentProcessingMutex.withLock {
+            processAudioSegment(
+              pendingSamples.copyOfRange(finalStart, sampleCount),
+              recordingSessionId = recordingSessionId,
+              preserveRecordingStatus = false,
+              reportEmptySpeech = !queuedLiveSegment,
+            )
+          }
         }
       } else if (!discardRecordingOnStop && sampleCount > 0 && !queuedLiveSegment) {
         uiState.update { it.copy(errorMessage = getApp().getString(R.string.bao_translate_error_recording_short)) }

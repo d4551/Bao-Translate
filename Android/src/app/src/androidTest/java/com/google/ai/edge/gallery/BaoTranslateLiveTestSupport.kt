@@ -86,6 +86,9 @@ object BaoTranslateLiveTestSupport {
   /** The bundled Spanish speech prompt (for multilingual streaming-caption verification). */
   fun spanishPromptAsSttPcm(): ShortArray = promptAsSttPcm(PROMPT_ASSET_ES)
 
+  /** The bundled speech prompt for any supported language code (bao_live_prompt_<code>.wav). */
+  fun promptForLanguage(code: String): ShortArray = promptAsSttPcm("bao_live_prompt_$code.wav")
+
   private fun promptAsSttPcm(asset: String): ShortArray {
     val testAssets = InstrumentationRegistry.getInstrumentation().context.assets
     val wavBytes = testAssets.open(asset).use { it.readBytes() }

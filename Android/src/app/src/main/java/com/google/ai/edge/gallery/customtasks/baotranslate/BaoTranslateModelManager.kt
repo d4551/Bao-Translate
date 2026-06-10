@@ -352,7 +352,11 @@ object BaoTranslateModelManager {
     return when (spec.engine) {
       // length>0 (not just exists): a zero-byte file from a killed write must not read as Ready.
       CaptionEngine.SHERPA -> File(dir, "encoder-epoch-99-avg-1.int8.onnx").length() > 0
-      CaptionEngine.VOSK -> File(dir, "conf").isDirectory && File(dir, "graph").isDirectory
+      // Vosk ships TWO model layouts: new (am/ + conf/ + graph/) and old-flat (final.mdl + mfcc.conf).
+      // Both carry ivector/; require it plus the acoustic model in either layout.
+      CaptionEngine.VOSK ->
+        File(dir, "ivector").isDirectory &&
+          (File(dir, "am").isDirectory || File(dir, "final.mdl").length() > 0)
     }
   }
 
@@ -588,18 +592,25 @@ object BaoTranslateModelManager {
     val baseDir = getSherpaOnnxDir(context)
     val archiveFile = File(baseDir, archive.archiveFileName)
 
-    if (!archiveFile.exists()) {
-      val downloadResult = downloadFileWithProgress(
-        context,
-        archive.downloadUrl, archiveFile, archive.sizeBytes, archive.sizeBytes,
-      ) { downloaded, total ->
-        val progress = if (total > 0) downloaded.toFloat() / total else 0f
-        updateStatus(modelId, ModelStatus.Downloading(progress, downloaded, total))
-      }
-      if (downloadResult.isFailure) {
-        archiveFile.delete()
-        return@withContext downloadResult
-      }
+    // We are here only because the model is NOT fully extracted. A leftover archive + a partial
+    // extraction means a prior run was interrupted and the archive is likely truncated (extracting it
+    // throws "Unexpected end of stream", leaving e.g. a missing vocoder) — so discard both and
+    // re-download fresh instead of skipping the download and failing extraction forever.
+    if (archiveFile.exists()) {
+      BaoLog.w(TAG, "${archive.modelId}: stale archive from an interrupted run; re-downloading clean")
+      archiveFile.delete()
+      File(baseDir, archive.extractDir).deleteRecursively()
+    }
+    val downloadResult = downloadFileWithProgress(
+      context,
+      archive.downloadUrl, archiveFile, archive.sizeBytes, archive.sizeBytes,
+    ) { downloaded, total ->
+      val progress = if (total > 0) downloaded.toFloat() / total else 0f
+      updateStatus(modelId, ModelStatus.Downloading(progress, downloaded, total))
+    }
+    if (downloadResult.isFailure) {
+      archiveFile.delete()
+      return@withContext downloadResult
     }
 
     updateStatus(modelId, ModelStatus.Extracting)
