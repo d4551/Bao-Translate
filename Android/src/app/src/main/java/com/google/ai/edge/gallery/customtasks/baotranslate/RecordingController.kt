@@ -22,7 +22,10 @@ import com.google.ai.edge.gallery.customtasks.baotranslate.config.PipelineConfig
 import com.google.ai.edge.gallery.customtasks.baotranslate.data.SupportedLanguages
 import com.google.ai.edge.gallery.customtasks.baotranslate.data.TranslationMessage
 import com.google.ai.edge.gallery.customtasks.baotranslate.stt.EmptyTranscriptionException
+import com.google.ai.edge.gallery.customtasks.baotranslate.stt.StreamingCaptioner
+import com.google.ai.edge.gallery.customtasks.baotranslate.stt.StreamingSttPipeline
 import com.google.ai.edge.gallery.customtasks.baotranslate.stt.VadProcessor
+import com.google.ai.edge.gallery.customtasks.baotranslate.stt.VoskStreamingPipeline
 import com.google.ai.edge.gallery.customtasks.baotranslate.translate.TranslationOutcome
 import com.google.ai.edge.gallery.customtasks.baotranslate.tts.KokoroTtsPipeline
 import com.google.ai.edge.gallery.customtasks.baotranslate.tts.TtsEngine
@@ -90,6 +93,47 @@ internal class RecordingController(
 ) {
   private val recordingMutex = Mutex()
   private val segmentProcessingMutex = Mutex()
+  // Guards against overlapping streaming partial-caption decodes (at most one in flight).
+  private val partialCaptionInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
+  // Multilingual TRUE streaming ASR for live token-by-token captions: a per-language [StreamingCaptioner]
+  // (sherpa zipformer transducer for English, Vosk for the other languages). Loaded for the active
+  // caption language; null while warming or when no streaming model exists (-> chunked-Whisper).
+  @Volatile private var captioner: StreamingCaptioner? = null
+  @Volatile private var captionerLang: String? = null
+  // True once a load attempt for [captionerLang] has resolved (so the read loop can tell "warming"
+  // from "failed/absent" and fall back to chunked without blocking the audio thread).
+  @Volatile private var captionerChecked = false
+
+  // Test-only seam: when set, the real recording read loop sources its frames from this injected PCM
+  // instead of the mic, so instrumentation exercises the PRODUCTION VAD -> turn-endpoint -> streaming
+  // partial -> translation loop (not a parallel reimplementation). Null in production. Frames are
+  // returned as fast as the loop reads (no real-time pacing); exhaustion returns 0 and the test calls
+  // stopRecording() to trigger the final-segment flush.
+  @Volatile private var injectedFrameSource: InjectedFrameSource? = null
+
+  /**
+   * Real-time-paced frame reader over a fixed PCM buffer, mimicking a live mic: it only releases
+   * audio up to the wall-clock playback position, so VAD turn-endpointing (which keys off wall-clock
+   * silence) and the streaming-partial cadence behave exactly as with a real microphone. Returns 0
+   * while waiting for the next frame's real time (the read loop sleeps), and 0 once exhausted.
+   */
+  private class InjectedFrameSource(private val pcm: ShortArray, private val sampleRate: Int) {
+    private var position = 0
+    private var startMs = 0L
+
+    fun read(buffer: ShortArray): Int {
+      val now = android.os.SystemClock.elapsedRealtime()
+      if (startMs == 0L) startMs = now
+      if (position >= pcm.size) return 0
+      val playbackSamples = ((now - startMs) * sampleRate / 1000L).toInt()
+      val available = minOf(playbackSamples - position, pcm.size - position)
+      if (available <= 0) return 0
+      val count = minOf(buffer.size, available)
+      System.arraycopy(pcm, position, buffer, 0, count)
+      position += count
+      return count
+    }
+  }
   @Volatile private var holdsRecordingLock = false
   @Volatile private var currentRecordingSessionId = 0L
   var recordingJob: Job? = null
@@ -168,28 +212,36 @@ internal class RecordingController(
         pipelineStatus = PipelineStatus.StartingRecording,
         errorMessage = null,
         liveTranslationPreview = null,
+        liveSourcePreview = null,
         amplitudes = emptyList(),
         elapsedSeconds = 0f,
       )
     }
 
-    // Test-only seam: drive the live-translation pipeline from injected PCM instead of the mic.
-    // A device's echo canceller cancels its own speaker output captured by its own mic, so an
-    // automated speaker->mic self-loopback cannot feed STT; this routes clean PCM through the SAME
-    // VAD -> Whisper -> translate -> UI path. Never set outside instrumentation tests.
+    // Test-only seam: drive the REAL read loop from injected PCM instead of the mic (the loop reads
+    // frames from injectedFrameSource when set). A device's echo canceller cancels its own speaker
+    // output captured by its own mic, so an automated speaker->mic self-loopback cannot feed STT;
+    // this routes clean PCM through the exact production VAD -> turn-endpoint -> streaming-partial ->
+    // translate -> UI loop. Never set outside instrumentation tests.
     val injectedPcm = testPcmSource
     if (injectedPcm != null) {
       testPcmSource = null
-      val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-      recordingScope = scope
-      recordingJob = scope.launch {
-        runInjectedLiveTranslationForTest(recordingSessionId, injectedPcm)
-      }
-      return
+      injectedFrameSource = InjectedFrameSource(injectedPcm, PipelineConfig.STT_SAMPLE_RATE)
     }
 
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     recordingScope = scope
+    // Multilingual caption provisioning, OFF the audio thread: if the streaming model for the
+    // speaker's language is present, pre-warm it so its ~1s load never stalls first-turn capture; if
+    // it's a supported language not yet downloaded, fetch it in the background (this session captions
+    // via chunked-Whisper, the next streams). Languages with no streaming model just use chunked.
+    captionLanguageCode()?.let { lang ->
+      if (BaoTranslateModelManager.isCaptionModelReady(app, lang)) {
+        scope.launch(Dispatchers.IO) { ensureCaptioner(lang) }
+      } else {
+        scope.launch(Dispatchers.IO) { BaoTranslateModelManager.downloadCaptionModel(app, lang) }
+      }
+    }
     recordingJob = scope.launch {
       try {
       if (ContextCompat.checkSelfPermission(app, Manifest.permission.RECORD_AUDIO) !=
@@ -280,8 +332,13 @@ internal class RecordingController(
       val liveStrideSamples = sampleRate * LIVE_TRANSLATION_STRIDE_SECONDS
       val minSegmentSamples = sampleRate * MIN_TRANSLATION_SEGMENT_SECONDS
       val pendingSamples = ShortArray(liveWindowSamples)
+      val partialCaptionStepSamples = sampleRate * 3 / 2 // 1.5s streaming-partial cadence
       var sampleCount = 0
       var samplesSinceLastLiveWindow = 0
+      var samplesSinceLastPartial = 0
+      var streamingTurnPrimed = false
+      // The language to caption this session (speaker's source language), fixed for the recording.
+      val captionLang = captionLanguageCode()
       var queuedLiveSegment = false
       var recordingFailed = false
       var publishedRecordingState = false
@@ -363,7 +420,9 @@ internal class RecordingController(
           }
         }
 
-        val readCount = recorder.read(buffer, 0, buffer.size, AudioRecord.READ_NON_BLOCKING)
+        val readCount =
+          injectedFrameSource?.read(buffer)
+            ?: recorder.read(buffer, 0, buffer.size, AudioRecord.READ_NON_BLOCKING)
 
         when {
           readCount > 0 -> {
@@ -420,6 +479,40 @@ internal class RecordingController(
               }
             }
 
+            // Streaming partial caption from the FIRST detected speech (not gated on the 1s
+            // translation minimum), so the recognized caption appears word-by-word as you talk
+            // instead of only at the turn endpoint below — industry-standard live captioning.
+            if (faceToFace && turnSpeechHeard) {
+              if (captionLang != null && isCaptionViable(captionLang)) {
+                // TRUE streaming ASR for this language (sherpa for English, Vosk otherwise),
+                // pre-warmed off the audio thread at recording start: prime with everything heard so
+                // far this turn, then feed each newly-read frame so the hypothesis grows token-by-
+                // token. While the recognizer is still warming, the feed is a no-op (skips a frame)
+                // rather than stalling capture.
+                if (captioner != null && captionerLang == captionLang) {
+                  if (!streamingTurnPrimed) {
+                    BaoLog.i(REC_TAG, "LIVE_PARTIAL_BRANCH=streaming:$captionLang session=$recordingSessionId")
+                    feedCaptionPartial(recordingSessionId, captionLang, pendingSamples.copyOf(sampleCount))
+                    streamingTurnPrimed = true
+                  } else {
+                    feedCaptionPartial(recordingSessionId, captionLang, buffer.copyOf(readCount))
+                  }
+                }
+              } else {
+                // No streaming model for this language (AUTO / unsupported / load failed): periodic
+                // chunked-Whisper re-decode, which is multilingual via the offline Whisper model.
+                if (!streamingTurnPrimed) {
+                  BaoLog.i(REC_TAG, "LIVE_PARTIAL_BRANCH=chunked session=$recordingSessionId")
+                  streamingTurnPrimed = true
+                }
+                samplesSinceLastPartial += readCount
+                if (samplesSinceLastPartial >= partialCaptionStepSamples) {
+                  samplesSinceLastPartial = 0
+                  queuePartialCaption(recordingSessionId, pendingSamples.copyOf(sampleCount))
+                }
+              }
+            }
+
             // Face-to-face turn endpoint: speech followed by a natural pause flushes the whole
             // utterance as ONE segment, which is then translated and spoken before the next turn.
             if (
@@ -433,6 +526,9 @@ internal class RecordingController(
               queuedLiveSegment = true
               sampleCount = 0
               samplesSinceLastLiveWindow = 0
+              samplesSinceLastPartial = 0
+              streamingTurnPrimed = false
+              captioner?.reset()
               turnSpeechHeard = false
             }
 
@@ -470,7 +566,7 @@ internal class RecordingController(
               delay(AUDIO_READ_EMPTY_SLEEP_MS)
               continue@readLoop
             }
-            if (now - lastPositiveReadAt >= AUDIO_READ_STALL_TIMEOUT_MS) {
+            if (now - lastPositiveReadAt >= AUDIO_READ_STALL_TIMEOUT_MS && injectedFrameSource == null) {
               BaoLog.e(
                 REC_TAG,
                 "AudioRecord produced no mic frames for ${now - lastPositiveReadAt}ms session=$recordingSessionId",
@@ -538,48 +634,9 @@ internal class RecordingController(
         audioRecord = null
       }
       } finally {
+        injectedFrameSource = null
         unlockRecordingIfHeld()
       }
-    }
-  }
-
-  // Sources audio from injected PCM and reuses the real queueRealtimeTranslationSegment /
-  // processAudioSegment path so STT, translation, and UI markers behave exactly as in production.
-  // Windows audio into live segments and flushes the tail, staying "recording" until stop.
-  private suspend fun runInjectedLiveTranslationForTest(recordingSessionId: Long, pcm: ShortArray) {
-    try {
-      val sampleRate = PipelineConfig.STT_SAMPLE_RATE
-      val liveWindowSamples = sampleRate * LIVE_TRANSLATION_WINDOW_SECONDS
-      val liveStrideSamples = sampleRate * LIVE_TRANSLATION_STRIDE_SECONDS
-      val minSegmentSamples = sampleRate * MIN_TRANSLATION_SEGMENT_SECONDS
-      uiState.update { it.copy(pipelineStatus = PipelineStatus.Recording, errorMessage = null) }
-      BaoLog.i(REC_TAG, "Injected live translation session=$recordingSessionId samples=${pcm.size} (TEST)")
-
-      var queuedLiveSegment = false
-      var offset = 0
-      while (offset + liveWindowSamples <= pcm.size && coroutineContext.isActive) {
-        queueRealtimeTranslationSegment(recordingSessionId, pcm.copyOfRange(offset, offset + liveWindowSamples))
-        queuedLiveSegment = true
-        offset += liveStrideSamples
-      }
-      val tailStart = if (queuedLiveSegment) offset else 0
-      if (pcm.size - tailStart >= minSegmentSamples) {
-        segmentProcessingMutex.withLock {
-          processAudioSegment(
-            pcm.copyOfRange(tailStart, pcm.size),
-            recordingSessionId = recordingSessionId,
-            preserveRecordingStatus = true,
-            reportEmptySpeech = !queuedLiveSegment,
-          )
-        }
-      }
-
-      // Stay "recording" until the test presses stop, exactly like the mic loop.
-      while (coroutineContext.isActive && uiState.value.isRecordingActive) {
-        delay(100)
-      }
-    } finally {
-      unlockRecordingIfHeld()
     }
   }
 
@@ -590,6 +647,7 @@ internal class RecordingController(
     recordingScope?.cancel()
     recordingScope = null
     recordingJob = null
+    captioner?.reset()
     // Scope cancellation kills the read loop before its own onRecordingStop line runs, so the
     // phase must be closed out here or the UI stays stuck on Listening/Speaking.
     conversationEvent { onRecordingStop() }
@@ -610,6 +668,7 @@ internal class RecordingController(
     recordingScope?.cancel()
     recordingScope = null
     recordingJob = null
+    captioner?.reset()
     conversationEvent { onRecordingStop() }
   }
 
@@ -636,6 +695,106 @@ internal class RecordingController(
         )
       }
     }
+  }
+
+  // Streaming partial caption: while a turn is still being spoken, decode the audio heard SO FAR and
+  // surface it as the live recognized text — so the caption streams as you talk instead of only
+  // appearing at end-of-turn. Best-effort and non-destructive: it never translates, commits a
+  // transcript, or speaks. At most one runs at a time (compareAndSet), and it shares
+  // segmentProcessingMutex with the final decode so the single Whisper context is never used
+  // concurrently; the in-flight flag is cleared on completion (success, failure, or cancel).
+  private fun queuePartialCaption(recordingSessionId: Long, audioSamples: ShortArray) {
+    if (!partialCaptionInFlight.compareAndSet(false, true)) return
+    val scope = recordingScope
+    if (scope == null) {
+      partialCaptionInFlight.set(false)
+      return
+    }
+    val job =
+      scope.launch(Dispatchers.IO) {
+        if (isStaleRecordingSegment(recordingSessionId)) return@launch
+        val whisper = pipelines.pipelineMutex.withLock { pipelines.whisperPipeline } ?: return@launch
+        val text =
+          segmentProcessingMutex.withLock {
+            if (isStaleRecordingSegment(recordingSessionId)) null
+            else whisper.transcribeBlocking(audioSamples).getOrNull()?.text
+          }
+        if (text != null && isValidTranscription(text) && !isStaleRecordingSegment(recordingSessionId)) {
+          BaoLog.i(REC_TAG, "Partial caption chars=${text.length} session=$recordingSessionId")
+          uiState.update { if (it.isRecordingActive) it.copy(liveSourcePreview = text) else it }
+        }
+      }
+    job.invokeOnCompletion { partialCaptionInFlight.set(false) }
+  }
+
+  // The ISO code of the language to caption this session — the speaker's configured source language.
+  // null when AUTO or a language with no streaming model (-> chunked-Whisper caption instead).
+  private fun captionLanguageCode(): String? {
+    val sourceKey = uiState.value.sourceLanguage
+    if (sourceKey == SupportedLanguages.AUTO.key) return null
+    val code = SupportedLanguages.CODE_MAP[sourceKey] ?: return null
+    return if (BaoTranslateModelManager.captionEngineFor(code) != null) code else null
+  }
+
+  // True when a provisioned streaming model exists for [langCode] AND a prior load attempt for this
+  // language has not failed. A present-but-unloadable model resolves to false so the read loop falls
+  // back to chunked-Whisper instead of showing nothing.
+  private fun isCaptionViable(langCode: String): Boolean =
+    BaoTranslateModelManager.isCaptionModelReady(getApp(), langCode) &&
+      !(captionerLang == langCode && captionerChecked && captioner == null)
+
+  // Loads the streaming captioner for [langCode] (blocking native load, ~1s). MUST be called OFF the
+  // audio read thread — pre-warmed at recording start so the first turn never stalls capture. Builds
+  // the sherpa transducer for English and Vosk for the other languages; caches one captioner at a
+  // time and rebuilds when the caption language changes.
+  @Synchronized
+  private fun ensureCaptioner(langCode: String): StreamingCaptioner? {
+    if (captionerLang == langCode) {
+      captioner?.let { return it }
+      if (captionerChecked) return null
+    } else {
+      captioner?.release()
+      captioner = null
+      captionerLang = langCode
+      captionerChecked = false
+    }
+    val dir = BaoTranslateModelManager.getCaptionModelDir(getApp(), langCode)
+    val pipeline: StreamingCaptioner? =
+      when (BaoTranslateModelManager.captionEngineFor(langCode)) {
+        BaoTranslateModelManager.CaptionEngine.SHERPA ->
+          dir?.let { StreamingSttPipeline(it.absolutePath) }?.takeIf { it.initialize() }
+        BaoTranslateModelManager.CaptionEngine.VOSK ->
+          dir?.let { VoskStreamingPipeline(it.absolutePath) }?.takeIf { it.initialize() }
+        null -> null
+      }
+    // Mark checked only AFTER the load attempt resolves (warming vs failed distinction).
+    captionerChecked = true
+    if (pipeline == null) {
+      BaoLog.w(REC_TAG, "Caption model for '$langCode' present but failed to load; using chunked")
+    }
+    captioner = pipeline
+    return pipeline
+  }
+
+  /** Releases the native streaming captioner; call when the owning ViewModel is cleared. */
+  fun releaseStreamingStt() {
+    captioner?.release()
+    captioner = null
+    captionerLang = null
+    captionerChecked = false
+  }
+
+  // Feeds an INCREMENTAL audio chunk to the (pre-warmed) captioner for [langCode] and surfaces its
+  // growing hypothesis as the live caption. Non-blocking: skips the frame while warming rather than
+  // loading on the audio thread. Returns false if no loaded captioner for this language.
+  private fun feedCaptionPartial(recordingSessionId: Long, langCode: String, samples: ShortArray): Boolean {
+    val cap = captioner?.takeIf { captionerLang == langCode && it.isReady } ?: return false
+    if (isStaleRecordingSegment(recordingSessionId)) return true
+    val text = cap.acceptAndDecode(samples).trim()
+    if (text.isNotBlank() && !isStaleRecordingSegment(recordingSessionId)) {
+      uiState.update { if (it.isRecordingActive) it.copy(liveSourcePreview = text) else it }
+    }
+    return true
   }
 
   private fun statusAfterSegment(preserveRecordingStatus: Boolean): PipelineStatus =
@@ -763,6 +922,11 @@ internal class RecordingController(
         continue
       }
 
+      // Surface the recognized SOURCE text immediately — the translation below (Qwen) is the
+      // dominant latency (~1s+), so showing the live caption now makes the conversation feel live
+      // instead of waiting for the full translated commit.
+      uiState.update { it.copy(liveSourcePreview = transcription.text) }
+
       // Face-to-face (single-device, 2-speaker) auto-detects every turn (like AUTO source) so either
       // person's language is transcribed; STT is already in auto-detect for both.
       val twoWay = uiState.value.faceToFaceMode
@@ -815,7 +979,7 @@ internal class RecordingController(
           if (preserveRecordingStatus) {
             val lastUserText = uiState.value.transcripts.lastOrNull { it.isUser }?.translatedText
             if (lastUserText != null && lastUserText.trim().equals(translatedText.trim(), ignoreCase = true)) {
-              uiState.update { it.copy(liveTranslationPreview = translatedText) }
+              uiState.update { it.copy(liveTranslationPreview = translatedText, liveSourcePreview = null) }
               continue
             }
           }
@@ -837,6 +1001,7 @@ internal class RecordingController(
             it.copy(
               transcripts = it.transcripts + message,
               liveTranslationPreview = if (preserveRecordingStatus) translatedText else it.liveTranslationPreview,
+              liveSourcePreview = null,
             )
           }
 

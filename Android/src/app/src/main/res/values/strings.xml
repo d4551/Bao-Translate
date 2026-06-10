@@ -900,6 +900,7 @@
   <string name="bao_model_kokoro_tts">Kokoro Multi-Lang TTS</string>
   <string name="bao_model_silero_vad">Silero VAD</string>
   <string name="bao_model_whisper_base">Whisper Base STT (Sherpa-ONNX)</string>
+  <string name="bao_model_streaming_asr">Streaming ASR (Zipformer Transducer)</string>
   <string name="bao_model_qwen25_1b">Qwen2.5 1.5B Translation (LiteRT-LM compact)</string>
   <string name="bao_model_gemma4_e2b">Gemma 4 E2B Translation (LiteRT-LM upgrade)</string>
   <string name="bao_model_openvoice">OpenVoice Cross-Lingual Voice Clone (ONNX)</string>

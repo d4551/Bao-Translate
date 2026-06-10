@@ -148,6 +148,7 @@ dependencies {
   testImplementation(libs.kotest.property)
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.espresso.core)
+  androidTestImplementation(libs.androidx.uiautomator)
   androidTestImplementation(platform(libs.androidx.compose.bom))
   androidTestImplementation(libs.androidx.ui.test.junit4)
   androidTestImplementation(libs.hilt.android.testing)
@@ -166,6 +167,11 @@ dependencies {
   // 1.24.3 is the exact (byte-identical) ORT build sherpa-onnx 1.13.2 bundles — so the packaging
   // pickFirst on libonnxruntime.so (see android{}) leaves one runtime that satisfies both.
   implementation(libs.onnxruntime.android)
+  // Vosk (Kaldi): the ONLY on-device engine with TRUE streaming partials for the app's non-CJK
+  // languages (Spanish/French/German/Russian/Hindi/...), which sherpa-onnx has no streaming model
+  // for. Ships its own libvosk.so (no libonnxruntime.so clash). Used for multilingual live captions;
+  // the sherpa zipformer transducer stays the English caption engine.
+  implementation(libs.vosk.android)
   // Google Nearby Connections: maintained, multi-medium (BLE + Bluetooth Classic + Wi-Fi) P2P
   // transport for the multi-device conversation mesh (see BleConversationManager).
   implementation(libs.play.services.nearby)
@@ -247,7 +253,14 @@ tasks.register<Exec>("smokeE2e") {
       "-w",
       "-e",
       "class",
-      "com.google.ai.edge.gallery.SmokeE2eTest",
+      // Real on-device coverage, both deterministic and model-free:
+      //  - SkillWebViewBridgeE2eTest: skill ES-module loading + native storage bridge round-trip +
+      //    vendored-font + a11y DOM + realtime re-render.
+      //  - UiAutomatorSmokeTest: app launch + home/drawer/models/settings navigation, driven by
+      //    UiAutomator (accessibility-tree polling) so it never calls Compose waitForIdle() — which
+      //    hangs on this app. It replaced the old createAndroidComposeRule SmokeE2eTest that hung at
+      //    launch and was historically masked green by the am-instrument exit-0 bug (now fixed).
+      "com.google.ai.edge.gallery.SkillWebViewBridgeE2eTest,com.google.ai.edge.gallery.UiAutomatorSmokeTest",
       "$appId.test/androidx.test.runner.AndroidJUnitRunner",
     )
   }
@@ -275,17 +288,19 @@ protobuf {
 // skills/ is the single source of truth; the Android copy is gitignored.
 // Layout must stay FLAT (assets/skills/<id>/SKILL.md) — SkillManagerViewModel
 // lists assets.list("skills") and reads skills/<dir>/SKILL.md directly.
-// Ships built-in skills + the shared/ runtime modules only: featured/ skills are
-// not bundled (host-app parity with the pre-sync asset set) and _vendor/ is a
-// 32 MB package mirror whose needed files are already vendored per-skill.
+// Ships built-in + featured skills + the shared/ runtime modules. Featured skills are flattened
+// into the same assets/skills/ dir so they ship in-APK and are available offline (they import the
+// same shared/ runtime via ../../shared, which resolves in the flat layout). _vendor/ is a 32 MB
+// package mirror whose needed files are already vendored per-skill, so it is NOT copied.
 // NOTE: the shared dir must NOT be underscore-prefixed — aapt drops `_*` assets
 // from the APK, which silently breaks every skill's `import '../../shared/*'`.
 tasks.register<Copy>("syncSkills") {
   group = "build"
-  description = "Copy skills/built-in + skills/shared into Android assets before build."
+  description = "Copy skills/built-in + skills/featured + skills/shared into Android assets before build."
   val skillsDir = file("../../../skills")
   into(file("src/main/assets/skills"))
   from(skillsDir.resolve("built-in"))
+  from(skillsDir.resolve("featured"))
   from(skillsDir.resolve("shared")) { into("shared") }
 }
 

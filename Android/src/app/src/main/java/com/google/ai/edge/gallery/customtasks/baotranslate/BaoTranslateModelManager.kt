@@ -13,6 +13,7 @@ import kotlinx.coroutines.withContext
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.coroutineContext
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 import java.io.BufferedInputStream
 import java.io.File
@@ -93,6 +94,12 @@ object BaoTranslateModelManager {
       estimatedSizeMb = 148,
     ),
     ModelInfo(
+      id = "streaming_asr",
+      displayNameRes = R.string.bao_model_streaming_asr,
+      category = ModelCategory.STT,
+      estimatedSizeMb = 44,
+    ),
+    ModelInfo(
       id = "qwen25_1b",
       displayNameRes = R.string.bao_model_qwen25_1b,
       category = ModelCategory.TRANSLATION,
@@ -124,6 +131,12 @@ object BaoTranslateModelManager {
   // all of them. OpenVoice voice cloning is a first-class member — not an optional upgrade — so it is
   // always provisioned; the cloned voice activates the moment the user enrolls.
   val REQUIRED_MODEL_IDS = listOf("whisper_base", "qwen25_1b", "silero_vad", "kokoro_tts", "openvoice")
+
+  // Models auto-provisioned for the full first-class experience, but NOT gating core translation
+  // readiness: streaming_asr upgrades the live caption to a true streaming transducer, and the live
+  // loop degrades gracefully to chunked-Whisper captions until it lands — so a user who could
+  // translate yesterday is never blocked waiting for it after an upgrade.
+  val AUTO_PROVISION_MODEL_IDS = REQUIRED_MODEL_IDS + "streaming_asr"
 
   private data class ArchiveSpec(
     val modelId: String,
@@ -161,6 +174,19 @@ object BaoTranslateModelManager {
         "kokoro-multi-lang-v1_0/espeak-ng-data",
       ),
       extractDir = "kokoro-multi-lang-v1_0",
+    ),
+    ArchiveSpec(
+      modelId = "streaming_asr",
+      archiveFileName = "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17.tar.bz2",
+      downloadUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17.tar.bz2",
+      sizeBytes = 44_000_000L,
+      requiredFiles = listOf(
+        "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17/encoder-epoch-99-avg-1.int8.onnx",
+        "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17/decoder-epoch-99-avg-1.int8.onnx",
+        "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17/joiner-epoch-99-avg-1.int8.onnx",
+        "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17/tokens.txt",
+      ),
+      extractDir = "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17",
     ),
     ArchiveSpec(
       modelId = "supertonic_tts",
@@ -246,6 +272,92 @@ object BaoTranslateModelManager {
   fun getWhisperModelDir(context: Context): File =
     File(getSherpaOnnxDir(context), "sherpa-onnx-whisper-base")
 
+  // Streaming ASR (sherpa-onnx zipformer transducer) — token-by-token live captions during a turn.
+  fun getStreamingAsrModelDir(context: Context): File =
+    File(getSherpaOnnxDir(context), "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17")
+
+  // ── Multilingual live-caption streaming-model registry ────────────────────────────────────────
+  // Every app language maps to its BEST on-device streaming engine: the sherpa-onnx zipformer
+  // transducer for English (highest accuracy), and Vosk/Kaldi small models for the languages
+  // sherpa-onnx has no streaming model for. Arabic has no small streaming model (only >300MB), so it
+  // is intentionally absent here and degrades to the multilingual chunked-Whisper caption.
+  // Caption models other than English are provisioned LAZILY (per active language), never eagerly —
+  // 11 models would be ~500MB. English (streaming_asr) is in AUTO_PROVISION so the default works offline.
+  enum class CaptionEngine {
+    SHERPA,
+    VOSK,
+  }
+
+  data class CaptionModelSpec(
+    val langCode: String,
+    val engine: CaptionEngine,
+    val modelId: String,
+    val downloadUrl: String,
+    val archiveFileName: String,
+    val extractDirName: String,
+    val sizeBytes: Long,
+  )
+
+  val CAPTION_MODELS: Map<String, CaptionModelSpec> =
+    listOf(
+      CaptionModelSpec(
+        "en",
+        CaptionEngine.SHERPA,
+        "streaming_asr",
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17.tar.bz2",
+        "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17.tar.bz2",
+        "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17",
+        44_000_000L,
+      ),
+      voskCaptionSpec("es", "vosk-model-small-es-0.42", 41_000_000L),
+      voskCaptionSpec("fr", "vosk-model-small-fr-0.22", 42_000_000L),
+      voskCaptionSpec("de", "vosk-model-small-de-0.15", 46_000_000L),
+      voskCaptionSpec("zh", "vosk-model-small-cn-0.22", 43_000_000L),
+      voskCaptionSpec("ja", "vosk-model-small-ja-0.22", 49_000_000L),
+      voskCaptionSpec("ko", "vosk-model-small-ko-0.22", 86_000_000L),
+      voskCaptionSpec("pt", "vosk-model-small-pt-0.3", 32_000_000L),
+      voskCaptionSpec("it", "vosk-model-small-it-0.22", 49_000_000L),
+      voskCaptionSpec("ru", "vosk-model-small-ru-0.22", 46_000_000L),
+      voskCaptionSpec("hi", "vosk-model-small-hi-0.22", 44_000_000L),
+    )
+      .associateBy { it.langCode }
+
+  private fun voskCaptionSpec(lang: String, name: String, sizeBytes: Long): CaptionModelSpec =
+    CaptionModelSpec(
+      langCode = lang,
+      engine = CaptionEngine.VOSK,
+      modelId = "vosk_$lang",
+      downloadUrl = "https://alphacephei.com/vosk/models/$name.zip",
+      archiveFileName = "$name.zip",
+      extractDirName = name,
+      sizeBytes = sizeBytes,
+    )
+
+  fun captionEngineFor(langCode: String): CaptionEngine? = CAPTION_MODELS[langCode]?.engine
+
+  fun deleteCaptionModel(context: Context, langCode: String) {
+    CAPTION_MODELS[langCode]?.let { spec ->
+      File(getSherpaOnnxDir(context), spec.extractDirName).deleteRecursively()
+      _modelStatuses.update { it + (spec.modelId to ModelStatus.NotDownloaded) }
+    }
+  }
+
+  /** On-disk dir for a language's caption model (whether or not it is downloaded yet), or null. */
+  fun getCaptionModelDir(context: Context, langCode: String): File? =
+    CAPTION_MODELS[langCode]?.let { File(getSherpaOnnxDir(context), it.extractDirName) }
+
+  fun isCaptionModelReady(context: Context, langCode: String): Boolean {
+    val spec = CAPTION_MODELS[langCode] ?: return false
+    val dir = File(getSherpaOnnxDir(context), spec.extractDirName)
+    return when (spec.engine) {
+      // length>0 (not just exists): a zero-byte file from a killed write must not read as Ready.
+      CaptionEngine.SHERPA -> File(dir, "encoder-epoch-99-avg-1.int8.onnx").length() > 0
+      CaptionEngine.VOSK -> File(dir, "conf").isDirectory && File(dir, "graph").isDirectory
+    }
+  }
+
+  // Streaming ASR (sherpa-onnx zipformer transducer) — token-by-token live captions during a turn.
+
   // OpenVoice cross-lingual voice-clone ONNX artifacts (cloned voice in the target language),
   // run at exact length on ONNX Runtime for crisp output.
   fun getOpenVoiceDir(context: Context): File =
@@ -311,7 +423,7 @@ object BaoTranslateModelManager {
         if (isOpenVoiceCloneAvailable(context)) ModelStatus.Ready
         else ModelStatus.NotDownloaded
       }
-      "supertonic_tts" -> {
+      "supertonic_tts", "streaming_asr" -> {
         val archive = ARCHIVES.first { it.modelId == modelId }
         if (isArchiveExtracted(context, archive)) ModelStatus.Ready
         else ModelStatus.NotDownloaded
@@ -335,6 +447,7 @@ object BaoTranslateModelManager {
         "kokoro_tts" -> dirSize(File(baseDir, "kokoro-multi-lang-v1_0"))
         "silero_vad" -> File(baseDir, "silero_vad.onnx").takeIf { it.exists() }?.length() ?: 0L
         "whisper_base" -> dirSize(getWhisperModelDir(context))
+        "streaming_asr" -> dirSize(getStreamingAsrModelDir(context))
         "qwen25_1b", "gemma4_e2b" -> dirSize(getTranslationModelDir(context, model.id))
         "openvoice" -> dirSize(getOpenVoiceDir(context))
         "supertonic_tts" -> dirSize(getSupertonicModelDir(context))
@@ -378,7 +491,7 @@ object BaoTranslateModelManager {
         "whisper_base" -> downloadWhisperModel(context, modelId)
         "qwen25_1b", "gemma4_e2b" -> downloadTranslationModel(context, modelId)
         "openvoice" -> downloadOpenVoiceModels(context, modelId)
-        "supertonic_tts" -> {
+        "supertonic_tts", "streaming_asr" -> {
           val archive = ARCHIVES.first { it.modelId == modelId }
           downloadAndExtractArchive(context, archive, modelId)
         }
@@ -404,7 +517,7 @@ object BaoTranslateModelManager {
     context: Context,
     wifiOnly: Boolean = false,
   ): Result<Unit> = withContext(Dispatchers.IO) {
-    REQUIRED_MODEL_IDS.mapNotNull { id -> ALL_MODELS.firstOrNull { it.id == id } }.forEach { model ->
+    AUTO_PROVISION_MODEL_IDS.mapNotNull { id -> ALL_MODELS.firstOrNull { it.id == id } }.forEach { model ->
       if (checkModelStatus(context, model.id) != ModelStatus.Ready) {
         val result = downloadModel(context, model.id, wifiOnly = wifiOnly)
         if (result.isFailure) return@withContext result
@@ -418,6 +531,7 @@ object BaoTranslateModelManager {
       "kokoro_tts" -> File(getSherpaOnnxDir(context), "kokoro-multi-lang-v1_0").deleteRecursively()
       "silero_vad" -> File(getSherpaOnnxDir(context), "silero_vad.onnx").delete()
       "whisper_base" -> getWhisperModelDir(context).deleteRecursively()
+      "streaming_asr" -> getStreamingAsrModelDir(context).deleteRecursively()
       "qwen25_1b", "gemma4_e2b" -> getTranslationModelDir(context, modelId).deleteRecursively()
       "openvoice" -> getOpenVoiceDir(context).deleteRecursively()
       "supertonic_tts" -> getSupertonicModelDir(context).deleteRecursively()
@@ -535,6 +649,113 @@ object BaoTranslateModelManager {
 
     BaoLog.i(TAG, "${archive.modelId} extracted successfully")
     Result.success(Unit)
+  }
+
+  /**
+   * Lazily provisions the live-caption streaming model for a language. English reuses the eagerly
+   * provisioned sherpa transducer; every other supported language downloads its Vosk model on demand.
+   */
+  suspend fun downloadCaptionModel(context: Context, langCode: String): Result<Unit> =
+    withContext(Dispatchers.IO) {
+      val spec =
+        CAPTION_MODELS[langCode]
+          ?: return@withContext Result.failure(
+            IllegalArgumentException("No streaming caption model for language '$langCode'")
+          )
+      if (isCaptionModelReady(context, langCode)) return@withContext Result.success(Unit)
+      when (spec.engine) {
+        CaptionEngine.SHERPA -> downloadModel(context, spec.modelId)
+        CaptionEngine.VOSK -> downloadVoskCaptionModel(context, spec)
+      }
+    }
+
+  private suspend fun downloadVoskCaptionModel(
+    context: Context,
+    spec: CaptionModelSpec,
+  ): Result<Unit> =
+    withContext(Dispatchers.IO) {
+      updateStatus(spec.modelId, ModelStatus.Downloading(0f, 0L, spec.sizeBytes))
+      val baseDir = getSherpaOnnxDir(context)
+      val archiveFile = File(baseDir, spec.archiveFileName)
+
+      val result =
+        runCatchingCancellable {
+            if (!archiveFile.exists()) {
+              val dl =
+                downloadFileWithProgress(
+                  context,
+                  spec.downloadUrl,
+                  archiveFile,
+                  spec.sizeBytes,
+                  spec.sizeBytes,
+                ) { downloaded, total ->
+                  val progress = if (total > 0) downloaded.toFloat() / total else 0f
+                  updateStatus(spec.modelId, ModelStatus.Downloading(progress, downloaded, total))
+                }
+              if (dl.isFailure) {
+                archiveFile.delete()
+                return@runCatchingCancellable dl
+              }
+            }
+            updateStatus(spec.modelId, ModelStatus.Extracting)
+            if (hasSymlinks(baseDir)) {
+              return@runCatchingCancellable Result.failure<Unit>(
+                SecurityException("Symlinks detected in extraction directory")
+              )
+            }
+            val extracted = extractZip(archiveFile, baseDir)
+            archiveFile.delete()
+            if (extracted.isFailure) return@runCatchingCancellable extracted
+            if (!isCaptionModelReady(context, spec.langCode)) {
+              return@runCatchingCancellable Result.failure<Unit>(
+                Exception("Vosk caption model ${spec.modelId} incomplete after extraction")
+              )
+            }
+            BaoLog.i(TAG, "Caption model ${spec.modelId} extracted successfully")
+            Result.success(Unit)
+          }
+          .getOrElse { Result.failure(it) }
+
+      result.fold(
+        onSuccess = {
+          updateStatus(spec.modelId, ModelStatus.Ready)
+          Result.success(Unit)
+        },
+        onFailure = { e ->
+          updateStatus(
+            spec.modelId,
+            ModelStatus.Error(e.message ?: context.getString(R.string.bao_error_unknown)),
+          )
+          Result.failure(e)
+        },
+      )
+    }
+
+  // Extracts a .zip into baseDir with the same path-traversal + symlink guards as the tar extractor.
+  private fun extractZip(archiveFile: File, baseDir: File): Result<Unit> {
+    ZipArchiveInputStream(BufferedInputStream(archiveFile.inputStream())).use { zip ->
+      var entry = zip.nextEntry
+      while (entry != null) {
+        val outFile = File(baseDir, entry.name)
+        if (!isInsideDir(baseDir, outFile)) {
+          return Result.failure(SecurityException("Path traversal in archive: ${entry.name}"))
+        }
+        if (entry.isDirectory) {
+          if (!outFile.mkdirs() && !outFile.exists()) {
+            return Result.failure(Exception("Failed to create directory: ${entry.name}"))
+          }
+        } else {
+          outFile.parentFile?.let { parent ->
+            if (!parent.mkdirs() && !parent.exists()) {
+              return Result.failure(Exception("Failed to create parent directory for: ${entry.name}"))
+            }
+          }
+          FileOutputStream(outFile).use { output -> zip.copyTo(output) }
+        }
+        entry = zip.nextEntry
+      }
+    }
+    return Result.success(Unit)
   }
 
   private suspend fun downloadSingleFile(

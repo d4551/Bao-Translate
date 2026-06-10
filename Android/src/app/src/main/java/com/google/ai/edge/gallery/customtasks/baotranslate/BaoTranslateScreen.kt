@@ -621,6 +621,7 @@ fun BaoTranslateScreen(
           amplitudes = uiState.amplitudes,
           elapsedSeconds = uiState.elapsedSeconds,
           liveTranslationPreview = uiState.liveTranslationPreview,
+          liveSourcePreview = uiState.liveSourcePreview,
           isTablet = isTablet,
           modifier = Modifier.fillMaxSize(),
           onCancel = { viewModel.cancelRecording() },

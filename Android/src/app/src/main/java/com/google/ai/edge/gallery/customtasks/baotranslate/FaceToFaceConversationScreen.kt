@@ -99,6 +99,7 @@ internal fun FaceToFaceConversationScreen(
       onToggleRecording = onToggleRecording,
       onPlayAudio = onPlayAudio,
       replayMessageId = replayMessageId,
+      liveSourcePreview = if (uiState.detectedLanguage == langBKey) uiState.liveSourcePreview else null,
       rotated = true,
       isTablet = isTablet,
       modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -114,6 +115,7 @@ internal fun FaceToFaceConversationScreen(
       onToggleRecording = onToggleRecording,
       onPlayAudio = onPlayAudio,
       replayMessageId = replayMessageId,
+      liveSourcePreview = if (uiState.detectedLanguage == langAKey) uiState.liveSourcePreview else null,
       rotated = false,
       isTablet = isTablet,
       modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -132,6 +134,7 @@ private fun SpeakerPanel(
   onToggleRecording: () -> Unit,
   onPlayAudio: ((TranslationMessage) -> Unit)? = null,
   replayMessageId: String? = null,
+  liveSourcePreview: String? = null,
   rotated: Boolean,
   isTablet: Boolean,
   modifier: Modifier = Modifier,
@@ -159,6 +162,20 @@ private fun SpeakerPanel(
         onPlayAudio = onPlayAudio,
         replayMessageId = replayMessageId,
       )
+      // Interim recognized caption for THIS speaker — shown the instant STT completes, before the
+      // translation lands in the opposite panel, so the turn reads as live.
+      if (!liveSourcePreview.isNullOrBlank()) {
+        Text(
+          text = liveSourcePreview,
+          modifier = Modifier.fillMaxWidth().padding(horizontal = Dimensions.Spacing.small),
+          style = MaterialTheme.typography.bodyMedium,
+          fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+          maxLines = 2,
+          overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        )
+      }
       ConversationTurnControl(
         phase = phase,
         isRecording = isRecording,

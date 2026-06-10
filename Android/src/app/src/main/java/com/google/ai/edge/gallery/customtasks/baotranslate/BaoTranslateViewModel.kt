@@ -65,6 +65,9 @@ data class BaoTranslateUiState(
   val amplitudes: List<Float> = emptyList(),
   val elapsedSeconds: Float = 0f,
   val liveTranslationPreview: String? = null,
+  // Recognized SOURCE text, surfaced the instant STT completes — before the (slower) translation —
+  // so the live caption appears ~1s+ sooner. Cleared once the translated message commits.
+  val liveSourcePreview: String? = null,
   val currentAudioDevice: AudioDevice = AudioDevice.Speaker,
   val availableAudioDevices: List<AudioDevice> = emptyList(),
   val availableInputDevices: List<com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioInputOption> = emptyList(),
@@ -527,6 +530,7 @@ class BaoTranslateViewModel @Inject constructor(
       it.copy(
         transcripts = emptyList(),
         liveTranslationPreview = null,
+        liveSourcePreview = null,
         detectedLanguage = null,
         errorMessage = null,
       )
@@ -748,6 +752,7 @@ class BaoTranslateViewModel @Inject constructor(
     super.onCleared()
     if (testInstance === this) testInstance = null
     recordingController.cancelRecording()
+    recordingController.releaseStreamingStt()
     viewModelJob.cancel()
     val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     cleanupScope.launch {

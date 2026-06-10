@@ -63,6 +63,8 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.R
@@ -101,6 +103,7 @@ internal fun RecordingInfoColumn(
   isTablet: Boolean,
   amplitudes: List<Float>,
   liveTranslationPreview: String?,
+  liveSourcePreview: String?,
 ) {
   Column(
     horizontalAlignment = Alignment.CenterHorizontally,
@@ -128,6 +131,23 @@ internal fun RecordingInfoColumn(
       amplitudes = amplitudes,
       isActive = true,
     )
+
+    // Recognized source caption — shown the instant STT completes (before the slower translation),
+    // then replaced by the translated preview below. Lighter/italic so it reads as interim.
+    if (!liveSourcePreview.isNullOrBlank() && liveTranslationPreview.isNullOrBlank()) {
+      Text(
+        text = liveSourcePreview,
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(horizontal = if (isTablet) Dimensions.Spacing.xxl else Dimensions.Spacing.large),
+        style = MaterialTheme.typography.bodyLarge,
+        fontStyle = FontStyle.Italic,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        maxLines = 3,
+        overflow = TextOverflow.Ellipsis,
+      )
+    }
 
     if (!liveTranslationPreview.isNullOrBlank()) {
       Card(
@@ -161,6 +181,7 @@ internal fun RecordingOverlay(
   amplitudes: List<Float>,
   elapsedSeconds: Float,
   liveTranslationPreview: String?,
+  liveSourcePreview: String?,
   isTablet: Boolean,
   modifier: Modifier = Modifier,
   onCancel: (() -> Unit)? = null,
@@ -246,6 +267,7 @@ internal fun RecordingOverlay(
             isTablet = isTablet,
             amplitudes = amplitudes,
             liveTranslationPreview = liveTranslationPreview,
+            liveSourcePreview = liveSourcePreview,
           )
         }
       } else {
@@ -259,6 +281,7 @@ internal fun RecordingOverlay(
             isTablet = isTablet,
             amplitudes = amplitudes,
             liveTranslationPreview = liveTranslationPreview,
+            liveSourcePreview = liveSourcePreview,
           )
         }
       }

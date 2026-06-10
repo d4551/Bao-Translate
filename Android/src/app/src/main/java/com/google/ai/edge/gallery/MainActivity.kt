@@ -64,7 +64,6 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
 
   private val modelManagerViewModel: ModelManagerViewModel by viewModels()
-  private var splashScreenAboutToExit: Boolean = false
   private var contentSet: Boolean = false
 
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -129,16 +128,12 @@ class MainActivity : ComponentActivity() {
     // Show splash screen.
     val splashScreen = installSplashScreen()
 
-    // Set the content when the system-provided splash screen is not shown.
-    //
-    // This is necessary on some Android versions where the splash screen is optimized away (e.g.,
-    // after a force-quit) to ensure the main content is displayed immediately and correctly.
-    lifecycleScope.launch {
-      delay(1000)
-      if (!splashScreenAboutToExit) {
-        setContent()
-      }
-    }
+    // Set Compose content synchronously in onCreate (the standard pattern). The in-Compose mask
+    // inside setContent handles the splash cross-fade reveal, so deferring content is unnecessary —
+    // and a deferred/coroutine setContent left the composition unattached at onCreate, which broke
+    // instrumented idle detection (waitForIdle never settled) and risked a blank frame when the
+    // system splash was optimized away (e.g. after a force-quit). Setting it now fixes both.
+    setContent()
 
     // Cross-fade transition from the splash screen to the main content.
     //
@@ -153,8 +148,6 @@ class MainActivity : ComponentActivity() {
     //    `splashScreenView.remove()` to properly remove the splash screen from the view hierarchy
     //    once it's fully transparent.
     splashScreen.setOnExitAnimationListener { splashScreenView ->
-      splashScreenAboutToExit = true
-
       val now = System.currentTimeMillis()
       val iconAnimationStartMs = splashScreenView.iconAnimationStartMillis
       val duration = splashScreenView.iconAnimationDurationMillis
@@ -162,12 +155,13 @@ class MainActivity : ComponentActivity() {
       fadeOut.interpolator = DecelerateInterpolator()
       fadeOut.duration = 300L
       fadeOut.doOnEnd { splashScreenView.remove() }
+      // Begin the splash fade-out just as the icon animation finishes. The Compose content is
+      // already live underneath (set synchronously in onCreate), so the fade simply reveals it.
       lifecycleScope.launch {
-        val setContentDelay = duration - (now - iconAnimationStartMs) - 300
-        if (setContentDelay > 0) {
-          delay(setContentDelay)
+        val fadeStartDelay = duration - (now - iconAnimationStartMs) - 300
+        if (fadeStartDelay > 0) {
+          delay(fadeStartDelay)
         }
-        setContent()
         fadeOut.start()
       }
     }

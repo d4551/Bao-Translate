@@ -348,3 +348,30 @@ RISK: API surface confusion; future contributors may not realize the function
   (Initialized / NotAvailable) for clarity.
 PROPOSED_LADDER_SLOT: Refactor `initialize` to return a sealed type. Update callers.
 STATUS: OPEN
+
+================================================================================
+LIVE-LOOP FINDING — 2026-06-10 (surfaced while making F2F streaming first-class)
+================================================================================
+
+ID: OOS-LIVE-001
+FINDING: In NON-face-to-face (single-speaker continuous) mode, manually stopping recording
+  (vm.stopRecording) on an utterance SHORTER than the 8s live window loses the translation.
+  stopRecording() cancels recordingScope (RecordingController.stopRecording -> recordingScope?.cancel()).
+  The read loop's end-of-loop "final tail flush" (the only commit path for sub-window utterances in
+  non-F2F, since non-F2F has no turn endpoint) runs processAudioSegment under segmentProcessingMutex.withLock
+  — a suspend point — in the SAME cancelled coroutine, so it throws CancellationException and the
+  segment is never transcribed/translated. Empirically reproduced: a 5.1s injected prompt + stopRecording
+  yielded NO translation; the same prompt tripled to >8s fired a window and DID translate.
+  Pre-existing (predates the streaming work; stopRecording's cancel-then-rely-on-tail-flush is unchanged).
+  F2F is unaffected (its turn endpoint commits during recording). Continuous mode normally relies on the
+  8s window / 15s silence auto-stop, so this only bites a short utterance ended by an explicit tap.
+PATHS:
+  - Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/baotranslate/RecordingController.kt
+    (stopRecording: recordingScope?.cancel(); final-flush block after the readLoop)
+RISK: A short phrase spoken in continuous mode and ended with the stop button is silently dropped
+  (no translation, no error). Medium UX bug for push-to-stop on brief utterances.
+PROPOSED_LADDER_SLOT: Make the final tail flush survive stop — run it under NonCancellable (or have
+  stopRecording set a "drain" flag and let the loop exit + flush before the scope is cancelled, the way
+  the F2F endpoint commits inline). Verify with a non-F2F injected <8s prompt + stopRecording asserting a
+  committed translation.
+STATUS: OPEN (logged, not fixed — outside the live-F2F-streaming goal; needs its own verify cycle)
