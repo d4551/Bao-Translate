@@ -12,7 +12,6 @@
   <img alt="Version: 1.0.15" src="https://img.shields.io/badge/version-1.0.15-orange.svg" />
   <img alt="Languages: 12 targets" src="https://img.shields.io/badge/languages-12%20targets-success.svg" />
   <img alt="Runtime: LiteRT-LM, sherpa-onnx, ONNX Runtime" src="https://img.shields.io/badge/runtime-LiteRT--LM%20%7C%20sherpa--onnx%20%7C%20ONNX-4285F4.svg" />
-  <a href="https://github.com/d4551/Bao-Translate/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/d4551/Bao-Translate?include_prereleases" /></a>
 </p>
 
 ## ELI5
@@ -134,7 +133,7 @@ Requirements:
 
 Steps:
 
-1. Install the latest APK from [Releases](https://github.com/d4551/Bao-Translate/releases), or build from source.
+1. Install an APK you have access to, or build from source.
 2. Launch the app and download the required models.
 3. Optional: enroll your voice in settings.
 4. Choose source and target languages, pick audio devices if needed, and start translating.
@@ -242,8 +241,8 @@ Bao Translate builds on these open-source projects:
 
 ## Support And Contributing
 
-- Found a bug? Open an issue with the [bug report template](https://github.com/d4551/Bao-Translate/issues/new?template=bug_report.md) and include the details from the [Bug Reporting Guide](Bug_Reporting_Guide.md).
-- Have an idea? Use the [feature request template](https://github.com/d4551/Bao-Translate/issues/new?template=feature_request.md).
+- Found a bug? Use the local [bug report template](.github/ISSUE_TEMPLATE/bug_report.md) and include the details from the [Bug Reporting Guide](Bug_Reporting_Guide.md).
+- Have an idea? Use the local [feature request template](.github/ISSUE_TEMPLATE/feature_request.md).
 - Planning a code change? Read [CONTRIBUTING.md](CONTRIBUTING.md) first so expectations are clear.
 
 ## License
