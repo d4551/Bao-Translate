@@ -7,7 +7,7 @@ activity detection, streaming captions, speech-to-text, translation, text-to-spe
 cloning runs locally on the device after the model stack has been downloaded. No account is required
 for normal use, and conversation audio stays on the phone.
 
-For the product overview, screenshots, and the model stack, see the [root README](../README.md).
+For the product overview, architecture charts, and the model stack, see the [root README](../README.md).
 
 ## What the app does
 
@@ -53,8 +53,8 @@ registered via Hilt `@IntoSet` and runs standalone within the app shell.
 ```bash
 cd src
 
-# Toolchain: Gradle 9.5.1 + AGP 9.2.1 + Kotlin 2.4.0 + compileSdk 37. Use the Android Studio bundled JBR (JDK 21):
-export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+# Toolchain: Gradle 9.5.1 + AGP 9.2.1 + Kotlin 2.4.0 + compileSdk 37.
+# Gradle toolchains provision JDK 26 for compilation and emit Java 17 bytecode.
 export PATH="$HOME/Library/Android/sdk/platform-tools:$PATH"
 
 ./gradlew :app:assembleDebug              # build the debug APK
