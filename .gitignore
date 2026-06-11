@@ -34,6 +34,7 @@ keystore.properties
 # Scratch / runtime
 .tmp/
 .claude/
+.cursor/
 
 # Skills are synced from skills/ via Gradle preBuild; do not commit the copy
 Android/src/app/src/main/assets/skills/
