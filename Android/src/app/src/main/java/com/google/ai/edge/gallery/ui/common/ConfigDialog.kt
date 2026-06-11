@@ -361,8 +361,8 @@ fun NumberSliderRow(config: NumberSliderConfig, values: SnapshotStateMap<String,
       var isFocused by remember { mutableStateOf(false) }
       val focusRequester = remember { FocusRequester() }
 
-      // The displaying value for the Text field. It allows hold invalid values that is not a proper
-      // value or out of the slider range, temporary while user is still editing the text.
+      // Display value for the text field. It can temporarily hold invalid or out-of-range input
+      // while the user is editing.
       var textFieldDisplayValue by remember {
         mutableStateOf(
           getTextFieldDisplayValue(config.valueType, values[config.key.label].safeAs(0f))

@@ -84,6 +84,10 @@ class AudioRouter(private val context: Context) {
     }
   @Volatile private var pendingRouteDeviceId: Int = 0
   @Volatile private var pendingRouteExpected: AudioDevice? = null
+  // Gate listener teardown so cleanup() is idempotent: removeOnCommunicationDeviceChangedListener
+  // throws IllegalArgumentException if the listener was never registered or was already removed
+  // (e.g. cleanup() called twice on lifecycle teardown + GC). Flip false after the single teardown.
+  @Volatile private var listenersRegistered = false
 
   private fun onRoutingTimeout() {
     val expected = pendingRouteExpected
@@ -133,6 +137,7 @@ class AudioRouter(private val context: Context) {
       mainExecutor,
       communicationDeviceChangedListener,
     )
+    listenersRegistered = true
     refreshDevice()
   }
 
@@ -295,14 +300,62 @@ class AudioRouter(private val context: Context) {
     }
     hasUserSelectedInput = true
     _preferredInputDevice.value = device
+    if (device != null) routeOutputToCommunicationFor(device)
     return true
+  }
+
+  // A BT mic only delivers audio while ITS headset is on an ACTIVE communication (SCO/BLE) link; A2DP
+  // is output-only, so a BT mic is SILENT whenever the output sits on A2DP — the historical "mic broke
+  // when using a BT mic + BT speaker" bug (A2DP stereo and an SCO mic are mutually exclusive on Android).
+  // This is a real-time conversation app (it always captures), so the industry-best-practice route for a
+  // BT headset is its bidirectional communication endpoint. When a BT mic is chosen, move the SAME
+  // headset's OUTPUT onto its SCO/BLE comm route so the mic and speaker share ONE link (mono SCO for
+  // classic headsets; full-duplex for LE Audio). No-op if already on that headset's comm route, so an
+  // A2DP-only "music, no BT mic" selection is untouched.
+  private fun routeOutputToCommunicationFor(device: AudioDevice.BluetoothHeadset) {
+    val current = selectedOutputDevice
+    if (current is AudioDevice.BluetoothHeadset &&
+      current.name == device.name &&
+      current.transport != BluetoothTransport.A2DP
+    ) {
+      return
+    }
+    val commEndpoint = audioManager.availableCommunicationDevices.firstOrNull { info ->
+      (info.type == AudioDeviceInfo.TYPE_BLE_HEADSET || info.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) &&
+        bluetoothDeviceName(info) == device.name
+    } ?: run {
+      BaoLog.w(TAG, "No SCO/BLE communication endpoint for BT mic ${device.name}; mic may be silent on A2DP")
+      return
+    }
+    selectedOutputDevice = AudioDevice.BluetoothHeadset(
+      name = device.name,
+      transport =
+        if (commEndpoint.type == AudioDeviceInfo.TYPE_BLE_HEADSET) BluetoothTransport.BLE_AUDIO
+        else BluetoothTransport.SCO,
+      supportsInput = true,
+    )
+    hasUserSelectedOutput = true
+    _routingStatus.value = RoutingStatus.ROUTING
+    if (configureCommunicationDevice(commEndpoint)) {
+      startRoutingTimeout(selectedOutputDevice, commEndpoint.id)
+      if (audioManager.communicationDevice?.id == commEndpoint.id) {
+        onCommunicationDeviceChanged(commEndpoint)
+      }
+    } else {
+      audioManager.mode = AudioManager.MODE_NORMAL
+      audioManager.clearCommunicationDevice()
+      _routingStatus.value = RoutingStatus.FAILED
+    }
   }
 
   fun play(
     samples: FloatArray,
     sampleRate: Int = PipelineConfig.TTS_SAMPLE_RATE,
+    // Per-turn output override (face-to-face: route each speaker's translation to THEIR assigned
+    // device — e.g. one person's earbuds, the other the phone speaker). Null => the global selection.
+    override: AudioDevice? = null,
   ): AudioPlayback.RouteResult {
-    val selected = selectedOutputDevice
+    val selected = override ?: selectedOutputDevice
     val outputInfo = findDeviceInfo(selected)
     if (selected !is AudioDevice.Speaker && outputInfo == null) {
       BaoLog.w(TAG, "Selected output route is no longer available: $selected")
@@ -472,8 +525,11 @@ class AudioRouter(private val context: Context) {
   fun cleanup() {
     handler.removeCallbacks(routingTimeoutRunnable)
     pendingRouteExpected = null
-    audioManager.unregisterAudioDeviceCallback(deviceCallback)
-    audioManager.removeOnCommunicationDeviceChangedListener(communicationDeviceChangedListener)
+    if (listenersRegistered) {
+      listenersRegistered = false
+      audioManager.unregisterAudioDeviceCallback(deviceCallback)
+      audioManager.removeOnCommunicationDeviceChangedListener(communicationDeviceChangedListener)
+    }
     AudioPlayback.releaseTrack()
     audioManager.mode = AudioManager.MODE_NORMAL
     audioManager.clearCommunicationDevice()

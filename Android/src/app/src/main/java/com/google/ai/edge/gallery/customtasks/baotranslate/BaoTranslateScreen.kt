@@ -6,13 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -73,6 +67,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberTooltipState
@@ -116,7 +111,6 @@ import com.google.ai.edge.gallery.ui.common.EmptyState
 import com.google.ai.edge.gallery.ui.common.ErrorCard
 import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.customColors
-import com.google.ai.edge.gallery.ui.theme.isReducedMotion
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -159,11 +153,9 @@ fun BaoTranslateScreen(
     defaultVoiceName,
   ) {
     uiState.voiceProfiles.find { it.id == uiState.activeVoiceProfileId }
-      ?: if (uiState.voiceProfileEnrolled && uiState.voiceProfilePath != null) {
-        VoiceProfile(name = defaultVoiceName, wavPath = uiState.voiceProfilePath!!)
-      } else {
-        null
-      }
+      ?: uiState.voiceProfilePath
+        ?.takeIf { uiState.voiceProfileEnrolled }
+        ?.let { path -> VoiceProfile(name = defaultVoiceName, wavPath = path) }
   }
 
   LaunchedEffect(Unit) { viewModel.initializeModels() }
@@ -349,7 +341,7 @@ fun BaoTranslateScreen(
             val conversationTooltipState = rememberTooltipState(isPersistent = true)
             val conversationTooltipScope = rememberCoroutineScope()
             TooltipBox(
-              positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+              positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
               tooltip = { PlainTooltip { Text(stringResource(R.string.bao_translate_tooltip_conversation)) } },
               state = conversationTooltipState,
             ) {
@@ -431,7 +423,7 @@ fun BaoTranslateScreen(
         val tooltipState = rememberTooltipState(isPersistent = true)
         val tooltipScope = rememberCoroutineScope()
         TooltipBox(
-          positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+          positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
           tooltip = { PlainTooltip { Text(stringResource(R.string.bao_translate_tooltip_record)) } },
           state = tooltipState,
         ) {
@@ -571,6 +563,7 @@ fun BaoTranslateScreen(
             },
             onPlayAudio = { message -> viewModel.replayAudio(message) },
             replayMessageId = uiState.replayMessageId,
+            onSetSpeakerOutput = viewModel::setFaceToFaceOutput,
             modifier = Modifier.weight(1f).fillMaxWidth(),
             isTablet = isTablet,
           )

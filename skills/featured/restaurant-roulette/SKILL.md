@@ -25,6 +25,7 @@ Call the `run_js` tool with the following exact parameters:
   - location: the target city or location (e.g., "San Jose", "Sunnyvale", "San Francisco").
   - cuisine: the style of food or cuisine desired (e.g., "Mexican", "Italian", "Indian", "Sushi").
 
-DO NOT use any other tool, DO NOT call `run_intent`.
+Use `run_js` only. Do not call `run_intent`.
 
-IMPORTANT: When the wheel is generated, DO NOT pick a winner for the user or make up a restaurant. Simply return the requested webview and tell the user to tap the preview card to spin the wheel themselves.
+After the wheel is generated, do not pick a winner or invent a restaurant. Return the requested webview
+and tell the user to tap the preview card to spin the wheel themselves.

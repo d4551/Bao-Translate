@@ -7,12 +7,6 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -69,6 +63,7 @@ import com.google.ai.edge.gallery.customtasks.baotranslate.data.SupportedLanguag
 import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.customColors
 import com.google.ai.edge.gallery.ui.theme.isReducedMotion
+import com.google.ai.edge.gallery.ui.theme.rememberPulseFloat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -173,16 +168,15 @@ fun VoiceEnrollmentSheet(
     }
   }
 
-	  fun stopAndEnroll() {
-	    // Idempotency guard: the watchdog and the Stop button can both invoke this. The first call
-	    // consumes audioRecord (set to null below); a second call no-ops instead of launching a
-	    // duplicate enroll coroutine (double onEnrollComplete). Both callers run on the main thread.
-	    if (audioRecord == null) return
-	    audioRecord?.let { recorder ->
-	      if (recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-	        recorder.stop()
-	      }
-	      recorder.release()
+  fun stopAndEnroll() {
+    // Idempotency guard: the watchdog and the Stop button can both invoke this. The first call
+    // consumes audioRecord; later calls return without launching duplicate enrollment work.
+    if (audioRecord == null) return
+    audioRecord?.let { recorder ->
+      if (recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+        recorder.stop()
+      }
+      recorder.release()
 	    }
 	    recordingJob?.cancel()
 	    audioRecord = null
@@ -295,16 +289,8 @@ fun VoiceEnrollmentSheet(
               verticalAlignment = Alignment.CenterVertically,
               horizontalArrangement = Arrangement.Center,
             ) {
-	              val infiniteTransition = rememberInfiniteTransition(label = "recordPulse")
-	              val pulseAlpha by infiniteTransition.animateFloat(
-	                initialValue = if (reduceMotion) 1f else 0.4f,
-	                targetValue = 1f,
-	                animationSpec = infiniteRepeatable(
-	                  animation = tween(if (reduceMotion) 0 else 800, easing = LinearEasing),
-	                  repeatMode = RepeatMode.Reverse,
-	                ),
-                label = "pulseAlpha",
-              )
+	              val pulseAlpha by rememberPulseFloat(
+	                initialValue = 0.4f, targetValue = 1f, durationMillis = 800, restValue = 1f, label = "recordPulse")
 
               Box(
                 modifier = Modifier

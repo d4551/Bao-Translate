@@ -20,29 +20,32 @@ import android.os.Build
 import com.google.ai.edge.gallery.common.BaoLog
 import com.google.ai.edge.gallery.common.isPixel10
 import com.google.ai.edge.gallery.common.isPixelDevice
-import com.google.gson.annotations.SerializedName
+import kotlinx.serialization.Serializable
 
 private const val TAG = "AGModelAllowlist"
 
+@Serializable
 data class DefaultConfig(
-  @SerializedName("topK") val topK: Int?,
-  @SerializedName("topP") val topP: Float?,
-  @SerializedName("temperature") val temperature: Float?,
-  @SerializedName("accelerators") val accelerators: String?,
-  @SerializedName("visionAccelerator") val visionAccelerator: String?,
-  @SerializedName("maxContextLength") val maxContextLength: Int?,
-  @SerializedName("maxTokens") val maxTokens: Int?,
+  val topK: Int? = null,
+  val topP: Float? = null,
+  val temperature: Float? = null,
+  val accelerators: String? = null,
+  val visionAccelerator: String? = null,
+  val maxContextLength: Int? = null,
+  val maxTokens: Int? = null,
 )
 
 /** A model file on HF for a specific SOC. */
+@Serializable
 data class SocModelFile(
-  @SerializedName("modelFile") val modelFile: String?,
-  @SerializedName("url") val url: String?,
-  @SerializedName("commitHash") val commitHash: String?,
-  @SerializedName("sizeInBytes") val sizeInBytes: Long?,
+  val modelFile: String? = null,
+  val url: String? = null,
+  val commitHash: String? = null,
+  val sizeInBytes: Long? = null,
 )
 
 /** A model in the model allowlist. */
+@Serializable
 data class AllowedModel(
   val name: String,
   val modelId: String,
@@ -239,19 +242,20 @@ data class AllowedModel(
 }
 
 /** Specific device requirements grouped by a descriptive name. */
+@Serializable
 data class NamedDeviceGroup(
-  @SerializedName("groupName") val groupName: String,
-  @SerializedName("description") val description: String? = null,
-  @SerializedName("deviceModels") val deviceModels: List<String>,
+  val groupName: String,
+  val description: String? = null,
+  val deviceModels: List<String>,
 )
 
 /** Hardware-based constraints for model deployment. */
-data class DeviceRequirements(
-  @SerializedName("allowedDeviceGroups") val allowedDeviceGroups: List<NamedDeviceGroup>? = null
-)
+@Serializable
+data class DeviceRequirements(val allowedDeviceGroups: List<NamedDeviceGroup>? = null)
 
 /** The model allowlist. */
+@Serializable
 data class ModelAllowlist(
   val models: List<AllowedModel>,
-  @SerializedName("aicoreRequirements") val aicoreRequirements: DeviceRequirements? = null,
+  val aicoreRequirements: DeviceRequirements? = null,
 )

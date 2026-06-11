@@ -51,5 +51,5 @@ object ProjectConfig {
 
   /** True when running on Android runtime (vs plain JVM unit tests). */
   val isAndroidRuntime: Boolean =
-    System.getProperty("java.runtime.name", "").contains("Android", ignoreCase = true)
+    (System.getProperty("java.runtime.name", "") ?: "").contains("Android", ignoreCase = true)
 }

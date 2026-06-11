@@ -24,27 +24,27 @@ import com.google.ai.edge.gallery.common.BaoLog
 import androidx.core.content.ContextCompat.checkSelfPermission
 import androidx.core.net.toUri
 import com.google.ai.edge.gallery.notifications.NotificationScheduleManagerEntryPoint
+import com.google.ai.edge.gallery.common.LenientJson
 import com.google.ai.edge.gallery.proto.ScheduledNotification
-import com.squareup.moshi.JsonClass
-import com.squareup.moshi.Moshi
 import dagger.hilt.android.EntryPointAccessors
+import kotlinx.serialization.Serializable
 import java.lang.Exception
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-@JsonClass(generateAdapter = true)
+@Serializable
 data class SendEmailParams(
   val extra_email: String,
   val extra_subject: String,
   val extra_text: String,
 )
 
-@JsonClass(generateAdapter = true)
+@Serializable
 data class SendSmsParams(val phone_number: String, val sms_body: String)
 
-@JsonClass(generateAdapter = true)
+@Serializable
 data class CreateCalendarEventParams(
   val title: String,
   val description: String,
@@ -52,9 +52,9 @@ data class CreateCalendarEventParams(
   val end_time: String,
 )
 
-@JsonClass(generateAdapter = true) data class ReadCalendarEventsParams(val date: String)
+@Serializable data class ReadCalendarEventsParams(val date: String)
 
-@JsonClass(generateAdapter = true)
+@Serializable
 data class CalendarEventDto(
   val title: String,
   val description: String,
@@ -62,7 +62,7 @@ data class CalendarEventDto(
   val end_time: String,
 )
 
-@JsonClass(generateAdapter = true)
+@Serializable
 data class ReadCalendarEventsResponse(val events: List<CalendarEventDto>)
 
 enum class IntentAction(val action: String) {
@@ -78,7 +78,7 @@ enum class IntentAction(val action: String) {
   }
 }
 
-@JsonClass(generateAdapter = true)
+@Serializable
 data class ScheduleNotificationParams(
   val title: String,
   val message: String,
@@ -107,24 +107,17 @@ object IntentHandler {
     return when (IntentAction.from(action)) {
       IntentAction.SEND_EMAIL -> {
         runCatching {
-          val moshi = Moshi.Builder().build()
-          val jsonAdapter = moshi.adapter(SendEmailParams::class.java)
-          val params = jsonAdapter.fromJson(parameters)
-          if (params != null) {
-            val intent =
-              Intent(Intent.ACTION_SEND).apply {
-                data = "mailto:".toUri()
-                type = "text/plain"
-                putExtra(Intent.EXTRA_EMAIL, arrayOf(params.extra_email))
-                putExtra(Intent.EXTRA_SUBJECT, params.extra_subject)
-                putExtra(Intent.EXTRA_TEXT, params.extra_text)
-              }
-            context.startActivity(intent)
-            "succeeded"
-          } else {
-            BaoLog.e(TAG, "Failed to parse send_email parameters: $parameters")
-            "failed"
-          }
+          val params = LenientJson.decodeFromString<SendEmailParams>(parameters)
+          val intent =
+            Intent(Intent.ACTION_SEND).apply {
+              data = "mailto:".toUri()
+              type = "text/plain"
+              putExtra(Intent.EXTRA_EMAIL, arrayOf(params.extra_email))
+              putExtra(Intent.EXTRA_SUBJECT, params.extra_subject)
+              putExtra(Intent.EXTRA_TEXT, params.extra_text)
+            }
+          context.startActivity(intent)
+          "succeeded"
         }.getOrElse { e ->
           BaoLog.e(TAG, "Failed to parse send_email parameters: $parameters", e)
           "failed"
@@ -132,19 +125,12 @@ object IntentHandler {
       }
       IntentAction.SEND_SMS -> {
         runCatching {
-          val moshi = Moshi.Builder().build()
-          val jsonAdapter = moshi.adapter(SendSmsParams::class.java)
-          val params = jsonAdapter.fromJson(parameters)
-          if (params != null) {
-            val uri = "smsto:${params.phone_number}".toUri()
-            val intent = Intent(Intent.ACTION_SENDTO, uri)
-            intent.putExtra("sms_body", params.sms_body)
-            context.startActivity(intent)
-            "succeeded"
-          } else {
-            BaoLog.e(TAG, "Failed to parse send_sms parameters: $parameters")
-            "failed"
-          }
+          val params = LenientJson.decodeFromString<SendSmsParams>(parameters)
+          val uri = "smsto:${params.phone_number}".toUri()
+          val intent = Intent(Intent.ACTION_SENDTO, uri)
+          intent.putExtra("sms_body", params.sms_body)
+          context.startActivity(intent)
+          "succeeded"
         }.getOrElse { e ->
           BaoLog.e(TAG, "Failed to parse send_sms parameters: $parameters", e)
           "failed"
@@ -152,27 +138,20 @@ object IntentHandler {
       }
       IntentAction.CREATE_CALENDAR_EVENT -> {
         runCatching {
-          val moshi = Moshi.Builder().build()
-          val jsonAdapter = moshi.adapter(CreateCalendarEventParams::class.java)
-          val params = jsonAdapter.fromJson(parameters)
-          if (params != null) {
-            val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
-            val beginTimeMillis = format.parse(params.begin_time)?.time ?: 0L
-            val endTimeMillis = format.parse(params.end_time)?.time ?: 0L
-            val intent =
-              Intent(Intent.ACTION_INSERT).apply {
-                data = Events.CONTENT_URI
-                putExtra(Events.TITLE, params.title)
-                putExtra(Events.DESCRIPTION, params.description)
-                putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, beginTimeMillis)
-                putExtra(CalendarContract.EXTRA_EVENT_END_TIME, endTimeMillis)
-              }
-            context.startActivity(intent)
-            "succeeded"
-          } else {
-            BaoLog.e(TAG, "Failed to parse create_calendar_event parameters: $parameters")
-            "failed"
-          }
+          val params = LenientJson.decodeFromString<CreateCalendarEventParams>(parameters)
+          val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+          val beginTimeMillis = format.parse(params.begin_time)?.time ?: 0L
+          val endTimeMillis = format.parse(params.end_time)?.time ?: 0L
+          val intent =
+            Intent(Intent.ACTION_INSERT).apply {
+              data = Events.CONTENT_URI
+              putExtra(Events.TITLE, params.title)
+              putExtra(Events.DESCRIPTION, params.description)
+              putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, beginTimeMillis)
+              putExtra(CalendarContract.EXTRA_EVENT_END_TIME, endTimeMillis)
+            }
+          context.startActivity(intent)
+          "succeeded"
         }.getOrElse { e ->
           BaoLog.e(TAG, "Failed to parse create_calendar_event parameters: $parameters", e)
           "failed"
@@ -214,10 +193,8 @@ object IntentHandler {
     }
 
     return runCatching {
-      val moshi = Moshi.Builder().build()
-      val jsonAdapter = moshi.adapter(ReadCalendarEventsParams::class.java)
-      val params = jsonAdapter.fromJson(parameters)
-      if (params != null) {
+      val params = LenientJson.decodeFromString<ReadCalendarEventsParams>(parameters)
+      run {
         val format = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val dateObj = format.parse(params.date)
         if (dateObj != null) {
@@ -275,15 +252,11 @@ object IntentHandler {
               )
             }
           }
-          val responseAdapter = moshi.adapter(ReadCalendarEventsResponse::class.java)
-          return responseAdapter.toJson(ReadCalendarEventsResponse(eventsList))
+          return LenientJson.encodeToString(ReadCalendarEventsResponse(eventsList))
         } else {
           BaoLog.e(TAG, "Failed to parse read_calendar_events date: ${params.date}")
           return "failed"
         }
-      } else {
-        BaoLog.e(TAG, "Failed to parse read_calendar_events parameters: $parameters")
-        return "failed"
       }
     }
       .getOrElse { e ->
@@ -294,10 +267,8 @@ object IntentHandler {
 
   fun scheduleNotification(context: Context, parameters: String): String {
     return runCatching {
-      val moshi = Moshi.Builder().build()
-      val jsonAdapter = moshi.adapter(ScheduleNotificationParams::class.java)
-      val params = jsonAdapter.fromJson(parameters)
-      if (params != null) {
+      val params = LenientJson.decodeFromString<ScheduleNotificationParams>(parameters)
+      run {
         val notificationProtoBuilder =
           ScheduledNotification.newBuilder()
             .setId(java.util.UUID.randomUUID().toString())
@@ -374,9 +345,6 @@ object IntentHandler {
           return "failed"
         }
         return "succeeded"
-      } else {
-        BaoLog.e(TAG, "Failed to parse schedule_notification parameters: $parameters")
-        return "failed"
       }
     }
       .getOrElse { e ->

@@ -34,15 +34,13 @@ import com.google.ai.edge.gallery.common.LOCAL_URL_BASE
 import com.google.ai.edge.gallery.common.PermissionResult
 import com.google.ai.edge.gallery.common.RequestPermissionAgentAction
 import com.google.ai.edge.gallery.common.SkillProgressAgentAction
-import com.google.ai.edge.gallery.common.convertStringToJsonObject
+import com.google.ai.edge.gallery.common.StrictJson
 import com.google.ai.edge.gallery.firebaseAnalytics
 import com.google.ai.edge.litertlm.Tool
 import com.google.ai.edge.litertlm.ToolParam
 import com.google.ai.edge.litertlm.ToolSet
-import com.squareup.moshi.JsonAdapter
-import com.squareup.moshi.Moshi
-import io.modelcontextprotocol.kotlin.sdk.CallToolRequest
-import io.modelcontextprotocol.kotlin.sdk.TextContent
+import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
+import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
@@ -166,21 +164,9 @@ open class AgentTools() : ToolSet {
                 )
             )
 
-          if (result == null) {
-            BaoLog.d(TAG, "Tool execution returned null result")
-            _actionChannel.send(
-              SkillProgressAgentAction(
-                label = "Failed to call MCP tool \"$toolName\"",
-                inProgress = false,
-              )
-            )
-            logMcpExecution(success = false, errorType = "null_result")
-            return@runBlocking mapOf("error" to "Null result", "status" to "failed")
-          }
-
           if (result.isError == true) {
             val errorText =
-              result.content.filterIsInstance<TextContent>().joinToString("\n") { it.text ?: "" }
+              result.content.filterIsInstance<TextContent>().joinToString("\n") { it.text }
             BaoLog.e(TAG, "MCP tool \"$toolName\" failed: $errorText")
             _actionChannel.send(
               SkillProgressAgentAction(
@@ -194,7 +180,7 @@ open class AgentTools() : ToolSet {
             return@runBlocking mapOf("error" to errorText, "status" to "failed")
           } else {
             val successText =
-              result.content.filterIsInstance<TextContent>().joinToString("\n") { it.text ?: "" }
+              result.content.filterIsInstance<TextContent>().joinToString("\n") { it.text }
             BaoLog.d(TAG, "MCP tool \"$toolName\" succeeded:\n$successText")
             _actionChannel.send(
               SkillProgressAgentAction(
@@ -323,11 +309,10 @@ open class AgentTools() : ToolSet {
             )
           }
 
-      // Try to parse result to CallJsSkillResult.
-      val moshi: Moshi = Moshi.Builder().build()
-      val jsonAdapter: JsonAdapter<CallJsSkillResult> =
-        moshi.adapter(CallJsSkillResult::class.java).failOnUnknown()
-      val resultJson = runCatching { jsonAdapter.fromJson(result) }
+      // Try to parse result to CallJsSkillResult. StrictJson rejects unknown keys, so an
+      // arbitrary JSON payload that doesn't match the result contract falls through to the
+      // plain-text branch below (Moshi failOnUnknown parity).
+      val resultJson = runCatching { StrictJson.decodeFromString<CallJsSkillResult>(result) }
         .onFailure { e -> BaoLog.w(TAG, "Failed to parse skill result JSON", e) }
         .getOrNull()
       val error = resultJson?.error

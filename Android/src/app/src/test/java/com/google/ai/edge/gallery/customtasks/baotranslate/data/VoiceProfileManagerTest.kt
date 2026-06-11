@@ -257,7 +257,7 @@ class VoiceProfileManagerTest {
     assertNotNull(path)
     assertTrue("returned path should end with sanitized filename", path!!.endsWith("___etc_passwd.wav"))
     val profilesDir = File(filesDir, "voice_profiles").canonicalFile
-    assertEquals("path must be inside profilesDir", profilesDir, File(path!!).canonicalFile.parentFile)
+    assertEquals("path must be inside profilesDir", profilesDir, File(path).canonicalFile.parentFile)
   }
 
   // ----- Speaker embedding roundtrip: 256 floats.

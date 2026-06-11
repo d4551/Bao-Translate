@@ -45,6 +45,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.ai.edge.gallery.customtasks.baotranslate.BaoTranslateModelManager
 import com.google.ai.edge.gallery.customtasks.baotranslate.BaoTranslateViewModel
+import com.google.ai.edge.gallery.customtasks.baotranslate.ConversationPhase
 import com.google.ai.edge.gallery.customtasks.baotranslate.ModelStatus
 import com.google.ai.edge.gallery.customtasks.baotranslate.PipelineStatus
 import com.google.ai.edge.gallery.customtasks.baotranslate.RecordingController
@@ -71,6 +72,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.ExternalResource
@@ -89,6 +91,18 @@ class BaoTranslateLiveMicTranslationE2eTest {
   val ruleChain: TestRule =
     RuleChain.outerRule(LiveMicPermissionRule())
       .around(composeRule)
+
+  // Freeze the Compose animation clock so the implicit waitForIdle() inside finders/assertions no
+  // longer blocks on the app's infinite listening/recording pulse (rememberPulseFloat ->
+  // infiniteRepeatable never reaches idle with autoAdvance on). With autoAdvance=false, waitForIdle
+  // waits only on idling resources. The trade-off: a frozen clock dispatches no frames, so
+  // StateFlow-driven UI does NOT recompose on its own and composeRule.waitUntil can never observe it.
+  // Every state-driven wait therefore goes through pumpUntil(), which manually advances one frame per
+  // iteration to drive recomposition (see pumpUntil). See Compose testing/synchronization docs.
+  @Before
+  fun freezeAnimationClock() {
+    composeRule.mainClock.autoAdvance = false
+  }
 
   @Test
   fun injectedSpeechProducesLiveTranslation_beforeStop() {
@@ -126,12 +140,14 @@ class BaoTranslateLiveMicTranslationE2eTest {
       composeRule.onNodeWithContentDescription(composeRule.stringResource(R.string.cd_bao_translate_stop))
         .assertIsDisplayed()
 
-      composeRule.waitUntil(timeoutMillis = 10_000) { composeRule.spanishMarkerCount() >= 0 }
+      composeRule.pumpUntil(timeoutMillis = 10_000) { composeRule.spanishMarkerCount() >= 0 }
       captureLiveMicScreenshot("live_mic_recording_with_injected_prompt")
 
+      val liveMarkers = composeRule.waitForSpanishTranslationMarkers(timeoutMillis = 120_000)
       assertTrue(
-        "Bao Translate did not show live Spanish translation markers while still recording; markerCount=${composeRule.spanishMarkerCount()}",
-        composeRule.waitForSpanishTranslationMarkers(timeoutMillis = 120_000),
+        "Bao Translate did not show live Spanish translation markers while still recording; " +
+          "markerCount=${composeRule.spanishMarkerCount()}; transcript=${transcriptDump()}",
+        liveMarkers,
       )
     } finally {
       if (recordingStarted && composeRule.hasContentDescription(composeRule.stringResource(R.string.cd_bao_translate_stop))) {
@@ -145,9 +161,68 @@ class BaoTranslateLiveMicTranslationE2eTest {
       RecordingController.testPcmSource = null
     }
 
+    val retainedMarkers = composeRule.waitForSpanishTranslationMarkers(timeoutMillis = 30_000)
     assertTrue(
-      "Bao Translate live transcript did not retain Spanish translation markers after stop; markerCount=${composeRule.spanishMarkerCount()}",
-      composeRule.waitForSpanishTranslationMarkers(timeoutMillis = 30_000),
+      "Bao Translate live transcript did not retain Spanish translation markers after stop; " +
+        "markerCount=${composeRule.spanishMarkerCount()}; transcript=${transcriptDump()}",
+      retainedMarkers,
+    )
+  }
+
+  /**
+   * OOS-LIVE-001 regression: in continuous (non-F2F) mode an utterance SHORTER than the 8s live
+   * window has no window-boundary commit — its only commit path is the stop-time tail flush, which
+   * runs under `withContext(NonCancellable)` so the stop-button cancel can't drop it. Inject a ~6s
+   * prompt (sub-window), record, stop, and assert a translation still lands.
+   */
+  @Test
+  fun shortUtteranceEndedByStop_isStillTranslated_oosLive001() {
+    val context = InstrumentationRegistry.getInstrumentation().targetContext
+    prepareDeviceForLiveMicTest(context)
+    ensureRequiredModelsReady(context)
+
+    // Truncate to < 8s so NO live window fires; the tail-flush drain is the sole commit path.
+    // Use the BUNDLED English prompt (not device TTS) so this runs on TTS-less test devices/emulators.
+    val shortPrompt =
+      BaoTranslateLiveTestSupport.englishPromptAsSttPcm().let { it.copyOf(minOf(it.size, 16_000 * 6)) }
+    RecordingController.testPcmSource = shortPrompt
+
+    val taskDescriptionPrefix = composeRule.prepareHome()
+    composeRule.openTaskByDescription(taskDescriptionPrefix)
+    composeRule.clickTextIfPresent(R.string.bao_translate_welcome_get_started)
+    composeRule.waitForText(R.string.bao_translate_title)
+    composeRule.waitForContentDescription(
+      composeRule.stringResource(R.string.cd_bao_translate_start),
+      timeoutMillis = 180_000,
+    )
+
+    var recordingStarted = false
+    try {
+      composeRule.onNodeWithContentDescription(composeRule.stringResource(R.string.cd_bao_translate_start))
+        .assertIsDisplayed()
+        .performClick()
+      recordingStarted = true
+      composeRule.waitForText(R.string.bao_translate_listening, timeoutMillis = 120_000)
+      // Let the ~6s prompt feed in full, then stop BEFORE the 8s window boundary.
+      Thread.sleep(6_500)
+    } finally {
+      if (recordingStarted && composeRule.hasContentDescription(composeRule.stringResource(R.string.cd_bao_translate_stop))) {
+        composeRule.onNodeWithContentDescription(composeRule.stringResource(R.string.cd_bao_translate_stop))
+          .performClick()
+        composeRule.waitForContentDescription(
+          composeRule.stringResource(R.string.cd_bao_translate_start),
+          timeoutMillis = 120_000,
+        )
+      }
+      RecordingController.testPcmSource = null
+    }
+
+    val stopFlushMarkers =
+      composeRule.waitForSpanishTranslationMarkers(timeoutMillis = 180_000, markers = GREETING_TRANSLATION_MARKERS)
+    assertTrue(
+      "Sub-window utterance ended by stop did not surface its Spanish translation in the UI; " +
+        "markerCount=${composeRule.spanishMarkerCount(GREETING_TRANSLATION_MARKERS)}; transcript=${transcriptDump()}",
+      stopFlushMarkers,
     )
   }
 
@@ -189,7 +264,7 @@ class BaoTranslateLiveMicTranslationE2eTest {
     assumeTrue("Two-device proof requires a SECOND device in Conversation Mode (scanning)", peer != null)
     Log.i(TAG, "TWO-DEVICE: discovered peer name=${peer!!.name} id=${peer.id}")
 
-    composeRule.runOnUiThread { vm!!.bleManager.connectToDevice(peer!!.id) }
+    composeRule.runOnUiThread { vm!!.bleManager.connectToDevice(peer.id) }
     val connDeadline = System.currentTimeMillis() + 60_000
     while (System.currentTimeMillis() < connDeadline && vm!!.bleManager.getConnectedCount() == 0) {
       Thread.sleep(500)
@@ -205,14 +280,14 @@ class BaoTranslateLiveMicTranslationE2eTest {
     // sendTranscript(...)` path broadcasts the RECOGNIZED transcript to the connected peer over Nearby.
     // The transcript that crosses the link is produced by the real speech->text pipeline, not a literal.
     RecordingController.testPcmSource = synthesizeEnglishPromptAsSttPcm(context)
-    composeRule.runOnUiThread { vm!!.startRecording() }
+    composeRule.runOnUiThread { vm.startRecording() }
     val sttDeadline = System.currentTimeMillis() + 120_000
     var spoken: TranslationMessage? = null
     while (System.currentTimeMillis() < sttDeadline && spoken == null) {
-      spoken = vm!!.uiState.value.transcripts.firstOrNull { it.isUser && it.originalText.isNotBlank() }
+      spoken = vm.uiState.value.transcripts.firstOrNull { it.isUser && it.originalText.isNotBlank() }
       if (spoken == null) Thread.sleep(500)
     }
-    composeRule.runOnUiThread { vm!!.stopRecording() }
+    composeRule.runOnUiThread { vm.stopRecording() }
     composeRule.waitForContentDescription(
       composeRule.stringResource(R.string.cd_bao_translate_start),
       timeoutMillis = 30_000,
@@ -236,6 +311,14 @@ class BaoTranslateLiveMicTranslationE2eTest {
     val resampled = AudioResampler.resample(prompt.samples, prompt.sampleRate, PipelineConfig.STT_SAMPLE_RATE)
     val pcm = ShortArray(resampled.size) { i -> (resampled[i].coerceIn(-1f, 1f) * 32767f).toInt().toShort() }
     Log.i(TAG, "injected prompt PCM samples=${pcm.size} @${PipelineConfig.STT_SAMPLE_RATE}Hz")
+    // The "live translation BEFORE stop" assertion requires a window-boundary commit, which only
+    // fires for utterances LONGER than the 8 s live window. Fail loudly here if the device TTS
+    // produced too-short audio, instead of a confusing downstream markerCount=0. Mirrors the
+    // size guard in liveMic_runtimeSpanishSource_producesEnglishTranslation_windowPath.
+    assertTrue(
+      "English prompt must exceed the 8 s live window to drive a pre-stop translation; got ${pcm.size} samples (~${pcm.size / PipelineConfig.STT_SAMPLE_RATE}s)",
+      pcm.size > PipelineConfig.STT_SAMPLE_RATE * 9,
+    )
     return pcm
   }
 
@@ -546,11 +629,11 @@ class BaoTranslateLiveMicTranslationE2eTest {
     ensureRequiredModelsReady(context)
 
     val langs = listOf(
-      LiveLang("Spanish", "es", Locale("es", "ES"), "Buenos días, ¿cómo estás hoy? Es un placer conocerte."),
+      LiveLang("Spanish", "es", Locale.forLanguageTag("es-ES"), "Buenos días, ¿cómo estás hoy? Es un placer conocerte."),
       LiveLang("French", "fr", Locale.FRANCE, "Bonjour, comment allez-vous aujourd'hui mon ami?"),
       LiveLang("German", "de", Locale.GERMANY, "Guten Morgen, wie geht es dir heute mein Freund?"),
       LiveLang("Italian", "it", Locale.ITALY, "Buongiorno, come stai oggi amico mio?"),
-      LiveLang("Russian", "ru", Locale("ru", "RU"), "Доброе утро, как дела сегодня, мой друг?"),
+      LiveLang("Russian", "ru", Locale.forLanguageTag("ru-RU"), "Доброе утро, как дела сегодня, мой друг?"),
     )
 
     val taskDescriptionPrefix = composeRule.prepareHome()
@@ -565,6 +648,15 @@ class BaoTranslateLiveMicTranslationE2eTest {
     val failures = mutableListOf<String>()
     val skipped = mutableListOf<String>()
     for (l in langs) {
+      // Wait for any PRIOR language's playback (Speaking -> Cooldown -> Idle) to finish before this
+      // language records: while a translation is being SPOKEN the live mic is gated (capturePaused), so
+      // an overlapping next-language capture is silently dropped. That was the cause of the prior
+      // alternating es✓/fr✗/de✓/it✗/ru✓ failures — every language right after a SUCCESSFUL one was gated.
+      val idleDeadline = System.currentTimeMillis() + 30_000
+      while (System.currentTimeMillis() < idleDeadline &&
+        vm!!.uiState.value.conversationPhase != ConversationPhase.Idle) {
+        Thread.sleep(200)
+      }
       val pcmF = platformTtsPcm16k(context, l.locale, l.phrase)
       if (pcmF == null) { skipped.add(l.key); Log.w(TAG, "LIVE-EVERY [${l.key}] skipped: no device voice"); continue }
 
@@ -573,7 +665,19 @@ class BaoTranslateLiveMicTranslationE2eTest {
 
       RecordingController.testPcmSource = ShortArray(pcmF.size) { (pcmF[it].coerceIn(-1f, 1f) * 32767f).toInt().toShort() }
       composeRule.runOnUiThread { vm.startRecording() }
-      val deadline = System.currentTimeMillis() + 90_000
+      // Each phrase is a single sentence (~5-6s) = SUB-WINDOW, so it commits via the stop-time tail
+      // flush, NOT a live window boundary (see shortUtterance...oosLive001); VAD does not endpoint on
+      // the injected trailing silence mid-recording. So feed the whole clip in real time, then STOP,
+      // then poll. Polling DURING recording (the prior design) could never observe a sub-window
+      // translation — every language failed for that reason. The live-window path is covered by
+      // liveMic_runtimeSpanishSource_producesEnglishTranslation_windowPath.
+      val feedMs = pcmF.size * 1000L / 16_000 + 2_000
+      Thread.sleep(feedMs)
+      composeRule.runOnUiThread { vm.stopRecording() }
+      composeRule.waitForContentDescription(composeRule.stringResource(R.string.cd_bao_translate_start), timeoutMillis = 30_000)
+      RecordingController.testPcmSource = null
+
+      val deadline = System.currentTimeMillis() + 60_000
       var english: TranslationMessage? = null
       while (System.currentTimeMillis() < deadline && english == null) {
         // Scope to THIS iteration's language (transcripts accumulate): the message whose source is
@@ -584,9 +688,6 @@ class BaoTranslateLiveMicTranslationE2eTest {
         }
         if (english == null) Thread.sleep(500)
       }
-      composeRule.runOnUiThread { vm.stopRecording() }
-      composeRule.waitForContentDescription(composeRule.stringResource(R.string.cd_bao_translate_start), timeoutMillis = 30_000)
-      RecordingController.testPcmSource = null
 
       if (english == null) {
         val got = vm.uiState.value.transcripts.lastOrNull { it.isUser }
@@ -628,7 +729,7 @@ class BaoTranslateLiveMicTranslationE2eTest {
     // >8 s of Spanish so the realtime window/stride loop fires (not just the tail flush).
     val spanish = platformTtsPcm16k(
       context,
-      Locale("es", "ES"),
+      Locale.forLanguageTag("es-ES"),
       "Buenos días. ¿Cómo estás hoy? Es un placer conocerte. " +
         "Espero que tengas un día maravilloso y lleno de mucha alegría y paz.",
     )
@@ -780,7 +881,14 @@ class BaoTranslateLiveMicTranslationE2eTest {
       tts.setSpeechRate(0.9f)
       tts.setPitch(1.0f)
 
-      val prompt = (1..4).joinToString(" ") { "Good night." }
+      // 16 reps so the synthesized utterance EXCEEDS the 8 s live window: the
+      // injectedSpeechProducesLiveTranslation_beforeStop assertion needs a window-boundary commit
+      // (a sub-window utterance only commits at the stop-time tail flush, producing NO live
+      // pre-stop translation). One continuous TTS utterance => one VAD segment (verified: the prior
+      // 4-rep prompt was a single segment), so the window/stride loop fires mid-recording. This was
+      // regressed from 8 reps to 4 in 388a9cd, dropping it below the window. See
+      // liveMic_runtimeSpanishSource_producesEnglishTranslation_windowPath for the symmetric Spanish case.
+      val prompt = (1..16).joinToString(" ") { "Good night." }
       val utteranceId = "bao-live-mic-prompt"
       val promptFile = File(context.cacheDir, "$utteranceId.wav")
       if (promptFile.exists()) {
@@ -904,6 +1012,12 @@ private const val MIN_LIVE_MIC_SCREENSHOT_BYTES = 10_000L
 // depending on the model; both contain the substrings "buena" and "noche".
 private val SPANISH_TRANSLATION_MARKERS = listOf("buena", "noche")
 
+// The bundled bao_live_prompt_en.wav actually says "Hello there. How are you today? I am doing very
+// well. Thank you." — NOT "good night" — which qwen25_1b renders to "Hola. ¿Cómo estás hoy? Estoy muy
+// bien. Gracias." (verified on device via the transcript dump). "thank you"->"gracias" and "very
+// well"->"... bien" are deterministic; the >=2 check tolerates minor wording drift across the set.
+private val GREETING_TRANSLATION_MARKERS = listOf("hola", "bien", "gracias")
+
 private fun runLiveMicShell(command: String): String {
   val descriptor =
     InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command)
@@ -952,17 +1066,50 @@ private fun LiveMicComposeRule.openTaskByDescription(taskDescriptionPrefix: Stri
     .performClick()
 }
 
-private fun LiveMicComposeRule.waitForSpanishTranslationMarkers(timeoutMillis: Long): Boolean =
-  runCatching { waitUntil(timeoutMillis) { spanishMarkerCount() >= 2 } }.isSuccess
+// Drive recomposition under the frozen animation clock. freezeAnimationClock() sets
+// mainClock.autoAdvance=false so the app's infinite listening/recording pulse (rememberPulseFloat ->
+// infiniteRepeatable) can never keep the recomposer non-idle and hang the implicit waitForIdle in
+// finders. But a frozen clock also dispatches NO frames, so StateFlow-driven UI (translation markers,
+// listening state) never recomposes and a bare composeRule.waitUntil can never observe it — the
+// regression behind the prior ComposeTimeoutExceptions. So pump ONE frame per iteration to apply
+// pending snapshot writes + recompose, with a real Thread.sleep so the real-dispatcher
+// VAD/Whisper/translate pipeline progresses, against a REAL wall-clock deadline (the pipeline runs in
+// real time, not virtual test-clock time). Per Compose testing/synchronization docs: under
+// autoAdvance=false the test clock must be advanced manually for recomposition to occur.
+private fun LiveMicComposeRule.pumpUntil(timeoutMillis: Long, condition: () -> Boolean): Boolean {
+  val deadline = System.currentTimeMillis() + timeoutMillis
+  while (System.currentTimeMillis() < deadline) {
+    if (condition()) return true
+    mainClock.advanceTimeByFrame()
+    Thread.sleep(16) // ~1 frame of real time so background pipeline coroutines advance + yield
+  }
+  return condition()
+}
 
-private fun LiveMicComposeRule.spanishMarkerCount(): Int =
-  SPANISH_TRANSLATION_MARKERS.count { marker ->
+// Dump the ViewModel transcript (source -> translated) so a markerCount=0 failure is self-documenting:
+// it separates a CONTENT problem (a translation is present but lacks the "buena"/"noche" markers) from
+// a UI problem (the translation never reached the visible semantics tree).
+private fun transcriptDump(): String =
+  BaoTranslateViewModel.testInstance?.uiState?.value?.transcripts
+    ?.takeIf { it.isNotEmpty() }
+    ?.joinToString("  ||  ") { "src=\"${it.originalText}\" -> es=\"${it.translatedText}\"" }
+    ?: "<no transcripts in VM>"
+
+private fun LiveMicComposeRule.waitForSpanishTranslationMarkers(
+  timeoutMillis: Long,
+  markers: List<String> = SPANISH_TRANSLATION_MARKERS,
+): Boolean = pumpUntil(timeoutMillis) { spanishMarkerCount(markers) >= 2 }
+
+private fun LiveMicComposeRule.spanishMarkerCount(
+  markers: List<String> = SPANISH_TRANSLATION_MARKERS,
+): Int =
+  markers.count { marker ->
     hasText(marker, substring = true, ignoreCase = true)
   }
 
 private fun LiveMicComposeRule.waitForText(
   @StringRes resId: Int,
-  timeoutMillis: Long = 10_000,
+  timeoutMillis: Long = 60_000,
   substring: Boolean = false,
 ) {
   waitForText(stringResource(resId), timeoutMillis, substring)
@@ -970,18 +1117,24 @@ private fun LiveMicComposeRule.waitForText(
 
 private fun LiveMicComposeRule.waitForText(
   text: String,
-  timeoutMillis: Long = 10_000,
+  timeoutMillis: Long = 60_000,
   substring: Boolean = false,
 ) {
-  waitUntil(timeoutMillis) { hasText(text, substring = substring) }
+  if (!pumpUntil(timeoutMillis) { hasText(text, substring = substring) }) {
+    throw AssertionError("Timed out after ${timeoutMillis}ms waiting for text: \"$text\" (substring=$substring)")
+  }
 }
 
 private fun LiveMicComposeRule.waitForContentDescription(
   contentDescription: String,
-  timeoutMillis: Long = 10_000,
+  timeoutMillis: Long = 60_000,
   substring: Boolean = false,
 ) {
-  waitUntil(timeoutMillis) { hasContentDescription(contentDescription, substring) }
+  if (!pumpUntil(timeoutMillis) { hasContentDescription(contentDescription, substring) }) {
+    throw AssertionError(
+      "Timed out after ${timeoutMillis}ms waiting for contentDescription: \"$contentDescription\" (substring=$substring)"
+    )
+  }
 }
 
 private fun LiveMicComposeRule.clickTextIfPresent(

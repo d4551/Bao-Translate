@@ -41,7 +41,7 @@ import org.junit.experimental.categories.Category
  * Property-based tests for [isValidTranscription]. Pins the public contract of the STT output filter
  * as a mathematical property, not a list of hand-picked cases:
  *
- *  - Idempotence: re-filtering a filtered result is a no-op.
+ *  - Idempotence: re-filtering a filtered result leaves the verdict unchanged.
  *  - Trivial rejection: empty / single-char input is always rejected.
  *  - Padding independence: ASCII whitespace around the input doesn't change the verdict.
  *  - Non-Latin scripts: Chinese, Arabic, Japanese hiragana, Cyrillic — none of the STT-realistic
@@ -181,7 +181,7 @@ private object Codepoints {
   val ascii: Arb<Codepoint> = Arb.int(0x20..0x7E).map { Codepoint(it) }
   /** CJK Unified Ideographs — real Chinese (the prior version used Arb.az(), i.e. Latin a–z). */
   val cjk: Arb<Codepoint> = Arb.int(0x4E00..0x9FFF).map { Codepoint(it) }
-  val arabic: Arb<Codepoint> = Arb.arabic()
-  val cyrillic: Arb<Codepoint> = Arb.cyrillic()
-  val hiragana: Arb<Codepoint> = Arb.hiragana()
+  val arabic: Arb<Codepoint> = Codepoint.arabic()
+  val cyrillic: Arb<Codepoint> = Codepoint.cyrillic()
+  val hiragana: Arb<Codepoint> = Codepoint.hiragana()
 }

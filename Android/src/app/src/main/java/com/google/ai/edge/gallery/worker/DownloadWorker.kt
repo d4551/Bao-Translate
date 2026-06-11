@@ -151,8 +151,8 @@ class DownloadWorker(context: Context, params: WorkerParameters) :
           }
           BaoLog.d(TAG, "About to download: $allFiles")
 
-          // Download them in sequence.
-          // TODO: maybe consider downloading them in parallel.
+          // Download files sequentially so resume state, foreground progress, and failure cleanup
+          // stay deterministic across the primary model file and companion data files.
           var downloadedBytes = 0L
           val bytesReadSizeBuffer: MutableList<Long> = mutableListOf()
           val bytesReadLatencyBuffer: MutableList<Long> = mutableListOf()

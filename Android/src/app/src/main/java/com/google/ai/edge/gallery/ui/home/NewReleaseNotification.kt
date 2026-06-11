@@ -57,6 +57,7 @@ import kotlinx.coroutines.withContext
 private const val TAG = "AGNewReleaseNotifi"
 private const val REPO = "google-ai-edge/gallery"
 
+@kotlinx.serialization.Serializable
 data class ReleaseInfo(val html_url: String, val tag_name: String)
 
 @Composable

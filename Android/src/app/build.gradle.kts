@@ -35,7 +35,7 @@ plugins {
   alias(libs.plugins.ksp)
 }
 
-// Host JDK 26 compiles Java 17 bytecode for Android (compileSdk 35). No separate JDK 17 install required.
+// Host JDK 26 compiles Java 17 bytecode for Android (compileSdk 37). No separate JDK 17 install required.
 // Ref: https://developer.android.com/build/jdks#toolchain
 java {
   toolchain {
@@ -53,7 +53,10 @@ kotlin {
 
 android {
   namespace = "com.google.ai.edge.gallery"
-  compileSdk = 35
+  // compileSdk 37: required by androidx.core 1.19 / activity-compose 1.13 / lifecycle 2.10.
+  // targetSdk stays 35 deliberately — raising it opts into new runtime behavior and needs its
+  // own device-verification pass (Android 16 ABF, predictive back, etc.).
+  compileSdk = 37
 
   defaultConfig {
     applicationId = "com.bao.translate"
@@ -110,13 +113,12 @@ dependencies {
   implementation(libs.androidx.material3.adaptive)
   implementation(libs.androidx.compose.navigation)
   implementation(libs.kotlinx.serialization.json)
-  implementation(libs.kotlin.reflect)
   implementation(libs.material.icon.extended)
   implementation(libs.androidx.work.runtime)
   implementation(libs.androidx.datastore)
-  implementation(libs.com.google.code.gson)
   implementation(libs.androidx.lifecycle.process)
-  implementation(libs.androidx.security.crypto)
+  implementation(libs.androidx.security.crypto) // legacy: read-only fallback for pre-Tink blobs
+  implementation(libs.tink.android)
   implementation(libs.androidx.webkit)
   implementation(libs.litertlm)
   implementation(libs.commonmark)
@@ -138,13 +140,13 @@ dependencies {
   implementation(libs.firebase.analytics)
   implementation(libs.firebase.messaging)
   implementation(libs.androidx.exifinterface)
-  implementation(libs.moshi.kotlin)
   ksp(libs.hilt.android.compiler)
   // Give Hilt's KSP processor a Kotlin-2.4.0-aware metadata reader (unshaded since Dagger 2.57).
   ksp(libs.kotlin.metadata.jvm)
   testImplementation(libs.junit)
   testImplementation(libs.mockito.kotlin)
-  testImplementation(libs.kotest.runner.junit4)
+  // kotest-property is used as a LIBRARY inside plain JUnit4 @Test methods (SttFilterPropertyTest);
+  // no Kotest Spec/runner classes exist, so the runner artifact is deliberately absent.
   testImplementation(libs.kotest.property)
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.espresso.core)
@@ -154,7 +156,6 @@ dependencies {
   androidTestImplementation(libs.hilt.android.testing)
   debugImplementation(libs.androidx.ui.tooling)
   debugImplementation(libs.androidx.ui.test.manifest)
-  ksp(libs.moshi.kotlin.codegen)
   implementation(libs.mlkit.genai.prompt)
   implementation(libs.mcp.kotlin.sdk)
   implementation(libs.ktor.client.android)
@@ -196,8 +197,8 @@ tasks.register("verifyReleaseReady") {
 }
 
 // Strict subset: runs only tests marked @Category(Strict.class). Promoted to the release
-// gate so every new brutalised test exercises production paths with no skipping, no
-// wishful-thinking markers, no time-padding Thread.sleeps. Filters via the JUnit 4
+// gate so newly hardened tests exercise production paths with no skips, optimistic markers, or
+// time-padding Thread.sleeps. Filters via the JUnit 4
 // categories mechanism — the @Category marker on each test class is what gates inclusion.
 tasks.register<Test>("testDebugUnitTestStrict") {
   group = "verification"
@@ -280,7 +281,8 @@ tasks.register<Exec>("smokeE2e") {
 }
 
 protobuf {
-  protoc { artifact = "com.google.protobuf:protoc:4.26.1" }
+  // protoc must match the protobuf-javalite runtime — both read the same catalog version.
+  protoc { artifact = "com.google.protobuf:protoc:${libs.versions.protobufJavaLite.get()}" }
   generateProtoTasks { all().forEach { it.plugins { create("java") { option("lite") } } } }
 }
 
@@ -294,9 +296,11 @@ protobuf {
 // package mirror whose needed files are already vendored per-skill, so it is NOT copied.
 // NOTE: the shared dir must NOT be underscore-prefixed — aapt drops `_*` assets
 // from the APK, which silently breaks every skill's `import '../../shared/*'`.
-tasks.register<Copy>("syncSkills") {
+// Sync (not Copy): the destination is generated output, so stale files from removed/renamed
+// skills must be pruned, or deleted skills would silently keep shipping in the APK.
+tasks.register<Sync>("syncSkills") {
   group = "build"
-  description = "Copy skills/built-in + skills/featured + skills/shared into Android assets before build."
+  description = "Sync skills/built-in + skills/featured + skills/shared into Android assets before build."
   val skillsDir = file("../../../skills")
   into(file("src/main/assets/skills"))
   from(skillsDir.resolve("built-in"))

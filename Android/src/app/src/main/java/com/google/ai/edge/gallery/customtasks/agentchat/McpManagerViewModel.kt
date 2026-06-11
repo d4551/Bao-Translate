@@ -33,7 +33,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
 import io.ktor.client.plugins.sse.SSE
-import io.modelcontextprotocol.kotlin.sdk.Implementation
+import io.modelcontextprotocol.kotlin.sdk.types.Implementation
 import io.modelcontextprotocol.kotlin.sdk.client.Client
 import io.modelcontextprotocol.kotlin.sdk.client.StreamableHttpClientTransport
 import javax.inject.Inject
@@ -428,7 +428,7 @@ constructor(
     client.connect(transport)
     val toolsResponse = client.listTools()
     val mcpTools =
-      toolsResponse?.tools.orEmpty().map { tool ->
+      toolsResponse.tools.orEmpty().map { tool ->
         val isEnabled = savedToolsMap?.get(tool.name) ?: true
         val isAlwaysAllow = savedAlwaysAllowMap?.get(tool.name) ?: false
         // Manually build a valid JSON schema string using public SDK object properties.

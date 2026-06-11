@@ -738,12 +738,10 @@ fun SkillManagerBottomSheet(
   if (showSecretEditorDialog) {
     val skillState = uiState.skills.getOrNull(skillToEditIndex)
     skillState?.let {
-      var curSecret by remember {
-        mutableStateOf(
-          skillManagerViewModel.dataStoreRepository.readSecret(
-            getSkillSecretKey(skillName = it.skill.name)
-          ) ?: ""
-        )
+      val secretKey = getSkillSecretKey(skillName = it.skill.name)
+      var curSecret by remember(secretKey) { mutableStateOf("") }
+      LaunchedEffect(secretKey) {
+        curSecret = skillManagerViewModel.dataStoreRepository.readSecret(secretKey) ?: ""
       }
       SecretEditorDialog(
         title = stringResource(R.string.edit_secret),

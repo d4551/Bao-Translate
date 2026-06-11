@@ -84,11 +84,12 @@ constructor(
   val uiState = _uiState.asStateFlow()
 
   init {
-    // Load results from storage.
-    val storedResults = dataStoreRepository.getAllBenchmarkResults()
-    BaoLog.d(TAG, "Loaded ${storedResults.size} benchmark results")
-    setBenchmarkResults(results = storedResults)
-    collapseAll()
+    viewModelScope.launch(Dispatchers.IO) {
+      val storedResults = dataStoreRepository.getAllBenchmarkResults()
+      BaoLog.d(TAG, "Loaded ${storedResults.size} benchmark results")
+      setBenchmarkResults(results = storedResults)
+      collapseAll()
+    }
   }
 
   @OptIn(ExperimentalApi::class)

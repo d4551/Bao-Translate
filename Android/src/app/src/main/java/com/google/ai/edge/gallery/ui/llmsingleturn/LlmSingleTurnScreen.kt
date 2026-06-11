@@ -16,7 +16,7 @@
 
 package com.google.ai.edge.gallery.ui.llmsingleturn
 
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 
 import com.google.ai.edge.gallery.common.BaoLog
 import androidx.activity.compose.BackHandler
@@ -47,7 +47,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.core.os.bundleOf
+import android.os.Bundle
 import com.google.ai.edge.gallery.GalleryEvent
 import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.ModelDownloadStatusType
@@ -180,7 +180,10 @@ fun LlmSingleTurnScreen(
 
                 firebaseAnalytics?.logEvent(
                   GalleryEvent.GENERATE_ACTION.id,
-                  bundleOf("capability_name" to task.id, "model_id" to selectedModel.name),
+                  Bundle().apply {
+                    putString("capability_name", task.id)
+                    putString("model_id", selectedModel.name)
+                  },
                 )
               },
               onStopButtonClicked = { model -> viewModel.stopResponse(model = model) },

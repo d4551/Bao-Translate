@@ -14,36 +14,34 @@ The strict subset is the release gate. New tests must be `@Category(Strict::clas
 
 ## Shared test harness
 
-- `com.google.ai.edge.gallery.testkit.BaoStrictTest` — base class with a 60s/test
+- `com.google.ai.edge.gallery.testkit.BaoStrictTest`: base class with a 60s/test
   timeout. Subclass to attach it.
-- `com.google.ai.edge.gallery.testkit.BaoStrictRules` — assertion helpers:
+- `com.google.ai.edge.gallery.testkit.BaoStrictRules`: assertion helpers:
   `assertFiniteFloats`, `assertNoEmptyAfterNormalize`, `assertNoBrokenSurrogates`,
   `assertCodepointCount`.
-- `com.google.ai.edge.gallery.testkit.CorpusFixture` — golden corpora: CJK, emoji,
+- `com.google.ai.edge.gallery.testkit.CorpusFixture`: golden corpora: CJK, emoji,
   Cyrillic homoglyphs, NBSP, malformed JSON, NaN/Inf float arrays. Reuse instead of
   inlining edge cases.
-- `com.google.ai.edge.gallery.testkit.Strict` — JUnit4 `@Category` annotation
+- `com.google.ai.edge.gallery.testkit.Strict`: JUnit4 `@Category` annotation
   marking a test as part of the strict subset.
 
 ## Rules of the road
 
-1. **Never skip a case the production code must handle.** No `Assume.assumeTrue` to dodge
-   missing hardware or empty fixtures — the production code must handle them, the test
-   must assert that.
-2. **No fake success toasts as a substitute for real assertions.** Each test must check
-   actual production behavior, not "did the test code run to the end".
+1. **Assert the production contract.** Do not use `Assume.assumeTrue` to bypass cases that production
+   code is expected to handle.
+2. **Use real assertions.** Each test should verify production behavior, not only that test code
+   reached the final line.
 3. **No `Thread.sleep` for synchronization.** Use `composeRule.waitUntil { ... }` for
    poll-based waits, or proper `kotlinx.coroutines` mechanisms.
-4. **No `try/catch` in tests** to "make them pass" — if a test catches a known exception,
-   it must re-throw or document the gap explicitly.
+4. **Avoid catch-and-pass patterns.** If a test catches a known exception, it must rethrow, use
+   `assertThrows`, or document the expected failure explicitly.
 5. **Run a property-based generator at least once per release.** The
-   `SttFilterPropertyTest.kt` uses Kotest to fuzz the STT filter — extend the property
+   `SttFilterPropertyTest.kt` uses Kotest to fuzz the STT filter; extend the property
    surface when adding new filters.
 6. **Use shared corpora.** New edge cases go in `CorpusFixture.kt`, not inlined. The
    corpus is auditable in one place.
-7. **Document gaps, don't paper over them.** If production has a real bug, add a
-   test that demonstrates it AND file an entry in `out_of_scope_findings.txt`. The
-   test will fail; that is the correct outcome.
+7. **Document gaps clearly.** If production has a known bug, add a test that demonstrates it and record
+   the follow-up in `out_of_scope_findings.txt`.
 
 ## Adding a new strict test
 

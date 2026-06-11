@@ -69,6 +69,10 @@ data class BaoTranslateUiState(
   // so the live caption appears ~1s+ sooner. Cleared once the translated message commits.
   val liveSourcePreview: String? = null,
   val currentAudioDevice: AudioDevice = AudioDevice.Speaker,
+  // Face-to-face per-speaker output routing: ISO language code -> the output device that speaker's
+  // translations play on (e.g. one person's earbuds, the other the phone speaker). Empty => both use
+  // the global [currentAudioDevice]. Drives the per-panel output chip and RecordingController routing.
+  val faceToFaceOutputs: Map<String, AudioDevice> = emptyMap(),
   val availableAudioDevices: List<AudioDevice> = emptyList(),
   val availableInputDevices: List<com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioInputOption> = emptyList(),
   val preferredInputDevice: com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioDevice.BluetoothHeadset? = null,
@@ -142,6 +146,16 @@ class BaoTranslateViewModel @Inject constructor(
     voiceProfileManager = voiceProfileManager,
     activeProfileId = { _uiState.value.activeVoiceProfileId },
   )
+
+  /**
+   * True once the OPTIONAL OpenVoice cross-lingual clone converter has finished initializing. Required
+   * models becoming ready (the record control appearing) does NOT imply the clone converter is loaded —
+   * it inits a few seconds later — so a peer-timbre test must wait on this before asserting a clone.
+   */
+  @VisibleForTesting(otherwise = VisibleForTesting.NONE)
+  internal val testOpenVoiceCloneReady: Boolean
+    get() = pipelines.openVoiceConverter != null
+
   private val localParticipantId = UUID.randomUUID().toString()
   private val modelManager = BaoTranslateModelManager
 
@@ -297,9 +311,9 @@ class BaoTranslateViewModel @Inject constructor(
         }
         // Translation and TTS operate on ISO codes (mirroring the local recording path); the KEYs
         // ("German", "Korean", ...) are kept only for the display fields. Passing a KEY to
-        // synthesizeSpeech silently broke platform-TTS for non-Kokoro target languages, because
-        // PlatformTtsPipeline feeds it to Locale.forLanguageTag (which needs "de"/"ko", not
-        // "German"/"Korean"). codeFor() normalizes a key->code and is a no-op on an already-ISO code.
+        // synthesizeSpeech silently broke platform TTS for non-Kokoro target languages because
+        // PlatformTtsPipeline feeds it to Locale.forLanguageTag, which needs "de"/"ko", not
+        // "German"/"Korean". codeFor() normalizes display keys and leaves ISO codes unchanged.
         val sourceCode = SupportedLanguages.codeFor(bleMsg.sourceLanguage)
         val targetCode = SupportedLanguages.codeFor(targetLang)
         var translationSucceeded = false
@@ -552,6 +566,18 @@ class BaoTranslateViewModel @Inject constructor(
   fun setTargetLanguage(language: String) {
     voiceLanguageCoordinator.setTargetLanguage(language)
     persistBaoTranslateSettings()
+  }
+
+  /**
+   * Assigns the output device for a face-to-face speaker's translations, keyed by their ISO language
+   * code. Selecting the global speaker clears the per-speaker override (falls back to [currentAudioDevice]).
+   */
+  fun setFaceToFaceOutput(langCode: String, device: AudioDevice) {
+    _uiState.update { state ->
+      val next = state.faceToFaceOutputs.toMutableMap()
+      if (device is AudioDevice.Speaker) next.remove(langCode) else next[langCode] = device
+      state.copy(faceToFaceOutputs = next)
+    }
   }
 
   /**

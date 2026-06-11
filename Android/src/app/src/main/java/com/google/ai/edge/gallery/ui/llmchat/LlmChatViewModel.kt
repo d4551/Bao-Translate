@@ -156,7 +156,7 @@ open class LlmChatViewModelBase(
         val resultListener: (String, Boolean, String?) -> Unit =
           { partialResult, done, partialThinkingResult ->
             if (partialResult.startsWith("<ctrl")) {
-              // Do nothing. Ignore control tokens.
+              // Ignore control tokens.
             } else {
               // Remove the last message if it is a "loading" message.
               // This will only be done once.
@@ -186,12 +186,10 @@ open class LlmChatViewModelBase(
                       ),
                   )
                 }
-                if (thinkingText != null) {
-                  updateLastThinkingMessageContentIncrementally(
-                    model = model,
-                    partialContent = thinkingText,
-                  )
-                }
+                updateLastThinkingMessageContentIncrementally(
+                  model = model,
+                  partialContent = thinkingText,
+                )
               } else {
                 if (currentLastMessage?.type == ChatMessageType.THINKING) {
                   val thinkingMsg = currentLastMessage as ChatMessageThinking

@@ -44,7 +44,7 @@ data class TokenRequestResult(val status: TokenRequestResultType, val errorMessa
  * Returns the current OAuth access-token status. The token is considered expired once the
  * expiration timestamp passes the [TOKEN_EXPIRY_BUFFER_MIN]-minute safety margin.
  */
-fun ModelManagerViewModel.getTokenStatusAndData(): TokenStatusAndData {
+suspend fun ModelManagerViewModel.getTokenStatusAndData(): TokenStatusAndData {
   var tokenStatus = TokenStatus.NOT_STORED
   BaoLog.d(TAG, "Reading token data from data store...")
   val tokenData = dataStoreRepository.readAccessTokenData()

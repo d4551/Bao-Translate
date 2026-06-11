@@ -1,6 +1,7 @@
 package com.google.ai.edge.gallery.customtasks.baotranslate.tts
 
 import ai.onnxruntime.OrtException
+import androidx.annotation.VisibleForTesting
 import com.google.ai.edge.gallery.common.BaoLog
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioResampler
 import java.io.File
@@ -39,9 +40,38 @@ class OpenVoiceVoiceConverter {
     private const val TAG = "OpenVoiceVC"
     private const val OV_RATE = 22050
     private const val FREQ = OpenVoiceSpectrogram.FREQ_BINS // 513
-    private const val TAU = 0.3f // posterior temperature; the converter samples its own noise
+    // Posterior temperature — UPSTREAM DEFAULT, do not zero it. OpenVoice samples the posterior as
+    // z = (m + randn*tau*exp(logs)) (openvoice/models.py:220) and its public convert() defaults to
+    // tau=0.3 (openvoice/api.py:141). That sampled noise IS the natural micro-variation of speech:
+    // at tau=0 the decoder vocodes the bare posterior MEAN, which produces over-smoothed, buzzy,
+    // ROBOTIC voices (regression report: "voices sound robotic/mechanical"). tau=0.3 keeps the clone
+    // intelligible and timbre-faithful (device-measured cos(target)≈0.90 at this scale) while
+    // restoring natural prosody. Tests assert tau-independent invariants (cosine margin, majority
+    // content-word retention), not bitwise determinism.
+    private const val TAU = 0.3f
     private const val MAX_FRAMES = 4096 // safety cap (~47 s at 22.05 kHz); longer utterances are truncated
     private const val SILENCE_RMS = 1e-3f // below this RMS a clip carries no extractable speaker identity
+    // Loudness normalization for cross-engine/cross-language clone CONSISTENCY (Kokoro vs Supertonic
+    // output at different levels). The OpenVoice/VITS converter is trained on librosa-loaded audio
+    // (max_wav_value ÷32768 → natural full-scale [-1,1]); it expects the base near FULL SCALE. So we
+    // PEAK-normalize the STFT input to [CLONE_INPUT_PEAK] — this standardizes level across engines
+    // WITHOUT the quiet-RMS rescale (target 0.08) that pushed the base below the model's expected scale
+    // and garbled cloned CONTENT on-device. Peak-to-full-scale preserves the waveform shape (no clip,
+    // no content loss). The cloned OUTPUT is peak-normalized to [CLONE_OUTPUT_PEAK] for playback loudness.
+    private const val CLONE_INPUT_PEAK = 0.95f
+    private const val CLONE_OUTPUT_PEAK = 0.95f
+
+    /** Scales [samples] so the absolute peak equals [targetPeak] (consistent playback loudness). */
+    @VisibleForTesting
+    internal fun normalizePeak(samples: FloatArray, targetPeak: Float): FloatArray {
+      if (samples.isEmpty()) return samples
+      var peak = 0f
+      for (s in samples) peak = maxOf(peak, kotlin.math.abs(s))
+      if (peak <= 1e-6f) return samples
+      val gain = targetPeak / peak
+      if (kotlin.math.abs(gain - 1f) < 1e-3f) return samples
+      return FloatArray(samples.size) { samples[it] * gain }
+    }
   }
 
   // Serializes native run() against close() so converter/refEnc are never freed mid-inference
@@ -86,7 +116,9 @@ class OpenVoiceVoiceConverter {
       BaoLog.w(TAG, "computeSpeakerEmbedding: input below speech level — no speaker identity to extract")
       return null
     }
-    val (spec, frames) = spectrogram(wavSamples, sampleRate) ?: return null
+    // Peak-normalize the reference to the model's expected full scale (consistent timbre extraction
+    // across engines/levels) — NOT a quiet-RMS rescale, which corrupts the spectrogram the model reads.
+    val (spec, frames) = spectrogram(normalizePeak(wavSamples, CLONE_INPUT_PEAK), sampleRate) ?: return null
     if (frames <= 0) return null
     return runRefEnc(re, spec, frames.coerceAtMost(MAX_FRAMES))
   }
@@ -102,7 +134,10 @@ class OpenVoiceVoiceConverter {
       BaoLog.w(TAG, "convert: non-finite audio/targetSe — refusing")
       return null
     }
-    val (spec, framesReal) = spectrogram(audio.samples, audio.sampleRate) ?: return null
+    // Peak-normalize the base to the model's expected full scale so the conversion is level-consistent
+    // across Kokoro/Supertonic engines and languages, while preserving the waveform shape the ONNX
+    // reads (peak-to-full-scale, NOT the quiet-RMS rescale that garbled content).
+    val (spec, framesReal) = spectrogram(normalizePeak(audio.samples, CLONE_INPUT_PEAK), audio.sampleRate) ?: return null
     if (framesReal <= 0) return null
 
     val frames = framesReal.coerceAtMost(MAX_FRAMES)
@@ -127,7 +162,8 @@ class OpenVoiceVoiceConverter {
     if (flat.isEmpty()) return null
     // Defensive: scrub any non-finite the native graph might emit so playback never receives NaN/Inf.
     val clean = if (flat.all { it.isFinite() }) flat else FloatArray(flat.size) { flat[it].takeIf { v -> v.isFinite() } ?: 0f }
-    return SynthesizedAudio(samples = clean, sampleRate = OV_RATE)
+    // Normalize the cloned output to a consistent peak so playback loudness matches across languages.
+    return SynthesizedAudio(samples = normalizePeak(clean, CLONE_OUTPUT_PEAK), sampleRate = OV_RATE)
   }
 
   fun cleanup() {

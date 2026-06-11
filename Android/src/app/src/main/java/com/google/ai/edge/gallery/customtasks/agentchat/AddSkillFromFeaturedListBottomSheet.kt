@@ -307,7 +307,7 @@ private fun FeaturedSkillItem(
                   color = MaterialTheme.colorScheme.primary,
                   textDecoration = TextDecoration.Underline,
                 ),
-              modifier = Modifier.clickable { skill.attributionUrl?.let { uriHandler.openUri(it) } },
+              modifier = Modifier.clickable { uriHandler.openUri(skill.attributionUrl) },
             )
             Icon(
               Icons.AutoMirrored.Outlined.OpenInNew,
@@ -355,7 +355,7 @@ private fun FeaturedSkillItem(
       } else {
         if (isSkillAdded) {
           FilledTonalButton(
-            onClick = { /* Do nothing */ },
+            onClick = {},
             contentPadding = BUTTON_CONTENT_PADDING,
             enabled = false, // Greyed out
           ) {

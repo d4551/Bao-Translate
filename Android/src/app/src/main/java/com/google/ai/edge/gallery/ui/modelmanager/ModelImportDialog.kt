@@ -163,7 +163,7 @@ fun ModelImportDialog(
         put(config.key.label, config.defaultValue)
       }
       put(ConfigKeys.NAME.label, fileName)
-      // TODO: support other types.
+      // The import dialog currently exposes the LLM configuration set only.
       put(ConfigKeys.MODEL_TYPE.label, "LLM")
 
       for ((key, value) in defaultValues) {

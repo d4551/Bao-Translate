@@ -64,11 +64,19 @@ internal fun isValidTranscription(text: String): Boolean {
     // transcription made entirely of filler tokens (e.g. "HmM hMm HMM", "oh um") is rejected,
     // not just a single token. This catches multi-token filler that an STT model emits during
     // hesitation, which the single-token-anchored variant let through.
-    val fillerToken = "(?:hmm+|uh+|um+|ah+|oh+)"
+    // Cross-linguistic filled-pause lexicon (hesitation markers). Only CLEARLY non-lexical sounds,
+    // matched case-insensitively; whole-utterance-only (anchored) so a real word is never dropped.
+    // Latin: English/German/French. Cyrillic: elongation required where a 1-letter form is a real word.
+    val fillerToken =
+        "(?:hmm+|uh+|um+|ah+|oh+|er+|ähm+|äh+|öh+|euh+|heu+|хм+|ух+|эм+|э+|мм+|ыы+)"
     val noisePatterns = listOf(
         Regex("^\\d+/\\d+\\s+\\w+$"),
         Regex("^$fillerToken(?:\\s+$fillerToken)*$", RegexOption.IGNORE_CASE),
-        Regex("^[\\s\\d\\W]+$"),
+        // "No letters of ANY script" = pure noise (whitespace/digits/punctuation/symbols). Uses the
+        // Unicode letter property \p{L}; a plain ASCII [\s\d\W] would treat every Cyrillic/CJK/Arabic
+        // letter as non-word and wrongly drop whole non-Latin utterances (regression-pinned by
+        // TranscriptionValidationTest.nonLatinRealText_isAccepted).
+        Regex("^[^\\p{L}]+$"),
     )
 
     if (noisePatterns.any { it.matches(trimmed) }) {

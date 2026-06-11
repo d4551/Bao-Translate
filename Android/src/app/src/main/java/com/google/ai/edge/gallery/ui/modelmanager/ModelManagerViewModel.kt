@@ -56,9 +56,8 @@ import com.google.ai.edge.gallery.proto.AccessTokenData
 import com.google.ai.edge.gallery.proto.ImportedModel
 import com.google.ai.edge.gallery.proto.Theme
 import com.google.ai.edge.gallery.runtime.aicore.AICoreModelHelper
+import com.google.ai.edge.gallery.common.LenientJson
 import com.google.ai.edge.litertlm.Contents
-import com.google.gson.Gson
-import com.google.gson.JsonSyntaxException
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -282,8 +281,7 @@ constructor(
       status = ModelDownloadStatus(status = ModelDownloadStatusType.IN_PROGRESS),
     )
 
-    // TODO: b/494029782 - Both litertlm and aicore download and storage should be unified into a
-    // model repository.
+    // Tracked in b/494029782: LiteRT-LM and AICore downloads still use separate storage paths.
     if (model.runtimeType == RuntimeType.AICORE) {
       AICoreModelHelper.downloadModel(
         context = context,
@@ -334,8 +332,7 @@ constructor(
   }
 
   fun cancelDownloadModel(model: Model) {
-    // TODO: b/494029782 - Both litertlm and aicore download and storage should be unified into a
-    // model repository.
+    // Tracked in b/494029782: AICore model deletion is controlled outside the local repository.
     // AICore models cannot be deleted from the download repository within the app.
     if (model.runtimeType == RuntimeType.AICORE) {
       return
@@ -377,13 +374,14 @@ constructor(
       }
       curModelDownloadStatus.remove(model.name)
 
-      // Update data store.
-      val importedModels = dataStoreRepository.readImportedModels().toMutableList()
-      val importedModelIndex = importedModels.indexOfFirst { it.fileName == model.name }
-      if (importedModelIndex >= 0) {
-        importedModels.removeAt(importedModelIndex)
+      viewModelScope.launch(Dispatchers.IO) {
+        val importedModels = dataStoreRepository.readImportedModels().toMutableList()
+        val importedModelIndex = importedModels.indexOfFirst { it.fileName == model.name }
+        if (importedModelIndex >= 0) {
+          importedModels.removeAt(importedModelIndex)
+        }
+        dataStoreRepository.saveImportedModels(importedModels = importedModels)
       }
-      viewModelScope.launch { dataStoreRepository.saveImportedModels(importedModels = importedModels) }
     }
     _uiState.update {
       it.copy(
@@ -680,15 +678,16 @@ constructor(
       )
     }
 
-    // Add to data store.
-    val importedModels = dataStoreRepository.readImportedModels().toMutableList()
-    val importedModelIndex = importedModels.indexOfFirst { info.fileName == it.fileName }
-    if (importedModelIndex >= 0) {
-      BaoLog.d(TAG, "duplicated imported model found in data store. Removing it first")
-      importedModels.removeAt(importedModelIndex)
+    viewModelScope.launch(Dispatchers.IO) {
+      val importedModels = dataStoreRepository.readImportedModels().toMutableList()
+      val importedModelIndex = importedModels.indexOfFirst { info.fileName == it.fileName }
+      if (importedModelIndex >= 0) {
+        BaoLog.d(TAG, "duplicated imported model found in data store. Removing it first")
+        importedModels.removeAt(importedModelIndex)
+      }
+      importedModels.add(info)
+      dataStoreRepository.saveImportedModels(importedModels = importedModels)
     }
-    importedModels.add(info)
-    viewModelScope.launch { dataStoreRepository.saveImportedModels(importedModels = importedModels) }
   }
 
   // getTokenStatusAndData, getAuthorizationRequest, handleAuthResult moved to
@@ -714,8 +713,8 @@ constructor(
     viewModelScope.launch { dataStoreRepository.addViewedPromoId(promoId = promoId) }
   }
 
-  // TODO: b/494029782 - Both litertlm and aicore download and storage should be unified into a
-  // model repository.
+  // Tracked in b/494029782: startup status probing remains runtime-specific until model storage is
+  // unified behind one repository.
   private fun checkAICoreModelStatuses() {
     viewModelScope.launch(Dispatchers.Main) {
       val aicoreModels =
@@ -788,9 +787,8 @@ constructor(
         // Local test only.
         if (TEST_MODEL_ALLOW_LIST.isNotEmpty()) {
           BaoLog.d(TAG, "Loading local model allowlist for testing.")
-          val gson = Gson()
           runCatching {
-              modelAllowlist = gson.fromJson(TEST_MODEL_ALLOW_LIST, ModelAllowlist::class.java)
+              modelAllowlist = LenientJson.decodeFromString<ModelAllowlist>(TEST_MODEL_ALLOW_LIST)
             }
             .onFailure { e -> BaoLog.e(TAG, "Failed to parse local test json", e) }
         }
@@ -809,7 +807,7 @@ constructor(
             modelAllowlist = readModelAllowlistFromDisk()
           } else {
             BaoLog.d(TAG, "Done: loading model allowlist from internet")
-            saveModelAllowlistToDisk(modelAllowlistContent = data?.textContent ?: "{}")
+            saveModelAllowlistToDisk(modelAllowlistContent = data.textContent)
           }
         }
 
@@ -932,16 +930,20 @@ constructor(
   }
 
   fun clearLoadModelAllowlistError() {
-    val curTasks = getActiveCustomTasks().map { it.task }
-    processTasks()
-    _uiState.update {
-      createUiState()
-        .copy(
-          loadingModelAllowlist = false,
-          tasks = curTasks,
-          loadingModelAllowlistError = "",
-          tasksByCategory = groupTasksByCategory(),
-        )
+    viewModelScope.launch(Dispatchers.IO) {
+      val curTasks = getActiveCustomTasks().map { it.task }
+      processTasks()
+      val newState =
+        createUiState()
+          .copy(
+            loadingModelAllowlist = false,
+            tasks = curTasks,
+            loadingModelAllowlistError = "",
+            tasksByCategory = groupTasksByCategory(),
+          )
+      _uiState.update {
+        newState
+      }
     }
   }
 
@@ -977,8 +979,7 @@ constructor(
         val content = file.readText()
         BaoLog.d(TAG, "Model allowlist content from local file: $content")
 
-        val gson = Gson()
-        return gson.fromJson(content, ModelAllowlist::class.java)
+        return LenientJson.decodeFromString<ModelAllowlist>(content)
       }
     
 }.onFailure { e ->
@@ -1023,7 +1024,7 @@ constructor(
     )
   }
 
-  private fun createUiState(): ModelManagerUiState {
+  private suspend fun createUiState(): ModelManagerUiState {
     val modelDownloadStatus: MutableMap<String, ModelDownloadStatus> = mutableMapOf()
     val modelInstances: MutableMap<String, ModelInitializationStatus> = mutableMapOf()
     val tasks: MutableMap<String, Task> = mutableMapOf()

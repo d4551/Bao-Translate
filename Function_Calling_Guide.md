@@ -1,45 +1,60 @@
-# Implementing Your Custom Logic
-To build specialized agents that go beyond our provided demos, you can fine-tune your own version of the model and customize the app with your functions to call.
+# Function Calling Guide
 
-## Clone the Repository
-```shell
+Bao Translate includes the Mobile Actions foundation from AI Edge Gallery. This guide explains how to add a custom action that an on-device model can call from the app.
+
+Use this guide when you want to connect model output to a specific Android capability, such as opening a system screen, creating a calendar event, or triggering a custom in-app workflow.
+
+## Overview
+
+A function-calling action has four parts:
+
+1. An `ActionType` enum value.
+2. An `Action` implementation that carries the parameters.
+3. A tool method exposed to the model.
+4. Android-side logic that performs the requested action.
+
+The model sees the tool description and parameters. The app receives the structured action and decides how to execute it.
+
+## 1. Clone The Repository
+
+```bash
 git clone git@github.com:d4551/bao-translate.git
+cd bao-translate
 ```
 
-This will create a local copy of the repository.
+## 2. Define The Action Type
 
-## Define Your Action Type 
-
-In [Actions.kt](Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/mobileactions/Actions.kt), add a new entry to the `ActionType` enum and create a class that extends `Action` to define your specific function name, icon, and parameters.
+In [Actions.kt](Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/mobileactions/Actions.kt), add a new `ActionType` value and an `Action` subclass.
 
 ```kotlin
 enum class ActionType {
-  // ... existing types
+  // Existing types...
   ACTION_NEW_CUSTOM_FUNCTION,
 }
 
 class NewCustomAction(val param: String) : Action(
   type = ActionType.ACTION_NEW_CUSTOM_FUNCTION,
-  icon = Icons.Outlined.Favorite, // Choose an appropriate icon
+  icon = Icons.Outlined.Favorite,
   functionCallDetails = FunctionCallDetails(
     functionName = "newCustomFunction",
-    parameters = listOf(Pair("param", param))
-  )
+    parameters = listOf(Pair("param", param)),
+  ),
 )
 ```
 
-## Add Your Tool Definition
+Choose a function name that clearly describes the action. Keep parameter names stable because prompts, tests, and UI traces may depend on them.
 
-In [MobileActionsTools.kt](Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/mobileactions/MobileActionsTools.kt), create a new function annotated with `@Tool` and `@ToolParam`. This function should call the `onFunctionCalled` callback to pass the specific action to your app logic.
+## 3. Add The Tool Definition
+
+In [MobileActionsTools.kt](Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/mobileactions/MobileActionsTools.kt), create a function annotated with `@Tool` and `@ToolParam`. The method should translate model-provided parameters into your action object.
 
 ```kotlin
-class MobileActionsTools(val onFunctionCalled: (Action) -> Unit): Toolset {
-  // ... existing tools
+class MobileActionsTools(val onFunctionCalled: (Action) -> Unit) : Toolset {
+  // Existing tools...
 
-  /** Description for the model. */
-  @Tool(description = "Description of what this function does")
+  @Tool(description = "Perform the custom action with the provided parameter.")
   fun newCustomFunction(
-    @ToolParam(description = "Description of the parameter") param: String
+    @ToolParam(description = "Parameter used by the custom action.") param: String,
   ): Map<String, String> {
     onFunctionCalled(NewCustomAction(param = param))
     return mapOf("result" to "success")
@@ -47,36 +62,49 @@ class MobileActionsTools(val onFunctionCalled: (Action) -> Unit): Toolset {
 }
 ```
 
-## Implement Your Action Logic 
+Tool descriptions should be concise and written for the model. Include enough context for the model to know when to call the tool, but avoid implementation details the model cannot use.
 
-Update the `performAction` method in [MobileActionsViewModel.kt](Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/mobileactions/MobileActionsViewModel.kt) to handle your new action type. This is where you implement the actual Android logic, such as using the `CameraManager` or starting a new `Intent`.
+## 4. Implement The Android Action
+
+Update `performAction` in [MobileActionsViewModel.kt](Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/mobileactions/MobileActionsViewModel.kt) to handle the new action type.
 
 ```kotlin
 fun performAction(action: Action, context: Context): String {
   return when (action) {
-    // ... existing actions
+    // Existing actions...
     is NewCustomAction -> handleNewCustomAction(context, action.param)
     else -> ""
   }
 }
 
 private fun handleNewCustomAction(context: Context, param: String): String {
-  // Implement your Android logic here (e.g., Toast, Intent, etc.)
+  // Implement the Android-side behavior here.
   return ""
 }
 ```
 
-## Update the System Prompt (Optional) 
+Keep side effects explicit. If the action opens another app, starts an activity, reads device state, or uses a sensitive permission, make that behavior clear in the code and UI.
 
-If your function requires specific context like the current time or device state, update the `getSystemPrompt()` function in [MobileActionsTask.kt](Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/mobileactions/MobileActionsTask.kt) to ensure the model has the information it needs.
+## 5. Update The System Prompt When Needed
 
-## Build and Install 
+If the function requires context such as device state, supported values, or safety constraints, update `getSystemPrompt()` in [MobileActionsTask.kt](Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/mobileactions/MobileActionsTask.kt).
 
-Navigate to the `Android/src/` directory in your terminal and use the Gradle wrapper to build the debug version of the app and install it directly onto your connected device:
+Prompt additions should be short, testable, and specific. Prefer structured examples over long prose.
 
-```shell
-cd gallery/Android/src/
+## 6. Build And Install
+
+```bash
+cd Android/src
 ./gradlew installDebug
 ```
 
-Gradle will take care of downloading dependencies, compiling the code, and deploying the APK. Once finished, you should see "Edge Gallery" appearing in your app drawer!
+Gradle downloads dependencies, compiles the app, and installs the debug APK on the connected device.
+
+## Verification Checklist
+
+- The new tool appears in the model's available tool list.
+- The model can call the tool with valid JSON parameters.
+- Invalid or missing parameters fail gracefully.
+- The Android action executes only the intended behavior.
+- User-visible strings are defined in Android resources.
+- Logs do not include secrets, private prompts, raw voice data, or sensitive device details.

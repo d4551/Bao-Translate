@@ -117,6 +117,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.google.ai.edge.gallery.BuildConfig
 import com.google.ai.edge.gallery.GalleryTopAppBar
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.data.AppBarAction
@@ -180,7 +181,12 @@ fun HomeScreen(
   val context = LocalContext.current
   val isDevBuild = context.packageName.endsWith(".dev")
 
-  var tasks = uiState.tasks
+  // Release gate for experimental/unverified demo tasks (e.g. Tiny Garden — a 270M FunctionGemma
+  // gardening mini-game, author-labeled "responses may vary"). They stay available in debug builds
+  // for development but are NOT shipped in the production task grid: experimental != released.
+  // Reversible (drop this filter to ship them) and non-destructive (no task code removed).
+  var tasks =
+    if (BuildConfig.DEBUG) uiState.tasks else uiState.tasks.filterNot { it.experimental }
 
   val categoryMap: Map<String, CategoryInfo> =
     remember(tasks) { tasks.associateBy { it.category.id }.mapValues { it.value.category } }

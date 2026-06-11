@@ -185,9 +185,7 @@ fun GalleryNavHost(
         Lifecycle.Event.ON_PAUSE -> {
           modelManagerViewModel.setAppInForeground(foreground = false)
         }
-        else -> {
-          /* Do nothing for other events */
-        }
+        else -> Unit
       }
     }
 

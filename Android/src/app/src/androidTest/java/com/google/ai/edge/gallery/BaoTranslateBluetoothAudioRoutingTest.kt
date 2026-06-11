@@ -16,17 +16,22 @@
 package com.google.ai.edge.gallery
 
 import android.Manifest
+import android.content.Context
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Build
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioDevice
+import com.google.ai.edge.gallery.customtasks.baotranslate.audio.BluetoothTransport
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioRouter
 import com.google.ai.edge.gallery.customtasks.baotranslate.config.PipelineConfig
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -164,27 +169,25 @@ class BaoTranslateBluetoothAudioRoutingTest {
     audioRouter.resetToSpeaker()
     // Call reset multiple times.
     repeat(5) { audioRouter.resetToSpeaker() }
-    // Prefer a non-existent Bluetooth device: should be a no-op (or fail), but not crash.
+    // Prefer a non-existent Bluetooth device. The router should report that no route was applied.
     val ghost = AudioDevice.BluetoothHeadset("Ghost", com.google.ai.edge.gallery.customtasks.baotranslate.audio.BluetoothTransport.BLE_AUDIO, supportsInput = true)
-    try {
-      val ok = audioRouter.preferBluetooth(ghost)
-      // Pin contract: false return means "not applied", no exception.
-      assertTrue("preferBluetooth(ghost) must be a no-op (no crash)", ok || !ok)
-    } catch (e: Exception) {
-      // If it throws, that's also a valid hardening but the test must report it.
-      throw e
-    }
+    assertFalse("preferBluetooth(ghost) must report that no route was applied", audioRouter.preferBluetooth(ghost))
   }
 
-  // ----- Default microphone (no BT): must work.
+  // ----- Default microphone (no BT): the platform must expose a built-in mic route.
   @Test
   fun defaultMicrophone_works() {
     val context = InstrumentationRegistry.getInstrumentation().targetContext
-    val audioRouter = AudioRouter(context)
-    router = audioRouter
-    val devices = audioRouter.getAvailableInputDevices()
-    // At least one input device (built-in mic) is always present.
-    assertTrue("device must have at least one input", devices.isNotEmpty())
+    val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    // getAvailableInputDevices() is the SELECTABLE *Bluetooth* input list (the built-in mic is the
+    // implicit default, surfaced as a separate "default" row in the picker), so it is legitimately
+    // EMPTY with no BT headset paired — asserting it is non-empty tested the wrong contract. The real
+    // "default mic works" contract is that the PLATFORM exposes a built-in microphone input route.
+    val inputs = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)
+    assertTrue(
+      "Device must expose a built-in microphone input route; input types=${inputs.map { it.type }}",
+      inputs.any { it.type == AudioDeviceInfo.TYPE_BUILTIN_MIC },
+    )
   }
 
   // ----- Default speaker (no BT): must work.
@@ -212,9 +215,10 @@ class BaoTranslateBluetoothAudioRoutingTest {
     assertEquals("resetToSpeaker is deterministic", state1, state2)
   }
 
-  // ----- Long playback (5 seconds): completes in <2s wall time.
+  // ----- Long playback (5s): play() BLOCKS for ~realtime playback (WRITE_BLOCKING + drain), by design
+  // — the sole caller gates the live mic for the playback duration. A 5s buffer must take ~5s.
   @Test
-  fun audioRouter_play_5sBuffer_completesQuickly() {
+  fun audioRouter_play_5sBuffer_blocksForRealtimePlayback() {
     val context = InstrumentationRegistry.getInstrumentation().targetContext
     val audioRouter = AudioRouter(context)
     router = audioRouter
@@ -223,7 +227,8 @@ class BaoTranslateBluetoothAudioRoutingTest {
     val start = System.currentTimeMillis()
     val result = audioRouter.play(samples)
     val elapsed = System.currentTimeMillis() - start
-    assertTrue("5s buffer must complete in <2s (took ${elapsed}ms)", elapsed < 2_000)
+    assertTrue("5s buffer must block ~realtime, not return early (took ${elapsed}ms)", elapsed >= 3_500)
+    assertTrue("5s buffer must not block far past realtime (took ${elapsed}ms)", elapsed < 9_000)
     assertTrue("playback reported success", result.preferredDeviceApplied)
   }
 
@@ -234,6 +239,85 @@ class BaoTranslateBluetoothAudioRoutingTest {
     val audioRouter = AudioRouter(context)
     audioRouter.cleanup()
     audioRouter.cleanup()
+  }
+
+  // ----- HISTORICAL BUG: using a BT MIC and a BT SPEAKER at the same time silenced the mic. Hold the
+  // BT speaker route active, open the SAME/another BT headset's mic simultaneously, and assert the mic
+  // (a) ROUTES to the BT device, (b) actually CAPTURES a non-zero signal (a silenced/broken BT mic
+  // returns pure digital zeros — the regression), and (c) the BT speaker can still PLAY while the mic
+  // is open (the mic route must not steal the output). All three, at once.
+  @Test
+  fun bluetoothMicAndSpeakerSimultaneously_micStillCaptures_whenHardwarePresent() {
+    val context = InstrumentationRegistry.getInstrumentation().targetContext
+    val audioRouter = AudioRouter(context)
+    router = audioRouter
+
+    // BEHAVIOUR UNDER TEST (industry best practice for a conversation app): selecting a BT mic must, BY
+    // ITSELF, drive that headset onto its bidirectional SCO/BLE communication route so the mic AND the
+    // speaker work together — without it the mic is silent whenever the speaker route is A2DP.
+    val btInputs = waitForBluetoothInputs(audioRouter)
+    if (btInputs.isEmpty()) {
+      assertTrue("no BT microphone hardware connected", btInputs.isEmpty())
+      return
+    }
+    val input = btInputs.first().device
+
+    // Selecting the BT mic ALONE (no explicit BT-speaker selection) must move the OUTPUT onto the
+    // headset's communication (SCO/BLE) route — NOT leave it on A2DP/phone speaker.
+    assertTrue("Router rejected the BT mic", audioRouter.selectPreferredInput(input))
+    val outDeadline = System.currentTimeMillis() + 6_000
+    while (System.currentTimeMillis() < outDeadline &&
+      audioRouter.currentDevice.value.let {
+        it !is AudioDevice.BluetoothHeadset || it.transport == BluetoothTransport.A2DP
+      }) {
+      Thread.sleep(100)
+    }
+    val out = audioRouter.currentDevice.value
+    assertTrue(
+      "Selecting a BT mic did not move the speaker onto the headset's SCO/BLE comm route (out=$out)",
+      out is AudioDevice.BluetoothHeadset && out.transport != BluetoothTransport.A2DP,
+    )
+    val inputInfo = audioRouter.getInputDeviceInfo(input)
+    assertNotNull("No AudioDeviceInfo for the selected BT mic", inputInfo)
+
+    val recorder = createRouteProbeRecorder()
+    try {
+      assertTrue("AudioRecord did not initialize for the BT mic", recorder.state == AudioRecord.STATE_INITIALIZED)
+      assertTrue("AudioRecord rejected the BT mic while the BT speaker was active", recorder.setPreferredDevice(inputInfo))
+      recorder.startRecording()
+      assertTrue("AudioRecord did not start", recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING)
+      assertTrue(
+        "BT mic did not route to the headset while the BT speaker route was active (routed=${recorder.routedDevice?.productName})",
+        waitForRecorderRoute(recorder, inputInfo!!.id),
+      )
+
+      // CAPTURE — the regression. SCO/BLE link bring-up can take >1s, so discard ~2.5s of warm-up
+      // before measuring, then assert the mic delivers a non-zero ADC signal. A live mic always has a
+      // noise floor; a silenced BT mic returns pure zeros.
+      val warmup = ShortArray(PipelineConfig.STT_SAMPLE_RATE / 5)
+      val warmupDeadline = System.currentTimeMillis() + 2_500
+      while (System.currentTimeMillis() < warmupDeadline) { recorder.read(warmup, 0, warmup.size) }
+      val buffer = ShortArray(PipelineConfig.STT_SAMPLE_RATE)
+      val n = recorder.read(buffer, 0, buffer.size)
+      assertTrue("BT mic read no frames while the BT speaker was active: $n", n > 0)
+      var peak = 0
+      for (i in 0 until n) { val v = buffer[i].toInt(); val a = if (v < 0) -v else v; if (a > peak) peak = a }
+      assertTrue(
+        "BT mic captured PURE SILENCE while the BT speaker route was active — the mic+speaker regression; " +
+          "peak=$peak routed=${recorder.routedDevice?.productName}",
+        peak > 0,
+      )
+
+      // 3) The BT SPEAKER must still PLAY while the BT mic is open (the mic route must not steal output).
+      val result = audioRouter.play(FloatArray(PipelineConfig.TTS_SAMPLE_RATE / 4))
+      assertTrue(
+        "BT speaker playback failed while the BT mic was recording; result=$result",
+        result.preferredDeviceApplied,
+      )
+    } finally {
+      if (recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) recorder.stop()
+      recorder.release()
+    }
   }
 
   private fun waitForBluetoothOutputs(

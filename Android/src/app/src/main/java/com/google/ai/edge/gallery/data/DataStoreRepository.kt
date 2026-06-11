@@ -31,30 +31,22 @@ import com.google.ai.edge.gallery.proto.UserData
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 
-// TODO(b/423700720): Async migration — DONE for all writes (now `suspend`, no runBlocking; callers
-// moved onto coroutine scopes). Reads are deliberately split, not blanket-converted:
-//   - STARTUP-GATE reads stay synchronous ON PURPOSE — they must return a value before the first
-//     frame, and going async would flash/flicker the wrong UI (a regression):
-//       * readTheme  -> Application.onCreate (device-verified: setting Light then cold-starting shows
-//         Light from frame 1, no dark flash);
-//       * isTosAccepted / isGemmaTermsOfUseAccepted -> the TOS gate;
-//       * hasViewedPromo -> GalleryNavGraph first-screen selection (home-direct vs promo).
-//   - The remaining VM-internal list reads (readImportedModels, getAllSkills, getAllBenchmarkResults,
-//     readTextInputHistory, readAccessTokenData) can move to `suspend`/Flow incrementally; each is a
-//     per-call-chain change (read return values cascade `suspend` upward) with marginal hot-path gain.
+// Async migration note for b/423700720: writes and background reads are suspend-based. Startup-gate
+// reads intentionally remain synchronous because they must return before the first rendered frame:
+// theme selection, terms-of-service gates, and first-screen promo routing.
 interface DataStoreRepository {
   suspend fun saveTextInputHistory(history: List<String>)
-  fun readTextInputHistory(): List<String>
+  suspend fun readTextInputHistory(): List<String>
   suspend fun saveTheme(theme: Theme)
   fun readTheme(): Theme
   suspend fun saveSecret(key: String, value: String)
-  fun readSecret(key: String): String?
+  suspend fun readSecret(key: String): String?
   suspend fun deleteSecret(key: String)
   suspend fun saveAccessTokenData(accessToken: String, refreshToken: String, expiresAt: Long)
   suspend fun clearAccessTokenData()
-  fun readAccessTokenData(): AccessTokenData?
+  suspend fun readAccessTokenData(): AccessTokenData?
   suspend fun saveImportedModels(importedModels: List<ImportedModel>)
-  fun readImportedModels(): List<ImportedModel>
+  suspend fun readImportedModels(): List<ImportedModel>
   fun isTosAccepted(): Boolean
   suspend fun acceptTos()
   fun isGemmaTermsOfUseAccepted(): Boolean
@@ -66,15 +58,15 @@ interface DataStoreRepository {
   suspend fun setCutout(newCutout: Cutout)
   suspend fun setCutouts(cutouts: List<Cutout>)
   suspend fun setHasSeenBenchmarkComparisonHelp(seen: Boolean)
-  fun getHasSeenBenchmarkComparisonHelp(): Boolean
+  suspend fun getHasSeenBenchmarkComparisonHelp(): Boolean
   suspend fun addBenchmarkResult(result: BenchmarkResult)
-  fun getAllBenchmarkResults(): List<BenchmarkResult>
+  suspend fun getAllBenchmarkResults(): List<BenchmarkResult>
   suspend fun deleteBenchmarkResult(index: Int)
   suspend fun addSkill(skill: Skill)
   suspend fun setSkills(skills: List<Skill>)
   suspend fun setSkillSelected(skill: Skill, selected: Boolean)
   suspend fun setAllSkillsSelected(selected: Boolean)
-  fun getAllSkills(): List<Skill>
+  suspend fun getAllSkills(): List<Skill>
   suspend fun deleteSkill(name: String)
   suspend fun deleteSkills(names: Set<String>)
   suspend fun addViewedPromoId(promoId: String)
@@ -110,8 +102,8 @@ class DefaultDataStoreRepository(
     }
   }
 
-  override fun readTextInputHistory(): List<String> {
-    return runBlocking { dataStore.data.first().textInputHistoryList }
+  override suspend fun readTextInputHistory(): List<String> {
+    return dataStore.data.first().textInputHistoryList
   }
 
   override suspend fun saveTheme(theme: Theme) {
@@ -129,8 +121,8 @@ class DefaultDataStoreRepository(
     userDataDataStore.updateData { it.toBuilder().putSecrets(key, value).build() }
   }
 
-  override fun readSecret(key: String): String? {
-    return runBlocking { userDataDataStore.data.first().secretsMap[key] }
+  override suspend fun readSecret(key: String): String? {
+    return userDataDataStore.data.first().secretsMap[key]
   }
 
   override suspend fun deleteSecret(key: String) {
@@ -157,16 +149,16 @@ class DefaultDataStoreRepository(
     userDataDataStore.updateData { it.toBuilder().clearAccessTokenData().build() }
   }
 
-  override fun readAccessTokenData(): AccessTokenData? {
-    return runBlocking { userDataDataStore.data.first().accessTokenData }
+  override suspend fun readAccessTokenData(): AccessTokenData? {
+    return userDataDataStore.data.first().accessTokenData
   }
 
   override suspend fun saveImportedModels(importedModels: List<ImportedModel>) {
     dataStore.updateData { it.toBuilder().clearImportedModel().addAllImportedModel(importedModels).build() }
   }
 
-  override fun readImportedModels(): List<ImportedModel> {
-    return runBlocking { dataStore.data.first().importedModelList }
+  override suspend fun readImportedModels(): List<ImportedModel> {
+    return dataStore.data.first().importedModelList
   }
 
   override fun isTosAccepted(): Boolean {
@@ -219,16 +211,16 @@ class DefaultDataStoreRepository(
     dataStore.updateData { it.toBuilder().setHasSeenBenchmarkComparisonHelp(seen).build() }
   }
 
-  override fun getHasSeenBenchmarkComparisonHelp(): Boolean {
-    return runBlocking { dataStore.data.first().hasSeenBenchmarkComparisonHelp }
+  override suspend fun getHasSeenBenchmarkComparisonHelp(): Boolean {
+    return dataStore.data.first().hasSeenBenchmarkComparisonHelp
   }
 
   override suspend fun addBenchmarkResult(result: BenchmarkResult) {
     benchmarkResultsDataStore.updateData { it.toBuilder().addResult(0, result).build() }
   }
 
-  override fun getAllBenchmarkResults(): List<BenchmarkResult> {
-    return runBlocking { benchmarkResultsDataStore.data.first().resultList }
+  override suspend fun getAllBenchmarkResults(): List<BenchmarkResult> {
+    return benchmarkResultsDataStore.data.first().resultList
   }
 
   override suspend fun deleteBenchmarkResult(index: Int) {
@@ -262,8 +254,8 @@ class DefaultDataStoreRepository(
     }
   }
 
-  override fun getAllSkills(): List<Skill> {
-    return runBlocking { skillsDataStore.data.first().skillList }
+  override suspend fun getAllSkills(): List<Skill> {
+    return skillsDataStore.data.first().skillList
   }
 
   override suspend fun deleteSkill(name: String) {

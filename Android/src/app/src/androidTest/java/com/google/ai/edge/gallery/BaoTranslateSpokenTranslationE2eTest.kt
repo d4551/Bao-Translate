@@ -39,6 +39,7 @@ import kotlin.math.sqrt
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -167,39 +168,24 @@ class BaoTranslateSpokenTranslationE2eTest {
   // `peak > 0.02f && rms > 0.005` — pin that this is the prod contract.
   @Test
   fun assertSpoken_silentIsRejected() {
+    // Silent audio is below the peak/rms thresholds — assertSpoken must reject it.
     val silent = SynthesizedAudio(samples = FloatArray(16000) { 0f }, sampleRate = 22050)
-    try {
-      assertSpoken(silent)
-      assertTrue("documented: silent audio currently accepted (gap)", false)
-    } catch (e: AssertionError) {
-      // Expected: silent audio is below the peak/rms thresholds.
-      assertTrue("silent is rejected by peak/rms threshold", true)
-    }
+    assertThrows(AssertionError::class.java) { assertSpoken(silent) }
   }
 
   // ----- assertSpoken: very short audio is rejected (duration < 0.5s).
   @Test
   fun assertSpoken_tooShortIsRejected() {
+    // 100/22050 ≈ 4.5ms is below the 0.5s minimum — assertSpoken must reject it.
     val tooShort = SynthesizedAudio(samples = FloatArray(100) { 0.1f }, sampleRate = 22050)
-    try {
-      assertSpoken(tooShort)
-      assertTrue("documented: too-short audio currently accepted (gap)", false)
-    } catch (e: AssertionError) {
-      // Expected: 100/22050 ≈ 4.5ms < 0.5s threshold.
-      assertTrue("too-short audio is rejected by duration threshold", true)
-    }
+    assertThrows(AssertionError::class.java) { assertSpoken(tooShort) }
   }
 
   // ----- assertSpoken: zero sample rate is rejected.
   @Test
   fun assertSpoken_zeroSampleRateIsRejected() {
     val bad = SynthesizedAudio(samples = FloatArray(16000) { 0.1f }, sampleRate = 0)
-    try {
-      assertSpoken(bad)
-      assertTrue("documented: zero sample rate currently accepted (gap)", false)
-    } catch (e: AssertionError) {
-      assertTrue("zero sample rate is rejected", true)
-    }
+    assertThrows(AssertionError::class.java) { assertSpoken(bad) }
   }
 
   // ----- The round-trip's `back.text` should NOT match the Spanish translation verbatim
@@ -226,8 +212,8 @@ class BaoTranslateSpokenTranslationE2eTest {
       val spoken = kokoro.synthesizeAudio(spanishText, KokoroTtsPipeline.getVoiceForLanguage("es"))!!
       val spoken16k = resampleToShort16k(spoken.samples, spoken.sampleRate)
       val back = whisper.transcribeBlocking(spoken16k).getOrNull()!!
-      // Whisper should NOT return the Spanish translation verbatim. If it does, the
-      // round-trip is a no-op (Whisper is reading text, not audio).
+      // Whisper should not return the Spanish translation verbatim. If it does, the
+      // round-trip is bypassing synthesized audio and reading text directly.
       assertNotEquals(
         "Round-trip Whisper returned the input translation verbatim — audio is being ignored",
         spanishText.trim().lowercase(),

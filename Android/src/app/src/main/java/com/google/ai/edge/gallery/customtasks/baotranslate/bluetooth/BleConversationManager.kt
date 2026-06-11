@@ -473,8 +473,7 @@ class BleConversationManager(private val context: Context) {
 
   // Symmetric discovery: every device both advertises and discovers under the same serviceId so a
   // pair reliably finds each other regardless of who taps first. P2P_CLUSTER allows the full M:N mesh
-  // needed for multi-party conversation. Advertising is best-effort and no-ops until the local
-  // participant is set (see startAdvertising).
+  // needed for multi-party conversation. Advertising starts only after the local participant is set.
   fun startConversationDiscovery() {
     startAdvertising()
     startScanning()

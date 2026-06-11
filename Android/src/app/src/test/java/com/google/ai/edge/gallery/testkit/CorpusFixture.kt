@@ -25,9 +25,9 @@ import java.util.concurrent.TimeUnit
 /**
  * Golden corpora and strict-test rules shared across the BaoTranslate test suite.
  *
- * Purpose: every brutalised test should pull its edge cases from here instead of inlining
- * them. This makes the corpus auditable in one place and prevents each new test from
- * inventing a different "what does whitespace look like?" or "what's a hostile input?".
+ * Purpose: strict tests should pull edge cases from here instead of inlining them. This keeps the
+ * corpus auditable in one place and prevents each test from defining whitespace or hostile inputs
+ * differently.
  */
 object CorpusFixture {
   /** CJK ideographs (no surrogate pair, 3 bytes UTF-8, 1 UTF-16 unit). */

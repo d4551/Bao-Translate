@@ -20,6 +20,22 @@ private const val MIN_STT_SEGMENT_SAMPLES = SAMPLE_RATE
 private const val FALLBACK_RMS_THRESHOLD = 0.015f
 private const val FALLBACK_PEAK_THRESHOLD = 1_000
 
+/**
+ * Outcome of [VadProcessor.initialize]. Explicit states replace a bare `Boolean` so callers can
+ * distinguish "native VAD ready" from "no model, energy-fallback" from "native init failed" without
+ * guessing — and so the energy-fallback path is a documented contract, not an accident.
+ */
+sealed interface VadInitResult {
+  /** Native Silero VAD initialized and will segment audio. */
+  data object Initialized : VadInitResult
+
+  /** The VAD model file is absent; [VadProcessor.processAudioSegment] uses energy-based fallback. */
+  data object ModelUnavailable : VadInitResult
+
+  /** Native initialization threw; the same energy-based fallback applies. */
+  data class Failed(val message: String) : VadInitResult
+}
+
 class VadProcessor(private val context: Context) {
   private var vad: Vad? = null
   private var isReady = false
@@ -29,45 +45,52 @@ class VadProcessor(private val context: Context) {
   // Also serializes concurrent decode calls (Vad is not safe for concurrent native use).
   private val inferenceLock = Any()
 
-  fun initialize(): Boolean {
+  fun initialize(): VadInitResult {
     val modelPath = BaoTranslateModelManager.getVadModelPath(context)
-    val modelFile = File(modelPath)
-    if (!modelFile.exists()) {
+    if (!File(modelPath).exists()) {
       BaoLog.w(TAG, "Silero VAD model not found: $modelPath")
-      return false
+      return VadInitResult.ModelUnavailable
     }
 
-    val sileroConfig = SileroVadModelConfig(
-      model = modelPath,
-      threshold = 0.5f,
-      minSilenceDuration = MIN_SILENCE_DURATION_SEC,
-      minSpeechDuration = MIN_SPEECH_DURATION_SEC,
-      windowSize = WINDOW_SIZE,
-      maxSpeechDuration = MAX_SPEECH_DURATION_SEC,
-    )
+    // The native Vad(...) constructor is JNI; a load/init fault would otherwise escape the caller.
+    // Funnel it into a typed Failed result so the pipeline degrades to energy-based segmentation.
+    return runCatching {
+      val sileroConfig = SileroVadModelConfig(
+        model = modelPath,
+        threshold = 0.5f,
+        minSilenceDuration = MIN_SILENCE_DURATION_SEC,
+        minSpeechDuration = MIN_SPEECH_DURATION_SEC,
+        windowSize = WINDOW_SIZE,
+        maxSpeechDuration = MAX_SPEECH_DURATION_SEC,
+      )
 
-    val tenConfig = TenVadModelConfig(
-      model = "",
-      threshold = 0.5f,
-      minSilenceDuration = MIN_SILENCE_DURATION_SEC,
-      minSpeechDuration = MIN_SPEECH_DURATION_SEC,
-      windowSize = WINDOW_SIZE,
-      maxSpeechDuration = MAX_SPEECH_DURATION_SEC,
-    )
+      val tenConfig = TenVadModelConfig(
+        model = "",
+        threshold = 0.5f,
+        minSilenceDuration = MIN_SILENCE_DURATION_SEC,
+        minSpeechDuration = MIN_SPEECH_DURATION_SEC,
+        windowSize = WINDOW_SIZE,
+        maxSpeechDuration = MAX_SPEECH_DURATION_SEC,
+      )
 
-    val config = VadModelConfig(
-      sileroVadModelConfig = sileroConfig,
-      tenVadModelConfig = tenConfig,
-      sampleRate = SAMPLE_RATE,
-      numThreads = PipelineConfig.VAD_THREADS,
-      provider = "cpu",
-      debug = false,
-    )
+      val config = VadModelConfig(
+        sileroVadModelConfig = sileroConfig,
+        tenVadModelConfig = tenConfig,
+        sampleRate = SAMPLE_RATE,
+        numThreads = PipelineConfig.VAD_THREADS,
+        provider = "cpu",
+        debug = false,
+      )
 
-    vad = Vad(null, config)
-    isReady = true
-    BaoLog.i(TAG, "Silero VAD initialized via Sherpa-ONNX")
-    return true
+      vad = Vad(null, config)
+      isReady = true
+      BaoLog.i(TAG, "Silero VAD initialized via Sherpa-ONNX")
+      VadInitResult.Initialized
+    }.getOrElse { e ->
+      isReady = false
+      BaoLog.w(TAG, "Silero VAD native init failed; energy fallback will be used: ${e.message}")
+      VadInitResult.Failed(e.message ?: "VAD native init failed")
+    }
   }
 
   fun processAudioSegment(audioSamples: ShortArray): List<List<Short>> = synchronized(inferenceLock) {

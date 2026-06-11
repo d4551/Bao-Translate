@@ -91,7 +91,7 @@ class BaoTranslateLivePipelineE2eTest {
   /**
    * Enters face-to-face with a known language pair, independent of any state a prior test persisted on
    * the shared ViewModel: toggle F2F OFF first so entering it again always runs a fresh STT reinit for
-   * the chosen source (setFaceToFaceMode is a no-op when already on). Waits for the reinit to settle.
+   * the chosen source. Waits for the reinit to settle.
    */
   private fun enterF2fWithLanguages(vm: BaoTranslateViewModel, sourceKey: String, targetKey: String) {
     // Sequence each state change with a settle-wait so the async STT reinits never overlap (two

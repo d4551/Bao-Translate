@@ -62,6 +62,11 @@ object BaoTranslateModelManager {
   private const val SHERPA_ONNX_DIR = "sherpa_onnx_models"
   private const val TRANSLATION_DIR = "translation_models"
   private const val VERSION_FILE = "version.json"
+  // English streaming-caption model — the SINGLE source of its name/URL, referenced by the ARCHIVES
+  // download spec, the dir helper, and the CAPTION_MODELS["en"] entry (previously triplicated literals).
+  private const val STREAMING_ASR_DIR = "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17"
+  private const val STREAMING_ASR_URL =
+    "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/$STREAMING_ASR_DIR.tar.bz2"
 
   private val _modelStatuses = MutableStateFlow<Map<String, ModelStatus>>(emptyMap())
   val modelStatuses: StateFlow<Map<String, ModelStatus>> = _modelStatuses.asStateFlow()
@@ -177,16 +182,16 @@ object BaoTranslateModelManager {
     ),
     ArchiveSpec(
       modelId = "streaming_asr",
-      archiveFileName = "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17.tar.bz2",
-      downloadUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17.tar.bz2",
+      archiveFileName = "$STREAMING_ASR_DIR.tar.bz2",
+      downloadUrl = STREAMING_ASR_URL,
       sizeBytes = 44_000_000L,
       requiredFiles = listOf(
-        "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17/encoder-epoch-99-avg-1.int8.onnx",
-        "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17/decoder-epoch-99-avg-1.int8.onnx",
-        "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17/joiner-epoch-99-avg-1.int8.onnx",
-        "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17/tokens.txt",
+        "$STREAMING_ASR_DIR/encoder-epoch-99-avg-1.int8.onnx",
+        "$STREAMING_ASR_DIR/decoder-epoch-99-avg-1.int8.onnx",
+        "$STREAMING_ASR_DIR/joiner-epoch-99-avg-1.int8.onnx",
+        "$STREAMING_ASR_DIR/tokens.txt",
       ),
-      extractDir = "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17",
+      extractDir = STREAMING_ASR_DIR,
     ),
     ArchiveSpec(
       modelId = "supertonic_tts",
@@ -274,7 +279,7 @@ object BaoTranslateModelManager {
 
   // Streaming ASR (sherpa-onnx zipformer transducer) — token-by-token live captions during a turn.
   fun getStreamingAsrModelDir(context: Context): File =
-    File(getSherpaOnnxDir(context), "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17")
+    File(getSherpaOnnxDir(context), STREAMING_ASR_DIR)
 
   // ── Multilingual live-caption streaming-model registry ────────────────────────────────────────
   // Every app language maps to its BEST on-device streaming engine: the sherpa-onnx zipformer
@@ -304,9 +309,9 @@ object BaoTranslateModelManager {
         "en",
         CaptionEngine.SHERPA,
         "streaming_asr",
-        "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17.tar.bz2",
-        "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17.tar.bz2",
-        "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17",
+        STREAMING_ASR_URL,
+        "$STREAMING_ASR_DIR.tar.bz2",
+        STREAMING_ASR_DIR,
         44_000_000L,
       ),
       voskCaptionSpec("es", "vosk-model-small-es-0.42", 41_000_000L),
@@ -444,21 +449,29 @@ object BaoTranslateModelManager {
 
   fun getStorageBreakdown(context: Context): Map<String, Long> {
     val baseDir = getSherpaOnnxDir(context)
-    val transDir = getTranslationDir(context)
 
-    return ALL_MODELS.associate { model ->
-      val size = when (model.id) {
-        "kokoro_tts" -> dirSize(File(baseDir, "kokoro-multi-lang-v1_0"))
-        "silero_vad" -> File(baseDir, "silero_vad.onnx").takeIf { it.exists() }?.length() ?: 0L
-        "whisper_base" -> dirSize(getWhisperModelDir(context))
-        "streaming_asr" -> dirSize(getStreamingAsrModelDir(context))
-        "qwen25_1b", "gemma4_e2b" -> dirSize(getTranslationModelDir(context, model.id))
-        "openvoice" -> dirSize(getOpenVoiceDir(context))
-        "supertonic_tts" -> dirSize(getSupertonicModelDir(context))
-        else -> 0L
+    val core =
+      ALL_MODELS.associate { model ->
+        val size = when (model.id) {
+          "kokoro_tts" -> dirSize(File(baseDir, "kokoro-multi-lang-v1_0"))
+          "silero_vad" -> File(baseDir, "silero_vad.onnx").takeIf { it.exists() }?.length() ?: 0L
+          "whisper_base" -> dirSize(getWhisperModelDir(context))
+          "streaming_asr" -> dirSize(getStreamingAsrModelDir(context))
+          "qwen25_1b", "gemma4_e2b" -> dirSize(getTranslationModelDir(context, model.id))
+          "openvoice" -> dirSize(getOpenVoiceDir(context))
+          "supertonic_tts" -> dirSize(getSupertonicModelDir(context))
+          else -> 0L
+        }
+        model.id to size
       }
-      model.id to size
-    }
+    // Lazily-provisioned Vosk caption models are NOT in ALL_MODELS; include the ones actually on disk
+    // so the storage total the user sees isn't undercounted by up to ~500MB.
+    val captions =
+      CAPTION_MODELS.values
+        .filter { it.engine == CaptionEngine.VOSK }
+        .associate { it.modelId to dirSize(File(baseDir, it.extractDirName)) }
+        .filterValues { it > 0L }
+    return core + captions
   }
 
   fun getDownloadedSizeBytes(context: Context): Long =
@@ -545,9 +558,15 @@ object BaoTranslateModelManager {
   }
 
   fun deleteAllModels(context: Context) {
+    // Removes the Vosk caption models too — they live under the sherpa-onnx dir that is cleared here.
     getSherpaOnnxDir(context).deleteRecursively()
     getTranslationDir(context).deleteRecursively()
-    _modelStatuses.value = ALL_MODELS.associate { it.id to ModelStatus.NotDownloaded }
+    // Reset the status of BOTH the core models AND the lazily-provisioned caption models, so a stale
+    // "Ready" for a just-deleted vosk_<lang> can't linger in the status map.
+    _modelStatuses.value =
+      (ALL_MODELS.map { it.id } + CAPTION_MODELS.values.map { it.modelId })
+        .distinct()
+        .associateWith { ModelStatus.NotDownloaded }
     BaoLog.i(TAG, "Deleted all models")
   }
 

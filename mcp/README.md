@@ -1,114 +1,122 @@
-# Model Context Protocol (MCP) in Google AI Edge Gallery
+# Model Context Protocol In Bao Translate
 
-## Overview
-
-Google AI Edge Gallery leverages on-device machine learning models to deliver low-latency, privacy-preserving inference. However, standalone on-device models inherently lack access to real-time data, web services, and dynamic action execution. To solve this limitation, Google AI Edge Gallery integrates the [**Model Context Protocol (MCP)**](https://modelcontextprotocol.io/docs/getting-started/intro), an open standard establishing secure, universal communication between AI models and external systems. By adopting this standardized client-server architecture, the app decouples its on-device models (the client) from external tools and data sources (the servers), creating a single unified interface for dynamic context retrieval and tool execution. 
-
-* **Dynamic Tool Discovery:** The app connects to configured MCP servers, dynamically loading and parsing JSON schemas for available tools.
-* **Contextual Injection:** Discovered tool descriptions and schemas are directly injected into the on-device model's prompt context.
-* **Secure Agentic Workflows:** When the on-device model decides to call a tool, the application routes the execution directly to the corresponding MCP server. Granular user permission controls, such as per-invocation prompts and toggleable "always allow" rules, ensure that remote actions remain fully transparent and secure.
+Bao Translate includes experimental Model Context Protocol (MCP) support through the Agent Skills and on-device LLM tooling inherited from AI Edge Gallery. MCP lets a local model discover tools from configured servers, decide when to call them, and receive structured results back inside the chat flow.
 
 > [!IMPORTANT]
-> MCP integration is currently experimental.
+> MCP support is experimental. Keep only the tools you need enabled, review server permissions carefully, and avoid sending private information to servers you do not control.
 
-## Add a Local MCP Server
+## How MCP Works In The App
 
-In this section, we will walk through adding one of the official example MCP servers, [`fetch`](https://github.com/modelcontextprotocol/servers/tree/main/src/fetch), to Google AI Edge Gallery.
+- **Tool discovery:** The app connects to configured MCP servers and loads their tool schemas.
+- **Prompt injection:** Tool names, descriptions, and schemas are added to the model context.
+- **User-controlled execution:** When the model requests a tool call, the app routes it to the selected MCP server and applies the configured permission rules.
+- **Result handling:** Tool responses return to the model so it can continue the conversation.
 
-### Step 1: Start the Server in StreamableHTTP Mode
+## Add A Local MCP Server
 
-Most open-source MCP servers are built exclusively with the **stdio** transport (learn more about [MCP transport types](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports)), under the assumption that the MCP server and the LLM client (e.g., Gemini CLI, Claude Code, etc) run on the same local machine. However, this does not work natively for a mobile application like Google AI Edge Gallery.
+This example connects the official [`fetch`](https://github.com/modelcontextprotocol/servers/tree/main/src/fetch) server. Most desktop MCP servers use `stdio`; a mobile app needs a network-reachable HTTP endpoint, so this flow uses [`supergateway`](https://github.com/supercorp-ai/supergateway) to expose the server over Streamable HTTP.
 
-To make the server accessible to Google AI Edge Gallery over the network, it needs to run in **StreamableHTTP** mode. Since the `fetch` example only supports `stdio` out of the box, we can use an adapter tool called [`supergateway`](https://github.com/supercorp-ai/supergateway) to convert the `stdio` transport to `StreamableHTTP` without rewriting the server code.
+### 1. Start The Server
 
-Run the following commands in your terminal to set up and launch the server. Make sure `python` and `node.js` have been installed:
-
-```bash
-# Install the `fetch` MCP server.
-$ python3 -m venv venv
-$ source venv/bin/activate
-$ pip install mcp-server-fetch
-
-# Start Supergateway.
-$ npx -y supergateway --stdio 'mcp-server-fetch' --outputTransport streamableHttp
-```
-
-Now, the server is listening at `http://localhost:8000/mcp`.
-
-### Step 2: Expose the Server via a Public URL
-
-Google AI Edge Gallery requires the local server to have a publicly routable URL to access it. If your host machine is already serving behind an HTTPS DNS address, you can skip this step.
-
-Otherwise, you can expose the local port using a free tool like [Cloudflare Quick Tunnels](https://try.cloudflare.com/). First, install the `cloudflared` command-line tool on your machine, then run the following command in a separate terminal window:
+Install the fetch server and run it through Supergateway:
 
 ```bash
-# Ensure the target port matches the Supergateway service started in Step 1.
-$ cloudflared tunnel --url http://localhost:8000
+python3 -m venv venv
+source venv/bin/activate
+pip install mcp-server-fetch
+
+npx -y supergateway --stdio 'mcp-server-fetch' --outputTransport streamableHttp
 ```
 
-The command will output a unique public HTTPS URL (e.g., `https://<random-string>.trycloudflare.com`). When entering this address in the app, be sure to append the `/mcp` endpoint path.
+The server listens at:
 
-### Step 3: Add MCP server URL
+```text
+http://localhost:8000/mcp
+```
 
-1. Open **Agent Chat** in the app, select a model (we recommend **Gemma-4-E4B** for better model quality), and navigate to the **Manage MCP servers** screen by clicking the **MCP** button below the input text area.
+### 2. Expose The Server To The Device
 
-    <img width="320" alt="mcp_entry" src="screenshots/mcp_entry.png" />
+If the Android device cannot reach your host machine directly, expose the port with a tunnel. Cloudflare Quick Tunnels are one option:
 
-2. Click **Add MCP Server** and enter your server URL. Make sure to append the `/mcp` endpoint path:
+```bash
+cloudflared tunnel --url http://localhost:8000
+```
 
-    <img width="320" alt="add_server_url" src="screenshots/add_server_url.png" />
+Use the generated HTTPS URL and append `/mcp`.
 
-3. Once connected, the app will automatically detect the tools provided by the MCP server, and you can also toggle servers and tools.
+### 3. Add The Server In The App
 
-    <img width="320" alt="mcp_tools_management" src="screenshots/mcp_tools_management.png" />
+1. Open **Agent Chat**.
+2. Choose a capable model. Larger local models generally handle tool schemas more reliably.
+3. Tap **MCP** under the message input.
+4. Tap **Add MCP Server**.
+5. Enter the server URL, including `/mcp`.
+6. Confirm that the app discovers the server tools.
 
-### Step 4: Try a prompt
+<img width="320" alt="MCP entry point" src="screenshots/mcp_entry.png" />
+<img width="320" alt="Add MCP server URL" src="screenshots/add_server_url.png" />
+<img width="320" alt="MCP tool management" src="screenshots/mcp_tools_management.png" />
 
-- Fetch https://play.google.com/store/apps/details?id=com.google.ai.edge.gallery and summarize the app's features.
-- Summarize the latest news from CNN.
+### 4. Try A Prompt
 
-> [!WARNING]
-> Please check out the [official documentation](https://github.com/modelcontextprotocol/servers/blob/main/src/fetch/README.md) of the `fetch` MCP server and be aware of its limitations.
+Examples:
 
-## Add a Cloud MCP Server
-
-Unlike local development setups, cloud-hosted MCP servers are fully managed, run directly on external cloud infrastructure, and operate in **StreamableHTTP** mode by default. Because these services are exposed publicly, they require explicit authorization to control access.
-
-Google AI Edge Gallery supports remote server authentication by allowing you to inject custom keys and credentials directly into the HTTP request headers. (We are working on supporting the full OAuth flow)
-
-The following steps demonstrate how to connect the official **Maps Grounding Lite** cloud server ([https://mapstools.googleapis.com/mcp](https://mapstools.googleapis.com/mcp)) to the app. This service provides your on-device model with tools to query live geographical locations, weather conditions, and travel routes.
-
-### Step 1: Set Up Credentials in Google Cloud
-
-Before configuring the app, you need to set up a project and generate a valid credential to authorize requests to the Maps Grounding Lite API. Follow the steps on the [official site](https://developers.google.com/maps/ai/grounding-lite).
-
-### Step 2: Add the Cloud Server with Custom Headers
-
-1. Open **Agent Chat** in the app, tap the **MCP** button under the message input field, and select **Add MCP Server**.
-2. Fill in the server details, making sure to provide the cloud endpoint and the mandatory authentication header required by Google Cloud services:
-    * **Server URL:** `https://mapstools.googleapis.com/mcp`.
-    * **Header name:** `X-Goog-Api-Key`
-    * **Header value:** The API key you generated in Step 1.
-
-    <img width="320" alt="mcp_auth" src="screenshots/mcp_auth.png" />
-
-### Step 3: Try a Prompt
-
-- **compute_routes**
-
-  Calculate the route from San Francisco to San Jose.
-
-- **search_places**
-
-  Recommend some highly rated Ramen places in downtown Mountain View CA.
+- Fetch `https://play.google.com/store/apps/details?id=com.google.ai.edge.gallery` and summarize the app features.
+- Fetch a public documentation page and list the key setup steps.
 
 > [!WARNING]
-> Due to model limitations, you might need to enable only the specific tool shown above the prompt and disable others for them to work. See the Limitations section below for more details.
+> Review the [`fetch` server documentation](https://github.com/modelcontextprotocol/servers/blob/main/src/fetch/README.md). Fetching arbitrary URLs can expose browsing intent and retrieved content to the MCP server.
+
+## Add A Cloud MCP Server
+
+Cloud-hosted MCP servers are already network-accessible and usually require authentication. Bao Translate can attach custom headers to MCP requests.
+
+This example connects the Maps Grounding Lite MCP endpoint:
+
+```text
+https://mapstools.googleapis.com/mcp
+```
+
+### 1. Create Credentials
+
+Follow the [Maps Grounding Lite setup guide](https://developers.google.com/maps/ai/grounding-lite) and create an API key or credential appropriate for the service.
+
+### 2. Add Custom Headers
+
+1. Open **Agent Chat**.
+2. Tap **MCP**.
+3. Tap **Add MCP Server**.
+4. Enter the server URL.
+5. Add the required authentication header.
+
+Example:
+
+| Field | Value |
+| --- | --- |
+| Server URL | `https://mapstools.googleapis.com/mcp` |
+| Header name | `X-Goog-Api-Key` |
+| Header value | Your API key |
+
+<img width="320" alt="MCP authentication header setup" src="screenshots/mcp_auth.png" />
+
+### 3. Try A Prompt
+
+Examples:
+
+- Use `compute_routes` to calculate a route from San Francisco to San Jose.
+- Use `search_places` to recommend highly rated ramen restaurants in downtown Mountain View, CA.
 
 ## Limitations
 
-While integrating MCP servers significantly expands the capabilities of on-device AI, users should keep the following constraints in mind during the experimental phase:
+- **Model reliability:** Tool calling requires the model to read and follow schemas. Larger, higher-quality local models are more reliable than small models.
+- **Context size:** Tool descriptions consume context. Enable only the tools needed for the current task.
+- **Numeric precision:** Some GPU-accelerated local inference paths can produce imperfect numeric formatting. Verify coordinates, totals, and other high-precision outputs.
+- **Privacy boundary:** MCP servers may be remote services. Treat every enabled server as a separate trust boundary.
 
-* **Model Compatibility:** Due to the complexity and length of the injected system prompts required for tool use, **Gemma-4-E4B** currently offers the most stable and reliable tool-calling behavior. Smaller models may struggle to parse schemas accurately.
-* **Context Window Constraints:** Most official MCP servers are designed for desktop applications with massive context windows (e.g., 32k to 200k+ tokens). Google AI Edge Gallery models operate within a tighter context limit (**4k to 10k tokens**). Because large tool descriptions or JSON schemas can quickly consume the majority of your context window, it is highly recommended to **only enable the specific tools you need** for your task.
-* **GPU Acceleration and Numerical Accuracy:** The app utilizes GPU hardware acceleration to ensure low-latency performance. However, some mobile GPU kernels do not handle floating-point or high-precision math with the same consistency as a CPU. As a result, the model may occasionally output incorrect or slightly distorted numbers when executing math-heavy or coordinate-based tools.
+## Safety Checklist
+
+- Enable only the server and tools required for the current workflow.
+- Review tool descriptions before granting broad permissions.
+- Avoid sending secrets, personal data, private locations, or sensitive documents to untrusted servers.
+- Prefer local servers for private workflows.
+- Rotate credentials if they were entered on a shared device.

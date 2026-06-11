@@ -15,20 +15,24 @@
  */
 package com.google.ai.edge.gallery.customtasks.baotranslate
 
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Mic
@@ -57,7 +61,7 @@ import com.google.ai.edge.gallery.customtasks.baotranslate.data.SupportedLanguag
 import com.google.ai.edge.gallery.customtasks.baotranslate.data.TranslationMessage
 import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.customColors
-import com.google.ai.edge.gallery.ui.theme.isReducedMotion
+import com.google.ai.edge.gallery.ui.theme.rememberPulseFloat
 
 /**
  * Single-device, 2-speaker FACE-TO-FACE conversation. Two mirrored panels share one phone laid flat
@@ -77,6 +81,9 @@ internal fun FaceToFaceConversationScreen(
   onToggleRecording: () -> Unit,
   onPlayAudio: ((TranslationMessage) -> Unit)? = null,
   replayMessageId: String? = null,
+  // Per-speaker output routing: assign the output device a given speaker's translations play on,
+  // keyed by their ISO language code.
+  onSetSpeakerOutput: (String, com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioDevice) -> Unit = { _, _ -> },
   modifier: Modifier = Modifier,
   isTablet: Boolean = false,
 ) {
@@ -84,6 +91,8 @@ internal fun FaceToFaceConversationScreen(
   val langBKey = uiState.targetLanguage
   val langACode = SupportedLanguages.codeFor(langAKey)
   val langBCode = SupportedLanguages.codeFor(langBKey)
+  val outputs = uiState.availableAudioDevices
+  fun outputFor(code: String) = uiState.faceToFaceOutputs[code] ?: uiState.currentAudioDevice
   // Selectable pair excludes AUTO — face-to-face needs two concrete languages to route between.
   val pickable = SupportedLanguages.TRANSLATION_TARGETS
 
@@ -100,6 +109,9 @@ internal fun FaceToFaceConversationScreen(
       onPlayAudio = onPlayAudio,
       replayMessageId = replayMessageId,
       liveSourcePreview = if (uiState.detectedLanguage == langBKey) uiState.liveSourcePreview else null,
+      outputDevice = outputFor(langBCode),
+      availableOutputs = outputs,
+      onSelectOutput = { onSetSpeakerOutput(langBCode, it) },
       rotated = true,
       isTablet = isTablet,
       modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -116,6 +128,9 @@ internal fun FaceToFaceConversationScreen(
       onPlayAudio = onPlayAudio,
       replayMessageId = replayMessageId,
       liveSourcePreview = if (uiState.detectedLanguage == langAKey) uiState.liveSourcePreview else null,
+      outputDevice = outputFor(langACode),
+      availableOutputs = outputs,
+      onSelectOutput = { onSetSpeakerOutput(langACode, it) },
       rotated = false,
       isTablet = isTablet,
       modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -135,6 +150,9 @@ private fun SpeakerPanel(
   onPlayAudio: ((TranslationMessage) -> Unit)? = null,
   replayMessageId: String? = null,
   liveSourcePreview: String? = null,
+  outputDevice: com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioDevice,
+  availableOutputs: List<com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioDevice>,
+  onSelectOutput: (com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioDevice) -> Unit,
   rotated: Boolean,
   isTablet: Boolean,
   modifier: Modifier = Modifier,
@@ -145,7 +163,9 @@ private fun SpeakerPanel(
     Column(
       modifier = Modifier.fillMaxSize().padding(Dimensions.Spacing.medium),
       horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
+      // Center the content group so a sparse conversation balances the empty space above/below the
+      // control instead of stranding it at the panel edge with a dead gap in the middle.
+      verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small, Alignment.CenterVertically),
     ) {
       LanguageDropdown(
         label = stringResource(R.string.bao_face_to_face_speaks),
@@ -155,12 +175,24 @@ private fun SpeakerPanel(
         onLanguageSelected = onLanguageSelected,
         isTablet = isTablet,
       )
+      // This speaker hears their translations on THEIR chosen output (e.g. their own earbuds while
+      // the other person uses the phone speaker). Defaults to the global output.
+      SpeakerOutputChip(
+        current = outputDevice,
+        available = availableOutputs,
+        onSelect = onSelectOutput,
+      )
       TranscriptList(
+        // fill = false: take only as much height as the messages need (up to the available space),
+        // so the centered group stays compact when the conversation is short.
         transcripts = transcripts,
-        modifier = Modifier.weight(1f).fillMaxWidth(),
+        modifier = Modifier.weight(1f, fill = false).fillMaxWidth(),
         isTablet = isTablet,
         onPlayAudio = onPlayAudio,
         replayMessageId = replayMessageId,
+        // Anchor the latest translation next to this speaker's control so sparse history doesn't
+        // leave a dead gap above the tap-to-talk button.
+        reverseLayout = true,
       )
       // Interim recognized caption for THIS speaker — shown the instant STT completes, before the
       // translation lands in the opposite panel, so the turn reads as live.
@@ -191,6 +223,59 @@ private fun SpeakerPanel(
  * Listening (pulsing mic) / Translating (progress) / Speaking (volume) — with stop/restart as the
  * secondary tap action. The status label is a polite live region so screen readers track turns.
  */
+/** Compact per-speaker output-device selector: tap to route THIS speaker's translations elsewhere. */
+@Composable
+private fun SpeakerOutputChip(
+  current: com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioDevice,
+  available: List<com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioDevice>,
+  onSelect: (com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioDevice) -> Unit,
+) {
+  var expanded by remember { mutableStateOf(false) }
+  val (label, icon, _) = describeDevice(current)
+  // TalkBack would otherwise announce only the bare device name ("Speaker") with no hint that this
+  // control selects THIS speaker's audio output. State the purpose + current value.
+  val chipDesc = stringResource(R.string.bao_face_to_face_output_device_cd, label)
+  val options =
+    available.ifEmpty {
+      listOf(com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioDevice.Speaker)
+    }
+  Box {
+    Surface(
+      onClick = { expanded = true },
+      shape = RoundedCornerShape(percent = 50),
+      color = MaterialTheme.colorScheme.surfaceContainerHighest,
+      contentColor = MaterialTheme.colorScheme.onSurface,
+      modifier = Modifier.semantics {
+        role = Role.DropdownList
+        contentDescription = chipDesc
+      },
+    ) {
+      Row(
+        modifier = Modifier.padding(horizontal = Dimensions.Spacing.small, vertical = Dimensions.Spacing.xxs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xxs),
+      ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(Dimensions.Icon.small), tint = MaterialTheme.colorScheme.primary)
+        Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(Dimensions.Icon.small), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+      }
+    }
+    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+      options.forEach { dev ->
+        val (l, ic, _) = describeDevice(dev)
+        DropdownMenuItem(
+          text = { Text(l) },
+          leadingIcon = { Icon(ic, contentDescription = null) },
+          onClick = {
+            onSelect(dev)
+            expanded = false
+          },
+        )
+      }
+    }
+  }
+}
+
 @Composable
 private fun ConversationTurnControl(
   phase: ConversationPhase,
@@ -209,17 +294,16 @@ private fun ConversationTurnControl(
     if (active) stringResource(R.string.cd_bao_translate_stop)
     else stringResource(R.string.cd_bao_translate_start)
 
-  // Gentle alpha pulse while listening; static when the user prefers reduced motion.
-  val reduceMotion = isReducedMotion
-  val pulse = rememberInfiniteTransition(label = "f2f_listen_pulse")
-  val pulseAlpha by pulse.animateFloat(
-    initialValue = 1f,
-    targetValue = 0.6f,
-    animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
-    label = "f2f_listen_alpha",
-  )
+  // Gentle alpha pulse while listening; static (1f) under reduced motion via the shared helper.
+  val pulseAlpha by rememberPulseFloat(
+    initialValue = 1f, targetValue = 0.6f, durationMillis = 900, restValue = 1f, label = "f2f_listen_pulse")
   val listening = active && phase == ConversationPhase.Listening
-  val circleAlpha = if (listening && !reduceMotion) pulseAlpha else 1f
+  val circleAlpha = if (listening) pulseAlpha else 1f
+  // Icon/label color that contrasts on the current container: onPrimary on the idle primary circle,
+  // and the dedicated high-contrast record-button on-color on the coral active circle (the previous
+  // onPrimary went dark on the coral, washing the icon out).
+  val onActive = MaterialTheme.customColors.recordButtonOnColor
+  val iconTint = if (active) onActive else MaterialTheme.colorScheme.onPrimary
 
   Column(horizontalAlignment = Alignment.CenterHorizontally) {
     Box(
@@ -252,14 +336,14 @@ private fun ConversationTurnControl(
           Icon(
             imageVector = Icons.AutoMirrored.Filled.VolumeUp,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onPrimary,
+            tint = iconTint,
             modifier = Modifier.size(Dimensions.Icon.large),
           )
         else ->
           Icon(
             imageVector = Icons.Default.Mic,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onPrimary,
+            tint = iconTint,
             modifier = Modifier.size(Dimensions.Icon.large),
           )
       }

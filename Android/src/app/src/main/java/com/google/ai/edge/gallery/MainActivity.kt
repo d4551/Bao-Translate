@@ -48,7 +48,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.animation.doOnEnd
 import androidx.core.net.toUri
-import androidx.core.os.bundleOf
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
@@ -72,9 +71,11 @@ class MainActivity : ComponentActivity() {
     // and forces the app to start cleanly on the Home Screen after an OS kill.
     super.onCreate(null)
 
+    // Log only the extra KEYS, not values: deep-link extra values can carry user/PII payloads, and
+    // Bundle.get(key) is deprecated. Keys alone are enough to debug intent routing.
     intent.extras?.let { extras ->
       for (key in extras.keySet()) {
-        BaoLog.d(TAG, "onCreate Extra -> Key: $key, Value: ${extras.get(key)}")
+        BaoLog.d(TAG, "onCreate Extra -> Key: $key")
       }
     }
 
@@ -180,9 +181,10 @@ class MainActivity : ComponentActivity() {
     super.onNewIntent(intent)
     setIntent(intent)
 
+    // Keys only — see onCreate: extra values may carry PII and Bundle.get(key) is deprecated.
     intent.extras?.let { extras ->
       for (key in extras.keySet()) {
-        BaoLog.d(TAG, "onNewIntent Extra -> Key: $key, Value: ${extras.get(key)}")
+        BaoLog.d(TAG, "onNewIntent Extra -> Key: $key")
       }
     }
 
@@ -202,11 +204,11 @@ class MainActivity : ComponentActivity() {
 
     firebaseAnalytics?.logEvent(
       FirebaseAnalytics.Event.APP_OPEN,
-      bundleOf(
-        "app_version" to ProjectConfig.versionName,
-        "os_version" to Build.VERSION.SDK_INT.toString(),
-        "device_model" to Build.MODEL,
-      ),
+      Bundle().apply {
+        putString("app_version", ProjectConfig.versionName)
+        putString("os_version", Build.VERSION.SDK_INT.toString())
+        putString("device_model", Build.MODEL)
+      },
     )
   }
 

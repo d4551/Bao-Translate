@@ -77,7 +77,7 @@ class BleMessageCodecTest {
     assertNotNull(decoded)
     assertEquals(256, decoded!!.voiceEmbedding?.size)
     assertEquals(se[42], decoded.voiceEmbedding!![42], 1e-4f)
-    assertEquals(se[255], decoded.voiceEmbedding!![255], 1e-4f)
+    assertEquals(se[255], decoded.voiceEmbedding[255], 1e-4f)
   }
 
   @Test

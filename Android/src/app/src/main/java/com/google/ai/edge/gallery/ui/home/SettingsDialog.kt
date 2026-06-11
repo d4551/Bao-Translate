@@ -52,9 +52,11 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,11 +75,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.google.ai.edge.gallery.common.ProjectConfig
 import com.google.ai.edge.gallery.R
+import com.google.ai.edge.gallery.proto.AccessTokenData
 import com.google.ai.edge.gallery.proto.Theme
 import com.google.ai.edge.gallery.ui.common.ClickableLink
 import com.google.ai.edge.gallery.ui.common.tos.AppTosDialog
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
-import com.google.ai.edge.gallery.ui.modelmanager.TokenStatusAndData
 import com.google.ai.edge.gallery.ui.modelmanager.getTokenStatusAndData
 import com.google.ai.edge.gallery.ui.theme.ThemeSettings
 import com.google.ai.edge.gallery.ui.theme.labelSmallNarrow
@@ -86,6 +88,9 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.min
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val THEME_OPTIONS = listOf(Theme.THEME_AUTO, Theme.THEME_LIGHT, Theme.THEME_DARK)
 
@@ -97,7 +102,10 @@ fun SettingsDialog(
   onDismissed: () -> Unit,
 ) {
   var selectedTheme by remember { mutableStateOf(curThemeOverride) }
-  var hfToken by remember { mutableStateOf(modelManagerViewModel.getTokenStatusAndData().data) }
+  var hfToken by remember { mutableStateOf<AccessTokenData?>(null) }
+  LaunchedEffect(modelManagerViewModel) {
+    hfToken = withContext(Dispatchers.IO) { modelManagerViewModel.getTokenStatusAndData().data }
+  }
   val dateFormatter = remember {
     DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
       .withZone(ZoneId.systemDefault())
@@ -107,6 +115,7 @@ fun SettingsDialog(
   var isFocused by remember { mutableStateOf(false) }
   val focusRequester = remember { FocusRequester() }
   val interactionSource = remember { MutableInteractionSource() }
+  val scope = rememberCoroutineScope()
   var showTos by remember { mutableStateOf(false) }
 
   Dialog(onDismissRequest = onDismissed) {
@@ -234,13 +243,22 @@ fun SettingsDialog(
                 Text(stringResource(R.string.settings_clear))
               }
               val handleSaveToken = {
-                modelManagerViewModel.saveAccessToken(
-                  accessToken = customHfToken,
-                  refreshToken = "",
-                  expiresAt = System.currentTimeMillis() + 1000L * 60 * 60 * 24 * 365 * 10,
-                )
-                hfToken = modelManagerViewModel.getTokenStatusAndData().data
-                focusManager.clearFocus()
+                scope.launch {
+                  val expiresAt = System.currentTimeMillis() + 1000L * 60 * 60 * 24 * 365 * 10
+                  modelManagerViewModel.saveAccessToken(
+                    accessToken = customHfToken,
+                    refreshToken = "",
+                    expiresAt = expiresAt,
+                  )
+                  hfToken =
+                    AccessTokenData.newBuilder()
+                      .setAccessToken(customHfToken)
+                      .setRefreshToken("")
+                      .setExpiresAtMs(expiresAt)
+                      .build()
+                  focusManager.clearFocus()
+                }
+                Unit
               }
               BasicTextField(
                 value = customHfToken,

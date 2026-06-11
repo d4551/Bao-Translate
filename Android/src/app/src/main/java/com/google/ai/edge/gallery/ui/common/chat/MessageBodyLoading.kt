@@ -17,11 +17,6 @@
 package com.google.ai.edge.gallery.ui.common.chat
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -39,6 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import com.google.ai.edge.gallery.ui.theme.rememberPulseFloat
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -48,20 +44,9 @@ import com.google.ai.edge.gallery.ui.common.RotationalLoader
 /** Composable function to display a loading indicator. */
 @Composable
 fun MessageBodyLoading(message: ChatMessageLoading? = null) {
-  val infiniteTransition = rememberInfiniteTransition(label = "icon-flash")
+  // Reduced-motion-aware breathing pulse (gating lives in the shared rememberPulseFloat helper).
   val iconAlpha by
-    infiniteTransition.animateFloat(
-      initialValue = 0.3f,
-      targetValue = 1f,
-      animationSpec =
-        infiniteRepeatable(
-          // Duration of one phase (1 second)
-          animation = tween(1000, easing = LinearEasing),
-          // Reverse back to start for a "breathing" effect
-          repeatMode = RepeatMode.Reverse,
-        ),
-      label = "icon-alpha",
-    )
+    rememberPulseFloat(initialValue = 0.3f, targetValue = 1f, durationMillis = 1000, restValue = 1f, label = "icon-flash")
 
   Row(
     horizontalArrangement = Arrangement.SpaceBetween,

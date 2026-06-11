@@ -1158,9 +1158,11 @@ constructor(
   }
 
   private fun updateSkillInDataStore(oldName: String, updatedSkill: Skill) {
-    val allSkills = dataStoreRepository.getAllSkills()
-    val updatedList = allSkills.map { if (it.name == oldName) updatedSkill else it }
-    viewModelScope.launch { dataStoreRepository.setSkills(updatedList) }
+    viewModelScope.launch(Dispatchers.IO) {
+      val allSkills = dataStoreRepository.getAllSkills()
+      val updatedList = allSkills.map { if (it.name == oldName) updatedSkill else it }
+      dataStoreRepository.setSkills(updatedList)
+    }
   }
 
   private fun getSkillSource(skill: Skill): SkillSource {

@@ -14,6 +14,7 @@ import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.common.BaoLog
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioCache
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioDevice
+import com.google.ai.edge.gallery.customtasks.baotranslate.audio.DeviceProbe
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioRouter
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.BluetoothTransport
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.WAVEFORM_HISTORY
@@ -24,6 +25,7 @@ import com.google.ai.edge.gallery.customtasks.baotranslate.data.TranslationMessa
 import com.google.ai.edge.gallery.customtasks.baotranslate.stt.EmptyTranscriptionException
 import com.google.ai.edge.gallery.customtasks.baotranslate.stt.StreamingCaptioner
 import com.google.ai.edge.gallery.customtasks.baotranslate.stt.StreamingSttPipeline
+import com.google.ai.edge.gallery.customtasks.baotranslate.stt.VadInitResult
 import com.google.ai.edge.gallery.customtasks.baotranslate.stt.VadProcessor
 import com.google.ai.edge.gallery.customtasks.baotranslate.stt.VoskStreamingPipeline
 import com.google.ai.edge.gallery.customtasks.baotranslate.translate.TranslationOutcome
@@ -188,6 +190,12 @@ internal class RecordingController(
     @androidx.annotation.VisibleForTesting(otherwise = androidx.annotation.VisibleForTesting.NONE)
     @Volatile
     internal var testLastWasCloned: Boolean = false
+
+    /** Per-turn output-device override last passed to playback, or null if the global route was used. */
+    @JvmStatic
+    @androidx.annotation.VisibleForTesting(otherwise = androidx.annotation.VisibleForTesting.NONE)
+    @Volatile
+    internal var testLastOutputOverride: AudioDevice? = null
   }
 
   fun startRecording() {
@@ -240,7 +248,17 @@ internal class RecordingController(
       if (BaoTranslateModelManager.isCaptionModelReady(app, lang)) {
         scope.launch(Dispatchers.IO) { ensureCaptioner(lang) }
       } else {
-        scope.launch(Dispatchers.IO) { BaoTranslateModelManager.downloadCaptionModel(app, lang) }
+        // Fetch in the background, then pre-warm so it streams later THIS session once it lands.
+        // The Result is logged (not swallowed) so a failed caption download is observable; the model
+        // manager already publishes Downloading/Error status for the vosk_<lang> id.
+        scope.launch(Dispatchers.IO) {
+          val result = BaoTranslateModelManager.downloadCaptionModel(app, lang)
+          if (result.isSuccess) {
+            ensureCaptioner(lang)
+          } else {
+            BaoLog.w(REC_TAG, "Background caption-model download for '$lang' failed: ${result.exceptionOrNull()?.message}")
+          }
+        }
       }
     }
     recordingJob = scope.launch {
@@ -494,8 +512,8 @@ internal class RecordingController(
                 // TRUE streaming ASR for this language (sherpa for English, Vosk otherwise),
                 // pre-warmed off the audio thread at recording start: prime with everything heard so
                 // far this turn, then feed each newly-read frame so the hypothesis grows token-by-
-                // token. While the recognizer is still warming, the feed is a no-op (skips a frame)
-                // rather than stalling capture.
+                // token. While the recognizer is still warming, skip the frame rather than stalling
+                // capture.
                 if (captioner != null && captionerLang == captionLang) {
                   if (!streamingTurnPrimed) {
                     BaoLog.i(REC_TAG, "LIVE_PARTIAL_BRANCH=streaming:$captionLang session=$recordingSessionId")
@@ -831,8 +849,8 @@ internal class RecordingController(
       runSegmentPipeline(audioSamples, recordingSessionId, preserveRecordingStatus, reportEmptySpeech)
     } finally {
       // Segments that end without playback (VAD-empty, blank decode, errors) return the phase to
-      // Listening while the mic loop is still live; after playback the tail-mute chain already
-      // landed on Listening, and after a session stop the Idle phase makes this a no-op.
+      // Listening while the mic loop is still live. After playback, the tail-mute chain already
+      // returned to Listening; after session stop, Idle remains authoritative.
       conversationEvent { onSegmentComplete() }
     }
   }
@@ -875,7 +893,7 @@ internal class RecordingController(
 
     val vadProcessor = vad ?: run {
       val newVad = VadProcessor(getApp())
-      if (newVad.initialize()) {
+      if (newVad.initialize() is VadInitResult.Initialized) {
         pipelines.pipelineMutex.withLock { pipelines.vadProcessor = newVad }
         newVad
       } else {
@@ -1106,7 +1124,10 @@ internal class RecordingController(
     // Cache key: voice profile enrollment state determines whether cloning is applied, so include
     // a fingerprint of the enrolled embedding so cache hits are correct across profile changes.
     val voiceId = when {
-      timbre == SpeechTimbre.PeerOnly -> "peer"
+      // Each connected peer has their OWN shared timbre, so the cache must key on a fingerprint of THAT
+      // peer's embedding — a bare "peer" key collides across peers, so peer B saying the same phrase as
+      // peer A would be served peer A's cached cloned audio (heard in the wrong voice).
+      timbre == SpeechTimbre.PeerOnly -> "peer:${speakerSe?.contentHashCode() ?: 0}"
       state.voiceProfileEnrolled -> state.activeVoiceProfileId
       else -> "default"
     }
@@ -1169,8 +1190,17 @@ internal class RecordingController(
         // if playback is interrupted, otherwise the mic would stay deaf for the rest of the session.
         capturePaused = true
         conversationEvent { onPlaybackStart() }
+        // Face-to-face per-speaker output: route this translation to the LISTENER's assigned device
+        // (the listener is whoever speaks [language]); null falls back to the global output route.
+        val outputOverride =
+          DeviceProbe.resolveOutputOverride(
+            faceToFaceMode = uiState.value.faceToFaceMode,
+            perSpeakerOutputs = uiState.value.faceToFaceOutputs,
+            language = language,
+          )
+        testLastOutputOverride = outputOverride
         try {
-          audioRouter.play(audio.samples, sampleRate = audio.sampleRate)
+          audioRouter.play(audio.samples, sampleRate = audio.sampleRate, override = outputOverride)
           conversationEvent { onPlaybackEnd() }
           delay(PLAYBACK_TAIL_MUTE_MS)
         } finally {

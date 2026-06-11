@@ -127,7 +127,7 @@ class ModelIntegrityTest {
     File(base, "espeak-ng-data").apply { mkdirs(); File(this, "phontab").writeBytes(ByteArray(4)) }
     // On a case-sensitive fs (Linux), this fails. On a case-insensitive fs (macOS HFS+),
     // production's "model.onnx" lookup may find "Model.Onnx" (case-insensitive match).
-    val isCaseInsensitiveFs = System.getProperty("os.name").lowercase().contains("mac")
+    val isCaseInsensitiveFs = (System.getProperty("os.name") ?: "").lowercase().contains("mac")
     val result = BaoTranslateModelManager.requiredFilesComplete(base, kokoroRequired)
     if (isCaseInsensitiveFs) {
       // Pin the case-insensitive behavior: it currently passes.
@@ -142,8 +142,8 @@ class ModelIntegrityTest {
   // doesn't care about permissions. Pin that.
   @Test
   fun incomplete_whenFileIsReadOnly_documented() {
-    assumeTrue("posix only", System.getProperty("os.name").lowercase().contains("linux") ||
-      System.getProperty("os.name").lowercase().contains("mac"))
+    assumeTrue("posix only", (System.getProperty("os.name") ?: "").lowercase().contains("linux") ||
+      (System.getProperty("os.name") ?: "").lowercase().contains("mac"))
     val base = tmp.newFolder("base")
     val f = File(base, "model.onnx")
     f.writeBytes(ByteArray(16))

@@ -40,9 +40,6 @@ import androidx.exifinterface.media.ExifInterface
 import com.google.ai.edge.gallery.GalleryEvent
 import com.google.ai.edge.gallery.data.SAMPLE_RATE
 import com.google.ai.edge.gallery.firebaseAnalytics
-import com.google.gson.Gson
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
 import java.io.File
 import java.io.FileInputStream
 import java.net.HttpURLConnection
@@ -102,12 +99,13 @@ inline fun <reified T> getJsonResponse(url: String): JsonObjAndTextContent<T>? {
   return null
 }
 
-/** Parses a JSON string into an object of type [T] using Gson. */
+/**
+ * Parses a JSON string into an object of type [T] via the shared [LenientJson] codec.
+ * [T] must be `@Serializable`; unknown keys in the payload are ignored so producers
+ * (allowlist snapshots, the GitHub API) can add fields without breaking older clients.
+ */
 inline fun <reified T> parseJson(response: String): T? {
-  return runCatching {
-    val gson = Gson()
-    gson.fromJson(response, T::class.java)
-  }.getOrElse { e ->
+  return runCatching { LenientJson.decodeFromString<T>(response) }.getOrElse { e ->
     BaoLog.e("AGUtils", "Error parsing JSON string", e)
     null
   }
@@ -403,10 +401,3 @@ fun logErrorToFirebase(event: GalleryEvent, errorType: String, errorMessage: Str
   )
 }
 
-fun convertStringToJsonObject(jsonString: String): JsonObject {
-  return runCatching {
-    JsonParser.parseString(jsonString).asJsonObject
-  }.getOrElse {
-    JsonObject()
-  }
-}

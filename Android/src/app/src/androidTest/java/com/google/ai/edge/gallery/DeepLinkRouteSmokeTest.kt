@@ -97,7 +97,7 @@ class DeepLinkRouteSmokeTest {
         // it shows the home screen (or at least doesn't white-screen).
         composeRule.dismissStartupDialogs(context)
         // Wait briefly for the home screen.
-        composeRule.waitForText(context, R.string.cd_menu, timeoutMillis = 30_000, substring = true)
+        composeRule.waitForContentDescription(context, R.string.cd_menu, timeoutMillis = 30_000, substring = true)
         // If we got here, no crash. If the intent was rejected, ActivityScenario.launch would
         // have thrown — which would have been caught by the test runner as a failure.
         // Either way: no crash.
@@ -121,7 +121,7 @@ class DeepLinkRouteSmokeTest {
         // We don't enforce a specific "not found" UI; the test passes as long as the app
         // doesn't crash. Verify the home screen is shown.
         composeRule.dismissStartupDialogs(context)
-        composeRule.waitForText(context, R.string.cd_menu, timeoutMillis = 30_000, substring = true)
+        composeRule.waitForContentDescription(context, R.string.cd_menu, timeoutMillis = 30_000, substring = true)
       }
     } catch (e: Exception) {
       // Acceptable: the intent may be rejected as malformed.

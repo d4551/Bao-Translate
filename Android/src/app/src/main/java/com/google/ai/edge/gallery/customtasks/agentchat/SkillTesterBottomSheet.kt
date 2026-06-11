@@ -56,8 +56,7 @@ import com.google.ai.edge.gallery.common.CallJsSkillResultWebview
 import com.google.ai.edge.gallery.proto.Skill
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageWebView
 import com.google.ai.edge.gallery.ui.common.chat.MessageBodyWebview
-import com.squareup.moshi.JsonAdapter
-import com.squareup.moshi.Moshi
+import com.google.ai.edge.gallery.common.StrictJson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -203,11 +202,9 @@ fun SkillTesterBottomSheet(agentTools: AgentTools, skill: Skill, onDismiss: () -
                 agentTools.sendAgentAction(action)
                 val curResult = action.result.await()
 
-                // Extract possible image and webview.
-                val moshi: Moshi = Moshi.Builder().build()
-                val jsonAdapter: JsonAdapter<CallJsSkillResult> =
-                  moshi.adapter(CallJsSkillResult::class.java).failOnUnknown()
-                val resultJson = runCatching { jsonAdapter.fromJson(curResult) }
+                // Extract possible image and webview. StrictJson rejects unknown keys
+                // (Moshi failOnUnknown parity): non-conforming payloads show as raw text.
+                val resultJson = runCatching { StrictJson.decodeFromString<CallJsSkillResult>(curResult) }
                   .onFailure { e -> BaoLog.w("SkillTesterBottomSheet", "Failed to parse skill result JSON", e) }
                   .getOrNull()
                 if (resultJson == null) {

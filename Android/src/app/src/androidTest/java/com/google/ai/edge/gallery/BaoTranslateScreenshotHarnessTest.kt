@@ -18,6 +18,8 @@ package com.google.ai.edge.gallery
 
 import android.Manifest
 import android.content.Context
+import android.media.AudioManager
+import android.media.MediaRecorder
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.util.Log
@@ -59,6 +61,7 @@ class BaoTranslateScreenshotHarnessTest {
     RuleChain.outerRule(ScreenshotHarnessPermissionRule())
       .around(composeRule)
 
+
   @Test
   fun capturesBaoTranslateVisualFlow_afterSelfProvisioningModels() {
     val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -91,10 +94,10 @@ class BaoTranslateScreenshotHarnessTest {
       phoneSpeakerOutput,
       substring = true,
     )
+    composeRule.captureScreenshot("03_audio_device_picker", screenshotRunDir)
     composeRule.onNodeWithText(composeRule.stringResource(R.string.bao_translate_audio_input_default))
       .assertIsDisplayed()
     composeRule.assertNoLocalPhoneBluetoothRoute()
-    composeRule.captureScreenshot("03_audio_device_picker", screenshotRunDir)
     pressBack()
     composeRule.waitForContentDescription(audioChipPrefix, substring = true)
 
@@ -172,9 +175,28 @@ private const val SCREENSHOT_ROOT = "/sdcard/Download/gallery-baotranslate-scree
 private const val MIN_SCREENSHOT_BYTES = 10_000L
 
 private class ScreenshotHarnessPermissionRule : ExternalResource() {
+  private val animationScaleKeys =
+    listOf("window_animation_scale", "transition_animation_scale", "animator_duration_scale")
+
+  private fun setAnimationScales(value: String) {
+    val ui = InstrumentationRegistry.getInstrumentation().uiAutomation
+    animationScaleKeys.forEach { key ->
+      ParcelFileDescriptor.AutoCloseInputStream(
+        ui.executeShellCommand("settings put global $key $value"),
+      ).use { it.readBytes() } // read to completion so the setting is applied before we proceed
+    }
+  }
+
   override fun before() {
     val instrumentation = InstrumentationRegistry.getInstrumentation()
     val packageName = instrumentation.targetContext.packageName
+    // Screenshots must capture SETTLED screens and assertIsDisplayed must not race an in-flight enter
+    // animation (the bottom-sheet slide-in). Disable system animations via the production reduced-motion
+    // seam (LocalAnimationScale <- ValueAnimator.getDurationScale()) BEFORE MainActivity first composes
+    // — GalleryTheme reads the scale once in a keyless remember{}. With the scale at 0 every animation
+    // snaps to its end state in the next frame, so the frozen-clock pumpUntil settles the UI instantly.
+    setAnimationScales("0")
+    Thread.sleep(500) // let ValueAnimator.getDurationScale() observe the new value before the launch
     val permissions =
       buildList {
         add(Manifest.permission.RECORD_AUDIO)
@@ -190,6 +212,17 @@ private class ScreenshotHarnessPermissionRule : ExternalResource() {
     permissions.forEach { permission ->
       instrumentation.uiAutomation.grantRuntimePermission(packageName, permission)
     }
+    // grantRuntimePermission grants the permission, but the system's ACTIVE-recording registration
+    // (what `dumpsys audio` AudioMonitor reports, asserted in captureRecordingStateScreenshot) also
+    // needs the RECORD_AUDIO app-op in ALLOWED mode. Under instrumentation it can be left unset
+    // ("App op 27 missing, silencing record"), so the app's recorder is silenced and never appears.
+    ParcelFileDescriptor.AutoCloseInputStream(
+      instrumentation.uiAutomation.executeShellCommand("appops set $packageName RECORD_AUDIO allow"),
+    ).use { it.readBytes() }
+  }
+
+  override fun after() {
+    setAnimationScales("1") // restore device animations for the next test/app session
   }
 }
 
@@ -237,11 +270,21 @@ private fun MainActivityScreenshotRule.isHomeReady(taskDescriptionPrefix: String
     hasContentDescription(taskDescriptionPrefix, substring = true)
 }
 
+// This is a SCREENSHOT harness: animations are disabled at the source via the production reduced-motion
+// seam (ScreenshotHarnessPermissionRule sets the system animation scales to 0 BEFORE the activity
+// launches), so the clock auto-advances normally (no infinite pulse to hang waitForIdle) and every
+// screen is captured fully SETTLED. So waits use the framework's wall-clock waitUntil directly; this
+// returns false on timeout (instead of throwing) to preserve the callers' boolean contract.
+private fun MainActivityScreenshotRule.pumpUntil(timeoutMillis: Long, condition: () -> Boolean): Boolean =
+  runCatching { waitUntil(timeoutMillis) { condition() } }.isSuccess
+
 private fun MainActivityScreenshotRule.waitForHomeReady(
   taskDescriptionPrefix: String,
   timeoutMillis: Long = 10_000,
 ) {
-  waitUntil(timeoutMillis) { isHomeReady(taskDescriptionPrefix) }
+  if (!pumpUntil(timeoutMillis) { isHomeReady(taskDescriptionPrefix) }) {
+    throw AssertionError("Timed out after ${timeoutMillis}ms waiting for home screen to be ready")
+  }
 }
 
 private fun MainActivityScreenshotRule.openScreenshotTaskByDescription(
@@ -272,8 +315,10 @@ private fun MainActivityScreenshotRule.waitForBaoTranslateReadyOrSetup(
   val modelsReady = stringResource(R.string.bao_translate_model_ready)
   val readyAction = stringResource(R.string.cd_bao_translate_start)
 
-  waitUntil(timeoutMillis) {
-    hasText(setupAction) || hasText(modelsReady) || hasContentDescription(readyAction)
+  if (!pumpUntil(timeoutMillis) {
+      hasText(setupAction) || hasText(modelsReady) || hasContentDescription(readyAction)
+    }) {
+    throw AssertionError("Timed out after ${timeoutMillis}ms waiting for BaoTranslate ready/setup state")
   }
 
   if (hasContentDescription(readyAction)) {
@@ -308,15 +353,28 @@ private fun MainActivityScreenshotRule.captureRecordingStateScreenshot(
   onNodeWithContentDescription(stringResource(R.string.cd_bao_translate_stop))
     .assertIsDisplayed()
 
-  Thread.sleep(5_500)
-  val audioMonitorBlock = currentAudioMonitorBlock()
-  // HARDENED: was "Recorder port map: {}" string match. New: parse the block into a
-  // structured map and assert the app-uid owns at least one recorder. Catches the
-  // regression where dumpsys output changes but the test is still passing on empty/garbage.
-  val ports = parseRecorderPorts(audioMonitorBlock)
+  // Verify the app holds a REAL system-level active MICROPHONE recording while "listening" — proves
+  // actual mic capture, not just a UI state. Uses the framework API (getActiveRecordingConfigurations),
+  // which from the app's own process returns the app's own recordings, instead of parsing vendor
+  // `dumpsys audio` text whose "AudioMonitor status:" section is empty/absent on some OEM builds (e.g.
+  // HyperOS) even while the AudioRecord is open. Poll: registration can lag the UI's "listening" state.
+  val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+  val micSources = setOf(
+    MediaRecorder.AudioSource.MIC,
+    MediaRecorder.AudioSource.VOICE_RECOGNITION,
+    MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+    MediaRecorder.AudioSource.DEFAULT,
+  )
+  val recordDeadline = System.currentTimeMillis() + 10_000
+  var activeSources = emptyList<Int>()
+  while (System.currentTimeMillis() < recordDeadline) {
+    activeSources = audioManager.activeRecordingConfigurations.map { it.clientAudioSource }
+    if (activeSources.any { it in micSources }) break
+    Thread.sleep(250)
+  }
   assertTrue(
-    "Bao Translate did not expose an active recorder for app uid ${context.applicationInfo.uid}: ports=$ports block=$audioMonitorBlock",
-    ports.values.any { it == context.applicationInfo.uid },
+    "Bao Translate did not expose an active microphone recording while listening; activeSources=$activeSources",
+    activeSources.any { it in micSources },
   )
 
   captureScreenshot(
@@ -366,13 +424,8 @@ private fun MainActivityScreenshotRule.waitForText(
   timeoutMillis: Long = 10_000,
   substring: Boolean = false,
 ) {
-  waitUntil(timeoutMillis) {
-    runCatching {
-        onAllNodesWithText(text, substring = substring, useUnmergedTree = true)
-          .fetchSemanticsNodes()
-          .isNotEmpty()
-      }
-      .getOrDefault(false)
+  if (!pumpUntil(timeoutMillis) { hasText(text, substring = substring) }) {
+    throw AssertionError("Timed out after ${timeoutMillis}ms waiting for text: \"$text\" (substring=$substring)")
   }
 }
 
@@ -381,13 +434,10 @@ private fun MainActivityScreenshotRule.waitForContentDescription(
   timeoutMillis: Long = 10_000,
   substring: Boolean = false,
 ) {
-  waitUntil(timeoutMillis) {
-    runCatching {
-        onAllNodesWithContentDescription(contentDescription, substring, useUnmergedTree = true)
-          .fetchSemanticsNodes()
-          .isNotEmpty()
-      }
-      .getOrDefault(false)
+  if (!pumpUntil(timeoutMillis) { hasContentDescription(contentDescription, substring) }) {
+    throw AssertionError(
+      "Timed out after ${timeoutMillis}ms waiting for contentDescription: \"$contentDescription\" (substring=$substring)"
+    )
   }
 }
 
@@ -396,16 +446,7 @@ private fun MainActivityScreenshotRule.clickScreenshotTextIfPresent(
   timeoutMillis: Long = 3_000,
 ): Boolean {
   val text = stringResource(resId)
-  val appeared =
-    runCatching {
-        waitUntil(timeoutMillis) {
-          runCatching {
-              onAllNodesWithText(text, useUnmergedTree = false).fetchSemanticsNodes().isNotEmpty()
-            }
-            .getOrDefault(false)
-        }
-      }
-      .isSuccess
+  val appeared = pumpUntil(timeoutMillis) { hasText(text) }
   if (appeared) {
     onNodeWithText(text).performClick()
     waitForIdle()
@@ -483,29 +524,6 @@ private fun parseRemoteFileSize(listing: String): Long {
   val firstLine = listing.lineSequence().firstOrNull { it.isNotBlank() } ?: return 0L
   val columns = firstLine.trim().split(Regex("\\s+"))
   return columns.getOrNull(4)?.toLongOrNull() ?: 0L
-}
-
-private fun parseRecorderPorts(dump: String): Map<String, Int> {
-  val start = dump.indexOf("AudioMonitor status:")
-  if (start < 0) return emptyMap()
-  val end = dump.indexOf("Events log: ZAudio service playbck & record monitor", start)
-  val block = if (end > start) dump.substring(start, end) else dump.substring(start)
-  val result = mutableMapOf<String, Int>()
-  val regex = Regex("""(\S+)\s+->\s+(\d+)""")
-  regex.findAll(block).forEach { match ->
-    val (port, uidStr) = match.destructured
-    val uid = uidStr.toIntOrNull() ?: return@forEach
-    result[port] = uid
-  }
-  return result
-}
-
-private fun currentAudioMonitorBlock(): String {
-  val audioDump = runScreenshotShell("dumpsys audio")
-  val start = audioDump.indexOf("AudioMonitor status:")
-  if (start < 0) return audioDump
-  val end = audioDump.indexOf("Events log: ZAudio service playbck & record monitor", start)
-  return if (end > start) audioDump.substring(start, end) else audioDump.substring(start)
 }
 
 private fun currentScreenSize(): Pair<Int, Int> {

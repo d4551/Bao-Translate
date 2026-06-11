@@ -1,30 +1,31 @@
-# Bao Translate — Android app
+# Bao Translate Android App
 
 The Android client for **Bao Translate**: a fully on-device, real-time speech translator with live
-streaming captions, that can speak translations in your own cloned voice and relay a live
-conversation to a paired phone over Nearby Connections (Bluetooth LE + Wi-Fi). Everything — voice
+streaming captions that can speak translations in your own cloned voice and relay a live
+conversation to a paired phone over Nearby Connections (Bluetooth LE + Wi-Fi). Everything from voice
 activity detection, streaming captions, speech-to-text, translation, text-to-speech, and voice
-cloning — runs locally on the device. No network, no accounts, nothing leaves the phone.
+cloning runs locally on the device after the model stack has been downloaded. No account is required
+for normal use, and conversation audio stays on the phone.
 
 For the product overview, screenshots, and the model stack, see the [root README](../README.md).
 
 ## What the app does
 
-* **Live speech translation** — a continuous `mic → VAD → STT → translation → TTS → speaker`
+- **Live speech translation:** a continuous `mic -> VAD -> STT -> translation -> TTS -> speaker`
   pipeline that translates speech as it is spoken.
-* **Multilingual streaming captions** — token-by-token recognition as you speak, in every language:
+- **Multilingual streaming captions:** token-by-token recognition as you speak, in every language:
   a sherpa-onnx streaming zipformer **transducer** (English) and **Vosk** (10 more), lazily
   provisioned per language; runs in both face-to-face and single-speaker continuous mode.
-* **On-device speech for every language** — Kokoro voices 7 languages, the supplemental **Supertonic**
+- **On-device speech for every language:** Kokoro voices 7 languages, the supplemental **Supertonic**
   TTS voices de/ja/ko/ru/ar, so no language falls back to the platform text-to-speech engine.
-* **Cross-lingual voice cloning** — enroll your voice once; translations into any supported language
+- **Cross-lingual voice cloning:** enroll your voice once; translations into any supported language
   are re-spoken in your own timbre (Kokoro/Supertonic pronunciation + OpenVoice tone-color conversion,
   on ONNX Runtime), computed entirely on-device.
-* **Conversation mode** — two phones pair over Nearby Connections (Bluetooth LE + Wi-Fi); each person
+- **Conversation mode:** two phones pair over Nearby Connections (Bluetooth LE + Wi-Fi); each person
   speaks their own language and hears the other in theirs, attributed per speaker.
-* **Per-speaker language + audio routing** — choose each side's source/target language and pick the
+- **Per-speaker language and audio routing:** choose each side's source/target language and pick the
   headset mic / output device in-app.
-* **On-device model management** — download the curated model stack from Hugging Face on first run;
+- **On-device model management:** download the curated model stack from Hugging Face on first run;
   resumable, integrity-checked downloads.
 
 ## Module layout
@@ -52,7 +53,7 @@ registered via Hilt `@IntoSet` and runs standalone within the app shell.
 ```bash
 cd src
 
-# Toolchain: Gradle 9.5.1 + AGP 9.2.0 + Kotlin 2.4.0. Use the Android Studio bundled JBR (JDK 21):
+# Toolchain: Gradle 9.5.1 + AGP 9.2.1 + Kotlin 2.4.0 + compileSdk 37. Use the Android Studio bundled JBR (JDK 21):
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 export PATH="$HOME/Library/Android/sdk/platform-tools:$PATH"
 
@@ -65,7 +66,7 @@ export PATH="$HOME/Library/Android/sdk/platform-tools:$PATH"
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-* `applicationId = com.bao.translate`; `compileSdk = 35`, `minSdk = 31` (Android 12).
+* `applicationId = com.bao.translate`; `compileSdk = 37`, `targetSdk = 35`, `minSdk = 31` (Android 12).
 * `app/libs/` vendors the `sherpa-onnx` AAR. It and `onnxruntime-android` both ship
   `libonnxruntime.so` (the same ORT 1.24.3 build); the duplicate is resolved at packaging via
   `jniLibs.pickFirsts`. ORT 1.24.3 is pinned because sherpa's JNI binds the ELF-versioned

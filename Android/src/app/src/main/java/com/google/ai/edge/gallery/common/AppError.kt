@@ -55,7 +55,7 @@ sealed interface AppError {
 fun Throwable.toAppError(): AppError =
   when (this) {
     is java.io.IOException -> AppError.Io(this)
-    is com.google.gson.JsonSyntaxException,
+    is kotlinx.serialization.SerializationException,
     is com.google.protobuf.InvalidProtocolBufferException ->
       AppError.Parse(this)
     is java.net.UnknownHostException,

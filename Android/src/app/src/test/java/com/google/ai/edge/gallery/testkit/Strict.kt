@@ -16,14 +16,14 @@
 package com.google.ai.edge.gallery.testkit
 
 /**
- * JUnit4 [Category] marker: tests that are part of the strict, no-skimping pyramid.
+ * JUnit4 [Category] marker for tests that are part of the strict verification set.
  *
  * Mark a test class with `@Category(Strict::class)` to enroll it in the
  * `:app:testDebugUnitTestStrict` Gradle gate (see app/build.gradle.kts). The strict
  * subset runs on every commit; the soft baseline (all other unit tests) stays for
  * backward compatibility but is not gating.
  *
- * Promotion rule: every test added during the brutalisation cycle must be `@Category(Strict::class)`.
+ * Promotion rule: new hardening tests should be annotated with `@Category(Strict::class)`.
  */
 // A JUnit 4 category marker is a plain type referenced by @Category(Strict::class). It is NOT an
 // annotation: JUnit's category filter (Gradle `useJUnit { includeCategories ... }`) matches the

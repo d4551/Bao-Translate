@@ -16,16 +16,17 @@
 
 package com.google.ai.edge.gallery.data
 
-import com.google.gson.annotations.SerializedName
+import kotlinx.serialization.Serializable
 
 /** A skill in the skill allowlist. */
+@Serializable
 data class AllowedSkill(
   val name: String,
   val description: String,
-  @SerializedName("skillUrl") val skillUrl: String,
-  @SerializedName("attributionLabel") val attributionLabel: String? = null,
-  @SerializedName("attributionUrl") val attributionUrl: String? = null,
+  val skillUrl: String,
+  val attributionLabel: String? = null,
+  val attributionUrl: String? = null,
 )
 
 /** The skill allowlist. */
-data class SkillAllowlist(@SerializedName("featuredSkills") val featuredSkills: List<AllowedSkill>)
+@Serializable data class SkillAllowlist(val featuredSkills: List<AllowedSkill>)

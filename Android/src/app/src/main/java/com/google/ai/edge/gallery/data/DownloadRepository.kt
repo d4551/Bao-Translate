@@ -23,6 +23,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Bundle
 import com.google.ai.edge.gallery.common.BaoLog
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
@@ -30,7 +31,6 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.core.net.toUri
-import androidx.core.os.bundleOf
 import androidx.work.BackoffPolicy
 import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
@@ -175,7 +175,8 @@ class DefaultDownloadRepository(
     val liveData = workManager.getWorkInfoByIdLiveData(workerId)
     liveData.observeForever(
       object : androidx.lifecycle.Observer<WorkInfo?> {
-        override fun onChanged(workInfo: WorkInfo?) {
+        override fun onChanged(value: WorkInfo?) {
+          val workInfo = value
           if (workInfo != null) {
         when (workInfo.state) {
           WorkInfo.State.ENQUEUED -> {
@@ -184,7 +185,10 @@ class DefaultDownloadRepository(
             }
             firebaseAnalytics?.logEvent(
               GalleryEvent.MODEL_DOWNLOAD.id,
-              bundleOf("event_type" to "start", "model_id" to model.name),
+              Bundle().apply {
+                putString("event_type", "start")
+                putString("model_id", model.name)
+              },
             )
           }
 
@@ -229,11 +233,11 @@ class DefaultDownloadRepository(
             val duration = System.currentTimeMillis() - startTime
             firebaseAnalytics?.logEvent(
               GalleryEvent.MODEL_DOWNLOAD.id,
-              bundleOf(
-                "event_type" to "success",
-                "model_id" to model.name,
-                "duration_ms" to duration,
-              ),
+              Bundle().apply {
+                putString("event_type", "success")
+                putString("model_id", model.name)
+                putLong("duration_ms", duration)
+              },
             )
             downloadStartTimeSharedPreferences.edit { remove(model.name) }
           }
@@ -265,12 +269,12 @@ class DefaultDownloadRepository(
             val duration = System.currentTimeMillis() - startTime
             firebaseAnalytics?.logEvent(
               GalleryEvent.MODEL_DOWNLOAD.id,
-              bundleOf(
-                "event_type" to "failure",
-                "model_id" to model.name,
-                "duration_ms" to duration,
-                "error_message" to (errorMessage ?: "unknown"),
-              ),
+              Bundle().apply {
+                putString("event_type", "failure")
+                putString("model_id", model.name)
+                putLong("duration_ms", duration)
+                putString("error_message", errorMessage)
+              },
             )
             downloadStartTimeSharedPreferences.edit { remove(model.name) }
           }

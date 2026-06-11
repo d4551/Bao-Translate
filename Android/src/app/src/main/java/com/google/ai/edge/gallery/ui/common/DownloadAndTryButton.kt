@@ -239,7 +239,7 @@ fun DownloadAndTryButton(
             }
 
             TokenRequestResultType.USER_CANCELLED -> {
-              BaoLog.d(TAG, "User cancelled. Do nothing")
+              BaoLog.d(TAG, "User cancelled token request")
               checkingToken = false
               downloadStarted = false
             }

@@ -4,199 +4,199 @@
 
 <h1 align="center">Bao Translate</h1>
 
-<p align="center"><strong>Hear anyone, in your language, in your own voice — live and fully offline.</strong></p>
+<p align="center"><strong>Private, on-device live translation that can speak in your own voice.</strong></p>
 
 <p align="center">
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" /></a>
-  <img alt="Platform" src="https://img.shields.io/badge/platform-Android%2012%2B-3DDC84.svg" />
-  <img alt="Offline" src="https://img.shields.io/badge/network-100%25%20on--device-success.svg" />
-  <img alt="Languages" src="https://img.shields.io/badge/languages-12-orange.svg" />
-  <a href="https://ai.google.dev/edge"><img alt="Built on Google AI Edge" src="https://img.shields.io/badge/built%20on-Google%20AI%20Edge%20%7C%20LiteRT-4285F4.svg" /></a>
-  <a href="https://github.com/d4551/bao-translate/releases"><img alt="Release" src="https://img.shields.io/github/v/release/d4551/bao-translate?include_prereleases" /></a>
+  <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" /></a>
+  <img alt="Platform: Android 12+" src="https://img.shields.io/badge/platform-Android%2012%2B-3DDC84.svg" />
+  <img alt="Privacy: fully on-device" src="https://img.shields.io/badge/privacy-fully%20on--device-success.svg" />
+  <img alt="Supported languages: 12" src="https://img.shields.io/badge/languages-12-orange.svg" />
+  <img alt="Build: Gradle" src="https://img.shields.io/badge/build-Gradle-02303A.svg" />
+  <img alt="Docs: ELI5 first" src="https://img.shields.io/badge/docs-ELI5%20first-purple.svg" />
+  <img alt="Runtime: LiteRT and ONNX Runtime" src="https://img.shields.io/badge/runtime-LiteRT%20%7C%20ONNX%20Runtime-4285F4.svg" />
+  <a href="https://github.com/d4551/bao-translate/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/d4551/bao-translate?include_prereleases" /></a>
 </p>
 
----
+## ELI5
 
-## In one sentence (ELI5)
+Bao Translate is like having a tiny interpreter inside your phone. You speak, another person speaks, and the app says each side's words out loud in the other person's language. If you record a short voice sample, the translated speech can sound like you. It works offline, without accounts, and without uploading your voice or conversation.
 
-You talk, the other person talks, and the phone instantly says each side's words out loud in the
-other person's language — and if you record a short sample of your voice once, your translations
-come out **sounding like you**. No internet, no accounts, nothing leaves the phone.
+## What Makes It Different
 
-## Why it's different
+- **Your voice, across languages.** Enroll once and translations can be spoken with your timbre through on-device cross-lingual voice conversion.
+- **Live captions while speech is still happening.** Streaming recognizers show words as they arrive instead of waiting for the entire sentence.
+- **Speech output for every supported language.** Kokoro covers en/es/fr/hi/it/pt/zh, and the on-device Supertonic engine covers de/ja/ko/ru/ar.
+- **A private local pipeline.** Voice activity detection, speech recognition, translation, TTS, and voice conversion all run on the device.
+- **Conversation mode.** Two phones can pair over Nearby Connections so each person speaks their own language and hears the other in theirs.
 
-* **It speaks in _your_ voice.** Enroll your voice once; translations into any supported language are
-  spoken in your own timbre — cross-lingual voice cloning that runs entirely on the phone.
-* **Live captions as you talk.** A true streaming recognizer surfaces the recognized words
-  token-by-token while you're still speaking — not only at the end of a sentence — in every supported
-  language (a streaming transducer for English, Vosk for the rest).
-* **Every language is spoken on-device.** No reliance on the phone's built-in text-to-speech: Kokoro
-  voices 7 languages and the on-device Supertonic engine voices the other 5 (de/ja/ko/ru/ar).
-* **It's genuinely offline.** Voice detection, streaming captions, speech-to-text, translation, and
-  speech all run as local models. Airplane mode works. Nothing is uploaded.
-* **It's a real conversation, not a walkie-talkie.** Two phones pair over Nearby (Bluetooth LE +
-  Wi-Fi); each person speaks their own language and hears the other in theirs, attributed by speaker.
+## Product Tour
 
-## How it works
+Bao Translate turns speech into translated speech with a local pipeline:
 
-A fully local pipeline turns each utterance into translated speech, with a live caption streaming as
-you speak. The speaker's language is recognized, translated, and re-spoken — as a preset voice, your
-cloned voice, or the on-device Supertonic voice for languages without a Kokoro preset. In
-**Conversation mode** each translated turn is also relayed to a paired phone and spoken there.
-
-```
-                    ┌─▶ live streaming caption (token-by-token, as you speak)
-                    │     sherpa transducer (en) · Vosk (es/fr/de/zh/ja/ko/pt/it/ru/hi)
-mic ─▶ VAD ─▶ STT ──┤
-     Silero  Whisper └─▶ Translation ──┬─ Kokoro preset voice (en/es/fr/hi/it/pt/zh)
-                       (Qwen2.5-1.5B,   ├─ YOUR cloned voice (OpenVoice timbre, any language) ─▶ speaker
-                        LiteRT-LM)      └─ Supertonic on-device voice (de/ja/ko/ru/ar)        └─▶ Nearby peer ─▶ speaker
+```text
+                    live streaming caption
+                    sherpa transducer (English) or Vosk (multilingual)
+                                  ^
+                                  |
+microphone -> VAD -> STT -> translation -> TTS or voice conversion -> speaker
+            Silero  Whisper   Qwen2.5       Kokoro, Supertonic, OpenVoice
+                                                   |
+                                                   v
+                                            Nearby peer speaker
 ```
 
-* **Live captions** stream from the first detected word via a true streaming recognizer (a sherpa-onnx
-  zipformer **transducer** for English; **Vosk** for the other languages), provisioned per language on
-  first use. The slower Whisper pass still produces the final, highest-quality transcript that drives
-  translation.
-* **STT** uses the **selected source language** (not blind auto-detect) so recognition stays
-  accurate across languages; Auto-detect remains available.
-* **Voice cloning** = Kokoro (or Supertonic) produces correct pronunciation in the target language,
-  then the **OpenVoice** tone-color converter re-times it into your enrolled timbre — so cloning works
-  for every language, not just English.
+The live caption path is optimized for responsiveness. The Whisper pass produces the final transcript that drives translation quality. Voice cloning uses language-appropriate TTS for pronunciation, then OpenVoice converts the result into the enrolled speaker timbre.
 
-## Supported languages
+## Supported Languages
 
-English · Spanish · French · German · Italian · Portuguese · Russian · Chinese · Japanese · Korean · Arabic · Hindi
+English, Spanish, French, German, Italian, Portuguese, Russian, Chinese, Japanese, Korean, Arabic, and Hindi.
 
-All 12 languages are translated, captioned, **and** spoken entirely on-device — no platform
-text-to-speech required:
-
-* **Live captions** — streaming token-by-token via a sherpa-onnx transducer (English) and Vosk
-  (es/fr/de/zh/ja/ko/pt/it/ru/hi); Arabic uses the Whisper caption as a fallback.
-* **Spoken output** — Kokoro voices **en/es/fr/hi/it/pt/zh**; the on-device Supertonic engine voices
-  **de/ja/ko/ru/ar**.
+| Capability | Coverage |
+| --- | --- |
+| Translation | All 12 languages |
+| Live captions | English via sherpa-onnx transducer; es/fr/de/zh/ja/ko/pt/it/ru/hi via Vosk; Arabic via Whisper fallback |
+| Spoken output | Kokoro for en/es/fr/hi/it/pt/zh; Supertonic for de/ja/ko/ru/ar |
+| Voice cloning | Any supported target language through OpenVoice tone-color conversion |
 
 ## Screenshots
 
 <p align="center">
-  <img src="docs/screenshots/01-translate-home.png" alt="Bao Translate home — on-device model stack and Bluetooth audio routing" width="280" />
+  <img src="docs/screenshots/01-translate-home.png" alt="Bao Translate home with model stack and Bluetooth audio routing" width="280" />
   &nbsp;&nbsp;
-  <img src="docs/screenshots/02-benchmark.png" alt="On-device model benchmarking — GPU/CPU, prefill/decode tokens" width="280" />
+  <img src="docs/screenshots/02-benchmark.png" alt="On-device model benchmarking screen" width="280" />
 </p>
 
-<p align="center"><em>Left: translation home with the on-device model stack and Bluetooth audio routing. Right: on-device model benchmarking.</em></p>
+<p align="center"><em>Left: translation home with model status and audio routing. Right: on-device model benchmarking.</em></p>
 
-## ✨ Features
+## Features
 
-* **Real-time speech translation** — a complete on-device VAD → STT → translation → TTS pipeline.
-* **Multilingual streaming captions** — token-by-token live recognition as you speak, in every
-  language: a streaming **zipformer transducer** (English) and **Vosk** (10 more), lazily provisioned
-  per language; works in both face-to-face and single-speaker continuous mode.
-* **Fully on-device speech for every language** — Kokoro (7 languages) + the supplemental
-  **Supertonic** TTS (de/ja/ko/ru/ar), so no language depends on a device text-to-speech engine.
-* **Cross-lingual voice cloning** — enroll once; hear translations in **your own voice** in any
-  supported language, computed on-device (no voice data leaves the phone).
-* **Live Conversation mode** — multi-speaker: translated turns sync to a peer device over **Nearby
-  Connections** (Bluetooth LE + Wi-Fi) and play aloud on both ends, attributed per speaker.
-* **Per-speaker language selection** — pick each side's source/target language; STT re-configures to
-  the chosen language for accurate recognition.
-* **100% on-device & private** — all inference runs on your hardware; no internet, nothing uploaded.
-* **Bluetooth audio routing** — choose headset mic and output devices in-app.
-* **Model management & benchmarking** — download curated models (resumable, integrity-checked), load
-  your own, and benchmark on GPU/CPU with configurable prefill/decode tokens.
-* **On-device LLM toolset** (from the AI Edge Gallery foundation) — alongside translation, the app
-  bundles upstream local-LLM tools that run models you download in-app: **AI Chat** (multi-turn),
-  **Prompt Lab** (single-turn prompting), **Ask Image** (vision Q&A), **Audio Scribe** (audio
-  understanding), and **Agent Skills** — tool use, [**MCP server**](mcp/) integration, and
-  [**function calling**](Function_Calling_Guide.md). Plus the experimental **Mobile Actions** and
-  **Tiny Garden**.
+- **Real-time speech translation** with a full on-device `VAD -> STT -> translation -> TTS` pipeline.
+- **Multilingual streaming captions** in face-to-face and continuous translation modes.
+- **Cross-lingual voice cloning** from a short enrolled sample, computed locally.
+- **Live conversation relay** over Nearby Connections with speaker attribution.
+- **Per-speaker language selection** for accurate source-language recognition.
+- **Bluetooth audio routing** for headset microphones and output devices.
+- **Model management** with curated downloads, resumable transfers, integrity checks, and benchmarking.
+- **On-device LLM tools** inherited from the AI Edge Gallery foundation: AI Chat, Prompt Lab, Ask Image, Audio Scribe, Agent Skills, MCP integration, function calling, Mobile Actions, and Tiny Garden.
 
-## On-device models
+## Model Stack
 
-Downloaded in-app from Hugging Face on first run:
+Models are downloaded in-app from Hugging Face on first use.
 
-| Role | Model | Size |
+| Role | Model | Approximate size |
 | --- | --- | --- |
 | Voice activity detection | Silero VAD | 2 MB |
-| Speech-to-text | Whisper Base (sherpa-onnx) | 148 MB |
-| Streaming captions (English) | Streaming Zipformer transducer (sherpa-onnx) | 44 MB |
-| Streaming captions (other languages) | Vosk small models, one per language | 30–86 MB each, on demand |
-| Translation | Qwen2.5 1.5B (LiteRT-LM) — Gemma optional | 1.5 GB |
+| Speech-to-text | Whisper Base through sherpa-onnx | 148 MB |
+| Streaming captions, English | Streaming Zipformer transducer through sherpa-onnx | 44 MB |
+| Streaming captions, other languages | Vosk small models, one per language | 30-86 MB each |
+| Translation | Qwen2.5 1.5B through LiteRT-LM, with Gemma optional | 1.5 GB |
 | Text-to-speech | Kokoro Multi-Lang | 142 MB |
-| Supplemental TTS (de/ja/ko/ru/ar) | Supertonic TTS (sherpa-onnx) | 80 MB |
-| Voice cloning | OpenVoice tone converter + reference encoder (ONNX) | 131 MB |
+| Supplemental TTS | Supertonic TTS through sherpa-onnx | 80 MB |
+| Voice conversion | OpenVoice tone converter and reference encoder through ONNX | 131 MB |
 
-The English caption model and core stack are fetched up front; each non-English Vosk caption model is
-downloaded the first time you use that language (and the live caption falls back to the Whisper pass
-until it lands).
+The English caption model and core translation stack are fetched up front. Non-English Vosk caption models are provisioned lazily the first time each language is used.
 
-## 🏁 Getting started
+## Getting Started
 
-**Requirements:** Android 12 (API 31) or newer.
+Requirements:
 
-1. Install the latest APK from [**Releases**](https://github.com/d4551/bao-translate/releases), or build from source (below).
-2. On first launch, tap **Download All Models** (or download individually) to fetch the on-device stack.
-3. (Optional) **Enroll your voice** in settings to have translations spoken in your own voice.
-4. Open **Conversation mode**, pick each speaker's language and audio devices, and start translating.
+- Android 12 / API 31 or newer.
+- Enough local storage for the selected model stack.
+- Optional Bluetooth headset or second Android device for advanced conversation testing.
 
-## 🛠️ Build from source
+Steps:
 
-Standard Gradle Android project rooted at [`Android/src`](Android/src).
+1. Install the latest APK from [Releases](https://github.com/d4551/bao-translate/releases), or build from source.
+2. Launch the app and download the required models.
+3. Optional: enroll your voice in settings.
+4. Open Bao Translate, choose source and target languages, select audio devices, and start translating.
+
+## Build From Source
+
+The Android project is rooted at [Android/src](Android/src).
 
 ```bash
 cd Android/src
 
-# Use Android Studio's bundled JBR (JDK 21) — Gradle 9.5.1 / AGP 9.2.0 / Kotlin 2.4.0
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 export PATH="$HOME/Library/Android/sdk/platform-tools:$PATH"
 
-./gradlew :app:assembleDebug              # compile + build the debug APK
-./gradlew :app:testDebugUnitTest          # unit tests
-./gradlew :app:connectedDebugAndroidTest  # on-device E2E: streaming captions (every language),
-                                          # all-language on-device audio, live translation, voice
-                                          # cloning, and the two-device Nearby conversation round-trip
-./gradlew :app:smokeE2e                    # fast smoke gate (skill WebView + UI navigation)
+./gradlew :app:assembleDebug
+./gradlew :app:testDebugUnitTest
+./gradlew :app:connectedDebugAndroidTest
+./gradlew :app:smokeE2e
 
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-* SDK: `compileSdk = 35`, `minSdk = 31`; `applicationId = com.bao.translate`.
-* `app/libs/` holds the vendored `sherpa-onnx` AAR; it and `onnxruntime-android` both ship
-  `libonnxruntime.so` (the same ORT 1.24.3 build), de-duplicated at packaging via `jniLibs.pickFirsts`.
-* See [DEVELOPMENT.md](DEVELOPMENT.md) for more.
+Build notes:
 
-## 📁 Project structure
+- `applicationId = com.bao.translate`.
+- `compileSdk = 37`; `minSdk = 31`; `targetSdk = 35`.
+- The vendored `sherpa-onnx` AAR lives under `Android/src/app/libs/`.
+- `sherpa-onnx` and `onnxruntime-android` both ship `libonnxruntime.so`; packaging de-duplicates the shared object with `jniLibs.pickFirsts`.
+- See [DEVELOPMENT.md](DEVELOPMENT.md) for local setup, Hugging Face OAuth configuration, and verification commands.
 
-| Path | What |
+## Repository Map
+
+| Path | Purpose |
 | --- | --- |
-| [`Android/`](Android/) | The Android app (Gradle project under `Android/src`) |
-| [`bao-translate/`](bao-translate/) | Brand assets and app-icon sets |
-| [`mcp/`](mcp/) | Model Context Protocol server integration and docs |
-| [`skills/`](skills/) | Agent skill packs |
-| [`model_allowlists/`](model_allowlists/), [`model_allowlist.json`](model_allowlist.json) | Curated model allowlist |
-| [`docs/`](docs/) | Screenshots and documentation |
+| [Android/](Android/) | Android application and Gradle project |
+| [bao-translate/](bao-translate/) | Brand assets and app icon resources |
+| [docs/](docs/) | Architecture decisions, screenshots, and supporting documentation |
+| [mcp/](mcp/) | Model Context Protocol integration guide |
+| [skills/](skills/) | Agent skill documentation and examples |
+| [model_allowlists/](model_allowlists/) and [model_allowlist.json](model_allowlist.json) | Curated model allowlists |
+| [Function_Calling_Guide.md](Function_Calling_Guide.md) | Guide for adding custom mobile actions |
+| [Bug_Reporting_Guide.md](Bug_Reporting_Guide.md) | Android bug report capture guide |
 
-## 🧩 Built on
+## Documentation
 
-Bao Translate stands on excellent open-source work — thank you to:
+- [Android app guide](Android/README.md)
+- [Development setup](DEVELOPMENT.md)
+- [Contribution policy](CONTRIBUTING.md)
+- [Bug reporting](Bug_Reporting_Guide.md)
+- [Function calling](Function_Calling_Guide.md)
+- [MCP integration](mcp/README.md)
+- [Agent skills](skills/README.md)
+- [Model allowlists](model_allowlists/README.md)
 
-* [**Google AI Edge Gallery**](https://github.com/google-ai-edge/gallery) — the app foundation (Apache-2.0)
-* [**LiteRT** / **LiteRT-LM**](https://github.com/google-ai-edge/LiteRT-LM) — on-device model runtime
-* [**sherpa-onnx**](https://github.com/k2-fsa/sherpa-onnx) — on-device STT, streaming-ASR & TTS engine
-* [**Vosk**](https://github.com/alphacep/vosk-api) — streaming speech recognition for the multilingual live captions
-* [**ONNX Runtime**](https://github.com/microsoft/onnxruntime) — runs the on-device voice-cloning graphs
-* [**Whisper**](https://github.com/openai/whisper) — speech recognition
-* [**Qwen2.5**](https://github.com/QwenLM/Qwen2.5) — translation model
-* [**Kokoro**](https://huggingface.co/hexgrad/Kokoro-82M) — multilingual TTS
-* [**OpenVoice**](https://github.com/myshell-ai/OpenVoice) — cross-lingual tone-color (voice) conversion
-* [**Silero VAD**](https://github.com/snakers4/silero-vad) — voice activity detection
-* [**Hugging Face**](https://huggingface.co/litert-community) — model hosting
+## Quality And Verification
 
-## 🤝 Feedback & contributing
+Recommended local gates before shipping changes:
 
-* 🐞 **Found a bug?** [Report it](https://github.com/d4551/bao-translate/issues/new?template=bug_report.md) (see also the [Bug Reporting Guide](Bug_Reporting_Guide.md)).
-* 💡 **Have an idea?** [Suggest a feature](https://github.com/d4551/bao-translate/issues/new?template=feature_request.md).
-* See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+```bash
+cd Android/src
+./gradlew :app:assembleDebug
+./gradlew :app:testDebugUnitTest
+./gradlew :app:connectedDebugAndroidTest
+./gradlew :app:smokeE2e
+```
 
-## 📄 License
+Use a physical device for full translation, Bluetooth audio routing, voice cloning, and Nearby conversation validation. Emulator coverage is useful for compile, unit, and focused UI checks, but it does not replace hardware verification for the audio pipeline.
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE). Bao Translate is a derivative of Google AI Edge Gallery; upstream copyright and the Apache-2.0 license are retained.
+## Built On
+
+Bao Translate builds on excellent open-source projects:
+
+- [Google AI Edge Gallery](https://github.com/google-ai-edge/gallery) for the app foundation.
+- [LiteRT and LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) for local model execution.
+- [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) for on-device STT, streaming ASR, and TTS.
+- [Vosk](https://github.com/alphacep/vosk-api) for multilingual streaming recognition.
+- [ONNX Runtime](https://github.com/microsoft/onnxruntime) for voice-conversion graphs.
+- [Whisper](https://github.com/openai/whisper) for speech recognition.
+- [Qwen2.5](https://github.com/QwenLM/Qwen2.5) for translation.
+- [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) for multilingual TTS.
+- [OpenVoice](https://github.com/myshell-ai/OpenVoice) for cross-lingual tone-color conversion.
+- [Silero VAD](https://github.com/snakers4/silero-vad) for voice activity detection.
+- [Hugging Face](https://huggingface.co/litert-community) for model hosting.
+
+## Support And Contributing
+
+- Found a bug? Open an issue with the [bug report template](https://github.com/d4551/bao-translate/issues/new?template=bug_report.md) and include the details from the [Bug Reporting Guide](Bug_Reporting_Guide.md).
+- Have an idea? Use the [feature request template](https://github.com/d4551/bao-translate/issues/new?template=feature_request.md).
+- Planning a code change? Read [CONTRIBUTING.md](CONTRIBUTING.md) first so expectations are clear.
+
+## License
+
+Bao Translate is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE). This project is derived from Google AI Edge Gallery; upstream copyright notices and Apache-2.0 licensing are retained.

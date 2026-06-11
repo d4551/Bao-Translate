@@ -1,5 +1,5 @@
 <!-- omit from toc -->
-# AI Edge Gallery Agent Skills
+# Bao Translate Agent Skills
 
 <!-- omit from toc -->
 ## Table of contents
@@ -29,7 +29,7 @@
 ## Introduction
 
 An Agent Skill is a modular set of capabilities that extends the functional reach of a
-Large Language Model (LLM) within the AI Edge Gallery app. By giving the LLM new
+Large Language Model (LLM) within Bao Translate. By giving the LLM new
 capabilities and domain-specific knowledge, skills reduce the need for
 repetitive prompt instructions, and eliminate the barriers for LLMs to discover
 and integrate new tools dynamically.
@@ -47,7 +47,7 @@ Python scripts or CLI tools, on-device LLMs operate within a sandboxed mobile
 environment. They cannot easily execute arbitrary system commands or local
 scripts due to security and resource constraints.
 
-To overcome this, AI Edge Gallery adapts by focusing on two primary execution
+To overcome this, Bao Translate adapts by focusing on two primary execution
 paths:
 
 1. **JavaScript Skills**: Running logic inside a lightweight, hidden webview,
@@ -86,22 +86,19 @@ the LLM.
 ```markdown
 ---
 name: fitness-coach
-description: A cheerful, high-energy fitness coach that provides motivational workout routines.
+description: A supportive fitness coach that provides concise workout routines.
 ---
 
-# Cheerful Fitness Coach
+# Fitness Coach
 
 ## Persona
-You are an incredibly enthusiastic and supportive fitness coach! Your goal is
-to make exercise feel like a party. Always use upbeat language, plenty of
-encouraging emojis, and focus on the "fun" of moving your body.
+You are a supportive fitness coach. Provide clear, safe, and encouraging workout guidance.
 
 ## Instructions
 When the user asks for a workout:
-1. Start with a high-energy greeting (e.g., "Ready to crush it?").
-2. Provide a 15-minute high-intensity routine that is easy to follow.
-3. End with a massive "virtual high-five" and a reminder of how awesome they are
-   for showing up today! 🌟✨
+1. Start with a brief readiness check.
+2. Provide a 15-minute routine that is easy to follow.
+3. End with a short recovery reminder.
 ```
 
 The LLM uses the **Name** and **Description** in the metadata to determine if
@@ -111,7 +108,7 @@ loaded into the model's context to guide its behavior.
 ## JavaScript (JS) Skills
 
 Because Python is often unsuitable for on-device LLMs within mobile
-applications, the AI Edge Gallery uses JavaScript-based scripts housed in HTML
+applications, Bao Translate uses JavaScript-based scripts housed in HTML
 files to execute custom logic.
 
 ### How JS Skills Work
@@ -212,8 +209,8 @@ field on failure.
 > Think of `index.html` as a **"headless" execution environment** that leverages
 > the full power of the web ecosystem within a standard mobile webview. This
 > setup allows you to move beyond basic scripts by making `fetch()` calls to
-> third-party APIs, integrating external libraries via CDN or relative paths in
-> the `<script>` tag, and utilizing advanced Web APIs like WebAssembly. For more
+> third-party APIs, integrating vendored libraries through relative paths in the
+> `<script>` tag, and utilizing advanced Web APIs like WebAssembly. For more
 > complex projects, you can maintain a clean architecture by splitting your
 > logic into separate `.js` files within the `scripts/` directory and importing
 > them directly into your main `index.html` entry point.
@@ -291,7 +288,7 @@ my-interactive-skill/
 ### Passing Secrets
 
 If your JS script requires an API key or token, do not pass it through the LLM
-prompt. Instead, the AI Edge Gallery app provides a secure mechanism: it will
+prompt. Instead, Bao Translate provides a secure mechanism: it will
 display a native dialog to the user to input the required secret when the JS
 skill is called, which is then passed directly to your script.
 
@@ -382,7 +379,7 @@ Call the `run_intent` tool with the following exact parameters:
 > to see how existing intents are mapped and to learn how to register new custom
 > intents for the LLM to invoke.
 
-## How to Add Skills in the Gallery App
+## How to Add Skills in Bao Translate
 
 There are three ways to add a skill to the app:
 
@@ -433,7 +430,7 @@ to the app by using the skill url.
 >
 > A tip if you want to use GitHub Pages to serve your skills:
 > By default, GitHub Pages uses Jekyll to process files, which can automatically
-> convert .md files into .html. Because the AI Edge Gallery app requires access
+> convert .md files into .html. Because Bao Translate requires access
 > to the raw SKILL.md file to parse instructions, you must disable this
 > behavior:
 >
@@ -469,8 +466,7 @@ You can load skills directly from your Android device's file system.
 ## Share Skills with Community
 
 We've created a dedicated **GitHub Discussions** category for users to showcase
-their skills. Follow these steps to share your custom skills with the global
-AI Edge Gallery community:
+their skills. Follow these steps to share your custom skills with the community:
 
 1. Visit [Skills Discussion Category](https://github.com/google-ai-edge/gallery/discussions/categories/skills)
 

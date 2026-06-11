@@ -12,11 +12,11 @@ data class DeviceDescriptor(
   companion object {
     fun from(info: AudioDeviceInfo): DeviceDescriptor {
       val name = info.productName?.toString()
-      val resolvedName = if (name.isNullOrBlank() || name == "null") info.address ?: "" else name
+      val resolvedName = if (name.isNullOrBlank() || name == "null") info.address else name
       return DeviceDescriptor(
         type = info.type,
         productName = resolvedName,
-        address = info.address ?: "",
+        address = info.address,
         isSource = info.isSource,
         isSink = info.isSink,
       )
@@ -238,6 +238,17 @@ object DeviceProbe {
         isModern = false,
       )
     }
+
+  /**
+   * Per-speaker output routing: in face-to-face mode each listener's language maps to THEIR chosen
+   * output device; outside face-to-face (or when that language has no override) playback uses the
+   * global route (null). Pure logic, JVM-unit-testable — the on-device E2E only adds the pipeline.
+   */
+  fun resolveOutputOverride(
+    faceToFaceMode: Boolean,
+    perSpeakerOutputs: Map<String, AudioDevice>,
+    language: String,
+  ): AudioDevice? = if (faceToFaceMode) perSpeakerOutputs[language] else null
 
   private fun endpointKey(name: String, transport: BluetoothTransport): String =
     "$name:${transport.name}"

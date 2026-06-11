@@ -18,8 +18,8 @@ private const val META_SUFFIX = ".meta"
  * Manages voice profile storage for BaoTranslate voice cloning.
  *
  * When [encryptedStore] is provided, WAV clips, speaker embeddings (.se), and display metadata are
- * stored with AES-256-GCM via Android Keystore ([EncryptedBlobStore] / androidx.security-crypto 1.1.0).
- * Plaintext files in [profilesDir] are migrated once on first access.
+ * stored with AES-256-GCM via Android Keystore ([EncryptedBlobStore], backed by Google Tink). Plaintext
+ * files in [profilesDir], and any pre-Tink security-crypto blobs, are migrated once on first access.
  */
 class VoiceProfileManager(
   private val context: Context,
@@ -108,22 +108,19 @@ class VoiceProfileManager(
     if (!wavExists(id)) return null
 
     val meta = readMeta(id)
-    val prosody = prosodyCache[id] ?: run {
-      try {
-        val bytes = readWavBytesInternal(id) ?: return null
-        if (WavUtils.isValidWav(bytes)) {
-          val rate = WavUtils.extractSampleRateFromWav(bytes) ?: 16000
-          val pcmSamples = WavUtils.extractSamplesFromWav(bytes)
-          val shortPcm = ShortArray(pcmSamples.size) {
-            (pcmSamples[it] * 32768f).toInt().coerceIn(-32768, 32767).toShort()
-          }
-          extractProsody(shortPcm, rate).also { prosodyCache[id] = it }
-        } else null
-      } catch (e: java.io.IOException) {
-        BaoLog.w(TAG, "Failed to extract prosody for profile '$id': ${e.message}")
-        null
-      }
-    }
+    val prosody = prosodyCache[id] ?: runCatching {
+      val bytes = readWavBytesInternal(id) ?: return null
+      if (WavUtils.isValidWav(bytes)) {
+        val rate = WavUtils.extractSampleRateFromWav(bytes) ?: 16000
+        val pcmSamples = WavUtils.extractSamplesFromWav(bytes)
+        val shortPcm = ShortArray(pcmSamples.size) {
+          (pcmSamples[it] * 32768f).toInt().coerceIn(-32768, 32767).toShort()
+        }
+        extractProsody(shortPcm, rate).also { prosodyCache[id] = it }
+      } else null
+    }.onFailure {
+      BaoLog.w(TAG, "Failed to extract prosody for profile '$id': ${it.message}")
+    }.getOrNull()
 
     val durationSec = meta?.durationSec ?: readWavBytesInternal(id)?.let { WavUtils.computeDurationSec(it) } ?: 0f
 

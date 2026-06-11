@@ -18,8 +18,8 @@ package com.google.ai.edge.gallery.common
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import com.squareup.moshi.JsonClass
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.serialization.Serializable
 
 interface LatencyProvider {
   val latencyMs: Float
@@ -96,23 +96,23 @@ data class SkillInfo(
 
 data class SkillsIndex(val skills: List<SkillInfo>)
 
-@JsonClass(generateAdapter = true)
+@Serializable
 data class CallJsSkillResult(
-  val result: String?,
-  val error: String?,
-  val image: CallJsSkillResultImage?,
-  val webview: CallJsSkillResultWebview?,
+  val result: String? = null,
+  val error: String? = null,
+  val image: CallJsSkillResultImage? = null,
+  val webview: CallJsSkillResultWebview? = null,
 )
 
-@JsonClass(generateAdapter = true) data class CallJsSkillResultImage(val base64: String?)
+@Serializable data class CallJsSkillResultImage(val base64: String? = null)
 
-@JsonClass(generateAdapter = true)
+@Serializable
 data class CallJsSkillResultWebview(
-  val url: String?,
-  val iframe: Boolean?,
+  val url: String? = null,
+  val iframe: Boolean? = null,
   // width/height.
   //
   // In the app the webview always takes the full width of the screen. This value is used to
   // calculate the height of the webview. Default is 4:3.
-  val aspectRatio: Float?,
+  val aspectRatio: Float? = null,
 )

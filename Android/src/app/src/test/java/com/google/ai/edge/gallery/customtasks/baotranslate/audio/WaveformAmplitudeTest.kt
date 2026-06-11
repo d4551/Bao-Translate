@@ -97,10 +97,10 @@ class WaveformAmplitudeTest {
     assertEquals("full-scale negative must clamp to 1.0", 1f, amp, 0.0001f)
   }
 
-  // ----- NaN input: production does `sumSquares += sample * sample`. With a NaN
-  // sample, sumSquares becomes NaN, and the result is NaN. Document the gap.
+  // ----- Input is ShortArray, which cannot hold NaN/Inf, so the result is always finite.
+  // Pin the extreme: the max short clamps to 1.0 (no overflow, no non-finite output).
   @Test
-  fun waveformAmplitude_nanInSamples_propagatesGap() {
+  fun waveformAmplitude_maxShort_clampsToOne() {
     val sig = ShortArray(160) { if (it == 80) 0 else 1000 }
     // Can't directly put NaN into ShortArray (no NaN for Short). Instead, simulate by
     // calling with a FloatArray via a helper — except the prod function takes ShortArray.

@@ -747,6 +747,7 @@
   <string name="bao_translate_language_korean">Korean</string>
   <string name="bao_translate_wifi_only">Wi-Fi only for model downloads</string>
   <string name="bao_translate_output_device">Output device</string>
+  <string name="bao_face_to_face_output_device_cd">Output device for this speaker: %1$s. Double tap to change.</string>
   <string name="bao_translate_stt_model_option_whisper">Whisper Base via Sherpa-ONNX (148 MB)</string>
   <string name="bao_translate_stt_model_option_qwen3">Qwen3 ASR 0.6B (2.4 GB)</string>
   <string name="bao_translate_stt_model_option_parakeet">Parakeet TDT 0.6B (2.4 GB)</string>

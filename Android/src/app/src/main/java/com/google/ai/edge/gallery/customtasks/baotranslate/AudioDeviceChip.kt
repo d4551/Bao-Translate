@@ -494,7 +494,7 @@ private fun audioRouteLabel(
 }
 
 @Composable
-private fun describeDevice(device: AudioDevice): Triple<String, ImageVector, Boolean> = when (device) {
+internal fun describeDevice(device: AudioDevice): Triple<String, ImageVector, Boolean> = when (device) {
   AudioDevice.Speaker -> Triple(
     stringResource(R.string.bao_translate_phone_speaker),
     Icons.Default.Speaker,

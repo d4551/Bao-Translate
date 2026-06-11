@@ -2,6 +2,7 @@ package com.google.ai.edge.gallery.customtasks.baotranslate
 
 import android.app.Application
 import com.google.ai.edge.gallery.R
+import com.google.ai.edge.gallery.customtasks.baotranslate.stt.VadInitResult
 import com.google.ai.edge.gallery.customtasks.baotranslate.stt.VadProcessor
 import com.google.ai.edge.gallery.customtasks.baotranslate.stt.WhisperPipeline
 import com.google.ai.edge.gallery.customtasks.baotranslate.translate.TranslationPipeline
@@ -113,7 +114,7 @@ internal class PipelineLifecycleManager(
     }
 
     val vad = VadProcessor(app)
-    if (vad.initialize()) {
+    if (vad.initialize() is VadInitResult.Initialized) {
       vadProcessor = vad
     }
 
@@ -134,7 +135,7 @@ internal class PipelineLifecycleManager(
         }
 
         val vad = VadProcessor(app)
-        if (vad.initialize()) {
+        if (vad.initialize() is VadInitResult.Initialized) {
           vadProcessor = vad
         }
       }

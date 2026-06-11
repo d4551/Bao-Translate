@@ -1,78 +1,77 @@
-# **The Complete Guide to Capturing Bao Translate Bug Reports for ANDROID devices**
+# Android Bug Reporting Guide
 
-Thank you for helping us improve the Bao Translate app\! To find and fix bugs effectively, our engineers need detailed diagnostic information from your device. A **Full Bug Report** is the best way to provide this.
+Thank you for helping improve Bao Translate. A complete Android bug report gives maintainers the logs, device state, and system diagnostics needed to investigate crashes, audio routing failures, Bluetooth issues, model download problems, and on-device inference errors.
 
-Please note that this guide is specifically for capturing bug reports on **Android devices**.
+This guide covers two ways to capture a report:
 
-This guide covers the simple on-device method for all users and the more advanced `adb` method for developers.
+- The recommended on-device flow for most users.
+- The `adb` command-line flow for developers and advanced testers.
 
-### **Part 1: The Recommended Method (On Your Device)**
+Before sharing a report publicly, review it for personal information. Android bug reports can include app names, device metadata, system logs, and recent diagnostic events.
 
-This is the fastest and easiest way to generate a complete bug report.
+## Recommended: Capture A Full Report On Device
 
-#### **1\. Enable Developer Options**
+Capture the report immediately after reproducing the issue.
 
-First, you need to enable the hidden "Developer options" menu on your phone.
+### 1. Enable Developer Options
 
-* Open your phone's **Settings** app.  
-* Scroll down and tap **"About phone"**.  
-* Find the **"Build number"** and tap on it **7 times** in a row. You will see a "You are now a developer\!" message.
+1. Open the Android **Settings** app.
+2. Tap **About phone**.
+3. Tap **Build number** seven times.
+4. Confirm that Android shows the developer-options confirmation message.
 
-#### **2\. Capture the Bug Report**
+### 2. Take The Bug Report
 
-It's best to capture the report **immediately after** you've experienced the bug.
+1. Return to **Settings**.
+2. Open **Developer options**. On some devices it appears under **System**.
+3. Tap **Take bug report**.
+4. Select **Full report**.
+5. Tap **Report**.
 
-* Go back to the main **Settings** page and find the new **"Developer options"** menu (it may be under "System").  
-* Inside Developer options, tap **"Take bug report"**.  
-* Select the **"Full report"** option and tap **"Report"**. This provides the most detailed information and is strongly preferred.
+### 3. Share The Report
 
-#### **3\. Wait and Share**
+1. Wait for the **Bug report captured** notification.
+2. Tap the notification.
+3. Save or share the generated `.zip` file.
+4. Attach it to the issue or share a restricted cloud-storage link.
 
-* Your phone will take a moment to collect all the data. When it's ready, a notification will appear saying **"Bug report captured"**.  
-* Tap this notification.  
-* The Android share menu will open. You can now share the `.zip` file with us. The easiest way is to **save it to your Google Drive** and share the link, or attach it directly to the GitHub issue.
+## Advanced: Capture With ADB
 
-### **Part 2: For Developers & Advanced Users (Using ADB)**
+Use this option when USB debugging is enabled and the device is connected to your computer.
 
-This section is for users comfortable with the Android Debug Bridge (`adb`) command-line tool.
+### Single Connected Device
 
-#### **Capture a Bug Report Directly**
-
-If you have a device connected to your computer with USB debugging enabled, you can use the following commands.
-
-* **For a single connected device:**
-
-```shell
-# This saves the report to the specified path on your computer.
-adb bugreport C:\Reports\MyBugReports
+```bash
+adb bugreport ./bao-translate-bugreport
 ```
 
-* **For multiple connected devices:**
+### Multiple Connected Devices
 
-```shell
-# First, list devices to get the serial number.
+```bash
 adb devices
-
-# Then, use the serial number to target the correct device.
-adb -s <your_device_serial_number> bugreport
+adb -s <device_serial_number> bugreport ./bao-translate-bugreport
 ```
 
-#### **Access Older Bug Reports from Your Device**
+### Retrieve A Saved Device Report
 
-Android automatically saves recent bug reports on the device.
-
-1. **List Saved Reports:**
-
-```shell
+```bash
 adb shell ls /bugreports/
-```
-
-2. **Pull a Specific Report:**
-
-```shell
 adb pull /bugreports/<bug_report_filename.zip>
 ```
 
-#### **Understanding the Bug Report File**
+## What To Include In The Issue
 
-Your bug report is a `.zip` file. Inside, the most important file is **`bugreport-[...].txt`**. This text file contains the full system log (logcat), error logs (`dumpstate`), and detailed diagnostic output for all system services (`dumpsys`), giving engineers a complete picture of the device's state at the time of the bug.
+- Device model and Android version.
+- Bao Translate app version or commit SHA.
+- Whether the device was online or offline.
+- Which models were downloaded.
+- Source and target languages.
+- Audio route used, such as phone speaker, wired headset, or Bluetooth headset.
+- Exact steps that reproduce the issue.
+- Expected behavior and actual behavior.
+- Screenshots or screen recordings when they help explain the problem.
+- The bug report `.zip` or a link to it.
+
+## What The File Contains
+
+The generated `.zip` usually includes a `bugreport-*.txt` file with logcat output, system-service diagnostics, crash information, and device state. This is often the most useful artifact for engineering investigation.

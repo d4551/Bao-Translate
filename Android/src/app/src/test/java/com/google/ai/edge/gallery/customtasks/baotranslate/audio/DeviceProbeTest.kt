@@ -233,7 +233,7 @@ class DeviceProbeTest {
   }
 
   @Test
-  fun `placeholder SCO output matching local device is filtered`() {
+  fun `generic SCO output matching local device is filtered`() {
     val devices = listOf(
       device(
         DeviceProbe.TYPE_BLUETOOTH_SCO,
@@ -257,7 +257,7 @@ class DeviceProbeTest {
   }
 
   @Test
-  fun `placeholder SCO input without real media endpoint is filtered`() {
+  fun `generic SCO input without real media endpoint is filtered`() {
     val devices = listOf(
       device(
         DeviceProbe.TYPE_BLUETOOTH_SCO,
@@ -280,7 +280,7 @@ class DeviceProbeTest {
   }
 
   @Test
-  fun `placeholder SCO input inherits real paired media endpoint name`() {
+  fun `generic SCO input inherits real paired media endpoint name`() {
     val input = device(
       DeviceProbe.TYPE_BLUETOOTH_SCO,
       "V23001960",
@@ -442,6 +442,18 @@ class DeviceProbeTest {
     val result = DeviceProbe.listInputs(listOf(buds), fallback = "DefaultBT")
     assertEquals(1, result.size)
     assertEquals("DefaultBT", result.single().device.name)
+  }
+
+  // ----- Per-speaker output routing (OOS-AUDIT-015a). The pure decision the on-device E2E asserts,
+  // verified here on the JVM so the routing invariant is RUN-checked without the full pipeline/device.
+  @Test
+  fun `resolveOutputOverride routes per-speaker only in face-to-face`() {
+    val earbuds = AudioDevice.WiredHeadset("Earbuds")
+    val outputs = mapOf("es" to earbuds)
+    assertEquals(earbuds, DeviceProbe.resolveOutputOverride(true, outputs, "es"))
+    assertNull(DeviceProbe.resolveOutputOverride(true, outputs, "fr"))   // no override for that lang
+    assertNull(DeviceProbe.resolveOutputOverride(false, outputs, "es"))  // not f2f -> global route
+    assertNull(DeviceProbe.resolveOutputOverride(true, emptyMap(), "es")) // empty map -> global route
   }
 
   private fun device(

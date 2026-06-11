@@ -116,7 +116,7 @@ class TranslationValidationTest {
     // trim() collapses NBSP to "", so both sides become empty, and empty content has nothing
     // to echo, so isSourceEcho must NOT flag it.
     @Test
-    fun isSourceEcho_unicodeWhitespace_documentedGap() {
+    fun isSourceEcho_nbspOnly_neverEcho() {
         // Kotlin's trim() strips NBSP (Character.isSpaceChar), so both sides trim to "",
         // and empty content is never an echo.
         val nbsp = "\u00A0"

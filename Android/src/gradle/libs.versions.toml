@@ -1,55 +1,57 @@
 [versions]
-agp = "9.2.0"
+# Versions = latest STABLE on Google Maven / Maven Central as of 2026-06-11 unless a pin is
+# documented inline. Pre-release (alpha/beta/rc) is only used where the library publishes
+# nothing else (richtext/commonmark, mlkit-genai-prompt).
+agp = "9.2.1"
 kotlin = "2.4.0"
-material3Adaptive = "1.0.0"
-coreKtx = "1.15.0"
+material3Adaptive = "1.2.0"
+coreKtx = "1.19.0"
 junit = "4.13.2"
-junitVersion = "1.2.1"
-espressoCore = "3.6.1"
-uiautomator = "2.3.0"
-lifecycleRuntimeKtx = "2.8.7"
-lifecycleRuntimeCompose = "2.8.7"
-activityCompose = "1.10.1"
-composeBom = "2026.02.00"
-navigation = "2.8.9"
+junitVersion = "1.3.0"
+espressoCore = "3.7.0"
+uiautomator = "2.3.0" # 2.4.x is still beta
+lifecycleRuntimeKtx = "2.10.0"
+lifecycleRuntimeCompose = "2.10.0"
+activityCompose = "1.13.0"
+composeBom = "2026.05.01"
+navigation = "2.9.8"
 serializationPlugin = "2.4.0"
-serializationJson = "1.7.3"
-materialIconExtended = "1.7.8"
-workRuntime = "2.10.0"
-dataStore = "1.1.7"
-gson = "2.12.1"
-lifecycleProcess = "2.8.7"
-webkit = "1.14.0"
+serializationJson = "1.11.0"
+materialIconExtended = "1.7.8" # final published version of material-icons-extended (artifact frozen)
+workRuntime = "2.11.2"
+dataStore = "1.2.1"
+lifecycleProcess = "2.10.0"
+webkit = "1.16.0"
 protobuf = "0.10.0"
-protobufJavaLite = "4.26.1"
-litertlm = "0.12.0"
-commonmark = "1.0.0-alpha02"
-richtext = "1.0.0-alpha02"
-playServicesTfliteJava = "16.4.0"
-playServicesTfliteGpu= "16.4.0"
-cameraX = "1.4.2"
+protobufJavaLite = "4.35.0" # keep in lockstep with the protoc pin in app/build.gradle.kts (reads this version)
+litertlm = "0.13.1"
+commonmark = "1.0.0-alpha05" # library publishes alphas only
+richtext = "1.0.0-alpha05" # library publishes alphas only
+playServicesTfliteJava = "16.5.0"
+playServicesTfliteGpu = "16.5.0"
+cameraX = "1.6.1"
 netOpenidAppauth = "0.11.1"
-splashscreen = "1.2.0-beta01"
-hilt = "2.59"
-hiltNavigation = "1.3.0"
-ossLicenses = "0.10.8"
-playServicesOssLicenses = "17.1.0"
-googleService = "4.4.3"
-firebaseBom = "33.16.0"
-exifinterface = "1.4.1"
-securityCrypto = "1.1.0"
-moshi = "1.15.2"
-ksp = "2.3.6"
+splashscreen = "1.2.0"
+hilt = "2.59.2"
+hiltNavigation = "1.3.0" # 1.4.x is still rc
+ossLicenses = "0.12.0"
+playServicesOssLicenses = "17.5.1"
+googleService = "4.4.4"
+firebaseBom = "34.14.1"
+exifinterface = "1.4.2"
+securityCrypto = "1.1.0" # legacy READ-ONLY: migration reader for pre-Tink blobs (see EncryptedBlobStore)
+tink = "1.21.0"
+ksp = "2.3.9" # KSP 2.3.9 line pairs with AGP 9.x (2.3.6 was the AGP 8.x pairing)
 mlkit-genai-prompt = "1.0.0-beta2"  # Ref: https://developers.google.com/ml-kit/genai/prompt/android/get-started#configure-project
-mcp = "0.8.0"
-ktor = "3.4.3"
-sherpaOnnx = "1.13.2"
-onnxruntimeAndroid = "1.24.3"
+mcp = "0.13.0"
+ktor = "3.5.0"
+sherpaOnnx = "1.13.2" # local AAR; pairs with the onnxruntimeAndroid pin below
+onnxruntimeAndroid = "1.24.3" # PINNED: sherpa-onnx 1.13.2 JNI imports OrtGetApiBase@VERS_1.24.3 (see app/build.gradle.kts packaging pickFirst)
 vosk = "0.3.75"
 playServicesNearby = "19.3.0"
-commonsCompress = "1.26.1"
-mockitoKotlin = "5.4.0"
-kotest = "5.9.1"
+commonsCompress = "1.28.0"
+mockitoKotlin = "6.3.0"
+kotest = "6.1.11"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -62,6 +64,7 @@ androidx-lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lif
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
 androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
+tink-android = { group = "com.google.crypto.tink", name = "tink-android", version.ref = "tink" }
 androidx-ui = { group = "androidx.compose.ui", name = "ui" }
 androidx-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 androidx-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
@@ -71,7 +74,6 @@ androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit
 androidx-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-material3-adaptive = { group = "androidx.compose.material3.adaptive", name = "adaptive", version.ref = "material3Adaptive" }
 androidx-compose-navigation = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation" }
-kotlin-reflect = { group = "org.jetbrains.kotlin", name = "kotlin-reflect", version.ref = "kotlin" }
 # Unshaded since Dagger 2.57: supply the metadata reader matching the Kotlin compiler so Hilt's KSP
 # processor can parse Kotlin 2.4.0 class metadata (Hilt's bundled reader maxes at 2.3.0).
 kotlin-metadata-jvm = { group = "org.jetbrains.kotlin", name = "kotlin-metadata-jvm", version.ref = "kotlin" }
@@ -79,7 +81,6 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 material-icon-extended = { group = "androidx.compose.material", name = "material-icons-extended", version.ref = "materialIconExtended" }
 androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workRuntime" }
 androidx-datastore = { group = "androidx.datastore", name = "datastore", version.ref = "dataStore" }
-com-google-code-gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 androidx-lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-process", version.ref = "lifecycleProcess" }
 androidx-webkit = { group = "androidx.webkit", name = "webkit", version.ref = "webkit"}
 litertlm = { group = "com.google.ai.edge.litertlm", name = "litertlm-android", version.ref = "litertlm" }
@@ -106,8 +107,6 @@ firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.r
 firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics" }
 firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
 androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
-moshi-kotlin = { group = "com.squareup.moshi", name = "moshi-kotlin", version.ref = "moshi" }
-moshi-kotlin-codegen = { group = "com.squareup.moshi", name = "moshi-kotlin-codegen", version.ref = "moshi" }
 mlkit-genai-prompt = { group = "com.google.mlkit", name = "genai-prompt", version.ref = "mlkit-genai-prompt" }
 mcp-kotlin-sdk = { group = "io.modelcontextprotocol", name = "kotlin-sdk", version.ref = "mcp" }
 ktor-client-android = { group = "io.ktor", name = "ktor-client-android", version.ref = "ktor" }
@@ -118,7 +117,6 @@ vosk-android = { module = "com.alphacephei:vosk-android", version.ref = "vosk" }
 play-services-nearby = { group = "com.google.android.gms", name = "play-services-nearby", version.ref = "playServicesNearby" }
 commons-compress = { group = "org.apache.commons", name = "commons-compress", version.ref = "commonsCompress" }
 mockito-kotlin = { group = "org.mockito.kotlin", name = "mockito-kotlin", version.ref = "mockitoKotlin" }
-kotest-runner-junit4 = { group = "io.kotest", name = "kotest-runner-junit4", version.ref = "kotest" }
 kotest-property = { group = "io.kotest", name = "kotest-property", version.ref = "kotest" }
 
 [plugins]

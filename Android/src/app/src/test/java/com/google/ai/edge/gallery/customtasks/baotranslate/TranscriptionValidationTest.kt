@@ -80,11 +80,11 @@ class TranscriptionValidationTest {
     // word-char negation) in the `^[\s\d\W]+$` noise pattern: a string of only Cyrillic letters
     // contains no ASCII word characters and is therefore rejected as content-free noise.
     @Test
-    fun filler_unicodeCyrillic_currentlyAcceptsButShouldReject() {
-        // Cyrillic-only filler "хмм" is rejected: every Cyrillic letter satisfies the ASCII
-        // `\W` class, so the whole string matches `^[\s\d\W]+$` and is filtered as noise.
+    fun filler_cyrillicHmm_isRejectedAsFiller() {
+        // Cyrillic filler "хмм" is rejected by the filled-pause lexicon (хм+), NOT by the old
+        // ASCII-\W noise bug (which also dropped real Cyrillic words — see nonLatinRealText_isAccepted).
         assertFalse(
-            "Cyrillic 'хмм' must be rejected as content-free noise",
+            "Cyrillic 'хмм' must be rejected as hesitation filler",
             isValidTranscription(CorpusFixture.cyrillicFiller),
         )
     }
@@ -159,5 +159,36 @@ class TranscriptionValidationTest {
     fun longSingleWord_isValid() {
         val long = "a".repeat(200)
         assertTrue(isValidTranscription(long))
+    }
+
+    // ----- Real non-Latin SOURCE text must be ACCEPTED. STT recognizes the speaker's source
+    // language, so Russian/Chinese/Arabic/Hindi/Japanese utterances flow through this filter. A
+    // naive `^[\s\d\W]+$` noise check (ASCII-only \W) would classify whole non-Latin utterances as
+    // "noise" and silently drop them. Pin acceptance for every supported script.
+    @Test
+    fun nonLatinRealText_isAccepted() {
+        assertTrue("Russian", isValidTranscription("привет как дела"))
+        assertTrue("Chinese", isValidTranscription("你好世界"))
+        assertTrue("Arabic", isValidTranscription("مرحبا بالعالم"))
+        assertTrue("Hindi", isValidTranscription("नमस्ते दुनिया"))
+        assertTrue("Japanese", isValidTranscription("こんにちは世界"))
+    }
+
+    // ----- Cross-linguistic filled-pause filler (whole utterance) must be rejected.
+    @Test
+    fun nonEnglishFiller_isRejected() {
+        assertFalse("German äh/ähm", isValidTranscription("äh ähm"))
+        assertFalse("French euh", isValidTranscription("euh euh"))
+        assertFalse("Russian эм/ээ", isValidTranscription("эм ээ"))
+        assertFalse("Russian мм", isValidTranscription("мм"))
+    }
+
+    // ----- Real short non-Latin words must NOT be mistaken for filler (over-rejection guard).
+    @Test
+    fun realShortNonLatinWords_areNotFiller() {
+        assertTrue("Russian да (yes)", isValidTranscription("да"))
+        assertTrue("Russian нет (no)", isValidTranscription("нет"))
+        assertTrue("German ja", isValidTranscription("ja"))
+        assertTrue("French oui", isValidTranscription("oui"))
     }
 }

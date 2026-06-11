@@ -136,6 +136,9 @@ data class CustomColors(
   val linkColor: Color = Color.Transparent,
   val successColor: Color = Color.Transparent,
   val recordButtonBgColor: Color = Color.Transparent,
+  // Content (icon/label) color that contrasts on [recordButtonBgColor]. White on the coral red meets
+  // WCAG AA for large graphics (~3.3:1); the previous onPrimary tint went dark on the coral.
+  val recordButtonOnColor: Color = Color.White,
   val waveFormBgColor: Color = Color.Transparent,
   val modelInfoIconColor: Color = Color.Transparent,
   val warningContainerColor: Color = Color.Transparent,
@@ -200,6 +203,7 @@ val lightCustomColors =
     linkColor = Color(0xFF32628D),
     successColor = Color(0xff3d860b),
     recordButtonBgColor = Color(0xFFEE675C),
+    recordButtonOnColor = Color(0xFFFFFFFF),
     waveFormBgColor = Color(0xFFaaaaaa),
     modelInfoIconColor = Color(0xFFCCCCCC),
     warningContainerColor = Color(0xfffef7e0),
@@ -282,6 +286,7 @@ val darkCustomColors =
     linkColor = Color(0xFF9DCAFC),
     successColor = Color(0xFFA1CE83),
     recordButtonBgColor = Color(0xFFEE675C),
+    recordButtonOnColor = Color(0xFFFFFFFF),
     waveFormBgColor = Color(0xFFaaaaaa),
     modelInfoIconColor = Color(0xFFCCCCCC),
     warningContainerColor = Color(0xff554c33),

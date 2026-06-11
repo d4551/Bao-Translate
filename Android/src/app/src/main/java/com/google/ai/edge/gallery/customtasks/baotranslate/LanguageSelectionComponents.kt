@@ -11,6 +11,9 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
+import com.google.ai.edge.gallery.ui.theme.isReducedMotion
 import androidx.compose.ui.draw.rotate
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -31,6 +34,7 @@ import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
@@ -103,10 +107,16 @@ internal fun LanguageSelectionBar(
         )
         val swapEnabled = sourceLanguage != SupportedLanguages.AUTO.key
         val swapDesc = stringResource(R.string.cd_bao_translate_swap)
+        val reduceMotion = isReducedMotion
         var swapRotation by remember { mutableStateOf(0f) }
-        val animatedRotation by animateFloatAsState(targetValue = swapRotation, label = "swapRotation")
+        // Snap instantly under reduced motion instead of spinning the swap icon.
+        val animatedRotation by animateFloatAsState(
+          targetValue = swapRotation,
+          animationSpec = if (reduceMotion) snap() else spring(),
+          label = "swapRotation",
+        )
         TooltipBox(
-          positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+          positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
           tooltip = { PlainTooltip { Text(stringResource(R.string.bao_translate_tooltip_swap)) } },
           state = rememberTooltipState(isPersistent = true),
         ) {

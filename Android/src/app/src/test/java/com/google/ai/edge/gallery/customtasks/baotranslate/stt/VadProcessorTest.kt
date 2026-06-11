@@ -72,6 +72,20 @@ class VadProcessorTest : BaoStrictTest() {
     assertEquals(1, segments.size)
   }
 
+  // ----- initialize() returns a typed result. With no model present (mock Context), it must NOT
+  // report Initialized, and processAudioSegment must still degrade to energy-based fallback.
+  @Test
+  fun `initialize_withoutModel_isNotInitialized_andFallbackStillWorks`() {
+    val result = vad.initialize()
+    assertTrue(
+      "no VAD model under a mock Context -> ModelUnavailable or Failed, never Initialized; was $result",
+      result is VadInitResult.ModelUnavailable || result is VadInitResult.Failed,
+    )
+    // The energy-fallback contract holds regardless of the init result.
+    val loud = ShortArray(8000) { 4000 }
+    assertEquals(1, vad.processAudioSegment(loud).size)
+  }
+
   // ----- BRUTALISATION -----
 
   // ----- When VAD is not initialized (or model missing), the production code MUST

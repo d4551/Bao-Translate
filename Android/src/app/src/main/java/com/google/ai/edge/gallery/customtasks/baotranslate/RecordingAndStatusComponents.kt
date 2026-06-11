@@ -3,11 +3,6 @@ package com.google.ai.edge.gallery.customtasks.baotranslate
 import android.content.res.Configuration
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -45,13 +40,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -72,6 +66,7 @@ import com.google.ai.edge.gallery.customtasks.baotranslate.audio.WaveformRendere
 import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.customColors
 import com.google.ai.edge.gallery.ui.theme.isReducedMotion
+import com.google.ai.edge.gallery.ui.theme.rememberPulseFloat
 
 @Composable
 internal fun RecordingPulseCircle(
@@ -186,28 +181,10 @@ internal fun RecordingOverlay(
   modifier: Modifier = Modifier,
   onCancel: (() -> Unit)? = null,
 ) {
-  val reduceMotion = isReducedMotion
-  val infiniteTransition = rememberInfiniteTransition(label = "recording_pulse")
-  val pulseAlpha by if (reduceMotion) {
-    remember { mutableStateOf(1f) }
-  } else {
-    infiniteTransition.animateFloat(
-      initialValue = 0.3f,
-      targetValue = 1f,
-      animationSpec = infiniteRepeatable(animation = tween(1000, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
-      label = "pulseAlpha",
-    )
-  }
-  val pulseScale by if (reduceMotion) {
-    remember { mutableStateOf(1f) }
-  } else {
-    infiniteTransition.animateFloat(
-      initialValue = 0.85f,
-      targetValue = 1.15f,
-      animationSpec = infiniteRepeatable(animation = tween(800, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
-      label = "pulseScale",
-    )
-  }
+  val pulseAlpha by rememberPulseFloat(
+    initialValue = 0.3f, targetValue = 1f, durationMillis = 1000, restValue = 1f, label = "recording_pulse_alpha")
+  val pulseScale by rememberPulseFloat(
+    initialValue = 0.85f, targetValue = 1.15f, durationMillis = 800, restValue = 1f, label = "recording_pulse_scale")
 
   val listeningDescription = stringResource(R.string.bao_translate_listening)
   val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -234,7 +211,7 @@ internal fun RecordingOverlay(
           .align(Alignment.TopEnd),
       ) {
         TooltipBox(
-          positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+          positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
           tooltip = { PlainTooltip { Text(stringResource(R.string.bao_translate_dismiss)) } },
           state = rememberTooltipState(),
         ) {

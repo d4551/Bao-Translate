@@ -26,17 +26,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.rememberTooltipState
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import com.google.ai.edge.gallery.ui.theme.rememberPulseFloat
 
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,14 +63,20 @@ internal fun TranscriptList(
   replayMessageId: String? = null,
   sourceLanguage: String = "",
   targetLanguage: String = "",
+  // When true, the newest bubble anchors to the END of the list (next to the control) and the list
+  // grows away from it — the standard chat layout that keeps the latest turn beside the tap-to-talk
+  // button instead of leaving a dead gap between sparse content and the control (used in face-to-face).
+  reverseLayout: Boolean = false,
 ) {
   val latestId = transcripts.lastOrNull()?.id
+  val ordered = if (reverseLayout) transcripts.asReversed() else transcripts
   LazyColumn(
     state = listState, modifier = modifier,
     contentPadding = PaddingValues(vertical = Dimensions.Spacing.small),
     verticalArrangement = Arrangement.spacedBy(if (isTablet) Dimensions.Spacing.medium else Dimensions.Spacing.small),
+    reverseLayout = reverseLayout,
   ) {
-    items(transcripts, key = { it.id }) { message ->
+    items(ordered, key = { it.id }) { message ->
       // Mark only the newest bubble as the live region so TalkBack announces just the latest
       // translation, instead of re-reading the entire visible list on every change.
       val itemModifier = Modifier.animateItem().let {
@@ -116,16 +119,9 @@ internal fun TranscriptEmptyState(
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.medium),
   ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "empty_state_pulse")
-    val pulseScale by infiniteTransition.animateFloat(
-      initialValue = 1f,
-      targetValue = 1.15f,
-      animationSpec = infiniteRepeatable(
-        animation = tween(1200, easing = LinearEasing),
-        repeatMode = RepeatMode.Reverse,
-      ),
-      label = "emptyPulse",
-    )
+    // Empty-state breathing pulse — reduced-motion-aware via the shared helper.
+    val pulseScale by rememberPulseFloat(
+      initialValue = 1f, targetValue = 1.15f, durationMillis = 1200, restValue = 1f, label = "empty_state_pulse")
 
     Icon(
       imageVector = Icons.Default.Mic,
@@ -265,7 +261,7 @@ internal fun TranslationBubble(
                 }
               }
               TooltipBox(
-                positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+                positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
                 tooltip = { PlainTooltip { Text(stringResource(R.string.cd_bao_translate_replay_audio)) } },
                 state = rememberTooltipState(),
               ) {
@@ -305,7 +301,7 @@ internal fun ConversationModeBadge(
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(Dimensions.Spacing.medium),
+        .padding(start = Dimensions.Spacing.medium, end = Dimensions.Spacing.xs, top = Dimensions.Spacing.xxs, bottom = Dimensions.Spacing.xxs),
       horizontalArrangement = Arrangement.SpaceBetween,
       verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -331,7 +327,7 @@ internal fun ConversationModeBadge(
         )
       }
       TooltipBox(
-        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
         tooltip = { PlainTooltip { Text(stringResource(R.string.bao_translate_exit_conversation)) } },
         state = rememberTooltipState(),
       ) {
