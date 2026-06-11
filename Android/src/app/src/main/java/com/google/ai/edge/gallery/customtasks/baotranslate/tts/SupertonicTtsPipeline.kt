@@ -83,7 +83,9 @@ class SupertonicTtsPipeline(private val context: Context) : TtsEngine {
       val code = normalizeLanguageCode(languageCode)
 
       val genConfig = GenerationConfig(
-        silenceScale = 0f,
+        // sherpa-onnx default (0.2f). 0f scales ALL predicted inter-phrase pause durations to zero,
+        // producing rushed, pause-less "robotic" delivery on the supplemental languages.
+        silenceScale = 0.2f,
         speed = speed,
         sid = 0,
         referenceAudio = floatArrayOf(),

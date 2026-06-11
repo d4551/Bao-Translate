@@ -296,8 +296,17 @@ class VoiceProfileManager(
         peakCount++
       }
     }
-    val durationSec = audioPcm.size.toFloat() / sampleRate
-    val speakingRate = if (durationSec > 0) peakCount / durationSec else 0f
+    // Measure rate over the VOICED span only. Dividing by the TOTAL clip duration counts the
+    // leading/trailing silence of a natural enrollment recording, deflating the estimate into the
+    // slowest bucket and wrongly slowing EVERY synthesized utterance to 0.8x for normal speakers —
+    // heard as draggy, droning "robotic" delivery on all engines/languages while enrolled. Trimming
+    // edge silence (keeping natural internal pauses) measures the speech itself.
+    val hopSec = hopSamples.toFloat() / sampleRate
+    val activeThreshold = medianEnergy * 0.3f
+    val firstVoiced = energies.indexOfFirst { it > activeThreshold }
+    val lastVoiced = energies.indexOfLast { it > activeThreshold }
+    val voicedSpanSec = if (firstVoiced >= 0) (lastVoiced - firstVoiced + 1) * hopSec else 0f
+    val speakingRate = if (voicedSpanSec > 0f) peakCount / voicedSpanSec else 0f
 
     val pitchWindowSamples = (sampleRate * 0.04f).toInt().coerceAtLeast(1)
     val minLag = (sampleRate / 500f).toInt().coerceAtLeast(1)

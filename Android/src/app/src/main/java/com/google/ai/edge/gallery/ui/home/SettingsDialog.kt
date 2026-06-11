@@ -16,10 +16,10 @@
 
 package com.google.ai.edge.gallery.ui.home
 
-import com.google.android.gms.oss.licenses.OssLicensesMenuActivity
+import com.mikepenz.aboutlibraries.ui.compose.android.produceLibraries
+import com.mikepenz.aboutlibraries.ui.compose.m3.LibrariesContainer
 import android.app.UiModeManager
 import android.content.Context
-import android.content.Intent
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -48,6 +49,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MultiChoiceSegmentedButtonRow
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Text
@@ -73,6 +75,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.google.ai.edge.gallery.common.ProjectConfig
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.proto.AccessTokenData
@@ -103,6 +106,7 @@ fun SettingsDialog(
 ) {
   var selectedTheme by remember { mutableStateOf(curThemeOverride) }
   var hfToken by remember { mutableStateOf<AccessTokenData?>(null) }
+  var showLicenses by remember { mutableStateOf(false) }
   LaunchedEffect(modelManagerViewModel) {
     hfToken = withContext(Dispatchers.IO) { modelManagerViewModel.getTokenStatusAndData().data }
   }
@@ -317,15 +321,22 @@ fun SettingsDialog(
               stringResource(R.string.settings_third_party_libraries),
               style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium),
             )
-            OutlinedButton(
-              onClick = {
-                // Create an Intent to launch a license viewer that displays a list of
-                // third-party library names. Clicking a name will show its license content.
-                val intent = Intent(context, OssLicensesMenuActivity::class.java)
-                context.startActivity(intent)
-              }
-            ) {
+            OutlinedButton(onClick = { showLicenses = true }) {
               Text(stringResource(R.string.settings_view_licenses))
+            }
+          }
+
+          // In-app license viewer (AboutLibraries, build-time metadata from R.raw.aboutlibraries) —
+          // replaces the deprecated play-services OssLicensesMenuActivity.
+          if (showLicenses) {
+            Dialog(
+              onDismissRequest = { showLicenses = false },
+              properties = DialogProperties(usePlatformDefaultWidth = false),
+            ) {
+              Surface(modifier = Modifier.fillMaxSize()) {
+                val libraries by produceLibraries(R.raw.aboutlibraries)
+                LibrariesContainer(libraries, Modifier.fillMaxSize())
+              }
             }
           }
 

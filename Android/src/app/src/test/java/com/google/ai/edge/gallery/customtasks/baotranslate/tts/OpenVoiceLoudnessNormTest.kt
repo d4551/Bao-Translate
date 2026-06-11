@@ -41,4 +41,21 @@ class OpenVoiceLoudnessNormTest {
     val silence = FloatArray(256) { 0f }
     assertSame(silence, OpenVoiceVoiceConverter.normalizePeak(silence, 0.95f))
   }
+
+  @Test
+  fun normalizePeak_capsUpwardBoost_soQuietOutputNoiseFloorIsNotAmplified() {
+    // A quiet conversion (peak 0.1) normalized to 0.95 would need x9.5 gain (+19.6 dB), lifting the
+    // decoder's noise floor into audible buzz/hiss. The OUTPUT path caps the boost (here x4 = +12 dB).
+    val quiet = FloatArray(1000) { if (it % 2 == 0) 0.1f else -0.1f }
+    val out = OpenVoiceVoiceConverter.normalizePeak(quiet, targetPeak = 0.95f, maxBoost = 4f)
+    assertEquals("boost must be capped at x4, not 0.95/0.1", 0.4f, peak(out), 1e-4f)
+  }
+
+  @Test
+  fun normalizePeak_capDoesNotAffectAttenuation() {
+    // The cap limits BOOST only; bringing a too-loud buffer DOWN to the target must be unaffected.
+    val loud = FloatArray(100) { if (it == 0) 1.9f else 0.2f }
+    val out = OpenVoiceVoiceConverter.normalizePeak(loud, targetPeak = 0.95f, maxBoost = 4f)
+    assertEquals("attenuation must reach the target exactly", 0.95f, peak(out), 1e-4f)
+  }
 }

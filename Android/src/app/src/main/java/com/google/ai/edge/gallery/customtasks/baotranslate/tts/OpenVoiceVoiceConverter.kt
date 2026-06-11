@@ -61,14 +61,27 @@ class OpenVoiceVoiceConverter {
     private const val CLONE_INPUT_PEAK = 0.95f
     private const val CLONE_OUTPUT_PEAK = 0.95f
 
-    /** Scales [samples] so the absolute peak equals [targetPeak] (consistent playback loudness). */
+    // Upward gain cap for the cloned OUTPUT only (+12 dB): upstream applies NO output gain, so an
+    // unbounded boost of a quiet conversion (e.g. peak 0.15 -> +16 dB) lifts the decoder's noise
+    // floor into audibility as buzz/hiss. The INPUT normalization stays unbounded — the model
+    // expects its base near full scale.
+    private const val OUTPUT_MAX_BOOST = 4f
+
+    /**
+     * Scales [samples] so the absolute peak equals [targetPeak] (consistent playback loudness).
+     * Upward gain is limited to [maxBoost] (default unbounded — required for the model INPUT).
+     */
     @VisibleForTesting
-    internal fun normalizePeak(samples: FloatArray, targetPeak: Float): FloatArray {
+    internal fun normalizePeak(
+      samples: FloatArray,
+      targetPeak: Float,
+      maxBoost: Float = Float.POSITIVE_INFINITY,
+    ): FloatArray {
       if (samples.isEmpty()) return samples
       var peak = 0f
       for (s in samples) peak = maxOf(peak, kotlin.math.abs(s))
       if (peak <= 1e-6f) return samples
-      val gain = targetPeak / peak
+      val gain = (targetPeak / peak).coerceAtMost(maxBoost)
       if (kotlin.math.abs(gain - 1f) < 1e-3f) return samples
       return FloatArray(samples.size) { samples[it] * gain }
     }
@@ -163,7 +176,10 @@ class OpenVoiceVoiceConverter {
     // Defensive: scrub any non-finite the native graph might emit so playback never receives NaN/Inf.
     val clean = if (flat.all { it.isFinite() }) flat else FloatArray(flat.size) { flat[it].takeIf { v -> v.isFinite() } ?: 0f }
     // Normalize the cloned output to a consistent peak so playback loudness matches across languages.
-    return SynthesizedAudio(samples = normalizePeak(clean, CLONE_OUTPUT_PEAK), sampleRate = OV_RATE)
+    return SynthesizedAudio(
+      samples = normalizePeak(clean, CLONE_OUTPUT_PEAK, maxBoost = OUTPUT_MAX_BOOST),
+      sampleRate = OV_RATE,
+    )
   }
 
   fun cleanup() {

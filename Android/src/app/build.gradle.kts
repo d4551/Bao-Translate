@@ -31,7 +31,7 @@ plugins {
   alias(libs.plugins.kotlin.serialization)
   alias(libs.plugins.protobuf)
   alias(libs.plugins.hilt.application)
-  alias(libs.plugins.oss.licenses)
+  alias(libs.plugins.aboutlibraries.android)
   alias(libs.plugins.ksp)
 }
 
@@ -135,7 +135,7 @@ dependencies {
   implementation(libs.protobuf.javalite)
   implementation(libs.hilt.android)
   implementation(libs.hilt.navigation.compose)
-  implementation(libs.play.services.oss.licenses)
+  implementation(libs.aboutlibraries.compose.m3)
   implementation(platform(libs.firebase.bom))
   implementation(libs.firebase.analytics)
   implementation(libs.firebase.messaging)

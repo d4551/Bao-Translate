@@ -26,6 +26,25 @@ class AudioResamplerTest {
     return sqrt(s1 * s1 + s2 * s2 - coeff * s1 * s2) / x.size
   }
 
+  // ----- ROBOTIC-VOICE REGRESSION PIN: the former lowpass + 2-point LINEAR interpolation left the
+  // triangle kernel's spectral image of an 8 kHz tone (24k -> 22.05k, the Kokoro->OpenVoice clone
+  // feed) folding back in-band at ~6.05 kHz at only ~-15 dB — audible inharmonic METALLIC grit on
+  // sibilants. The windowed-sinc fractional kernel must keep that image below -50 dB relative to
+  // the preserved tone.
+  @Test
+  fun `downsample_24kTo22_05k_8kHzTone_leavesNoAudibleFoldedImage`() {
+    val src = tone(8000.0, 24000, 48000)
+    val out = AudioResampler.resample(src, 24000, 22050)
+    val kept = mag(out, 8000.0, 22050)
+    val image = mag(out, 6050.0, 22050)
+    assertTrue("8kHz tone lost in 24k->22.05k resample (mag=$kept)", kept > 0.25)
+    assertTrue(
+      "linear-interp imaging regression: folded image at 6.05kHz must be < -50 dB of the tone " +
+        "(tone=$kept image=$image ratio=${image / kept})",
+      image < kept * 0.003,
+    )
+  }
+
   @Test
   fun `output length scales with rate ratio`() {
     val out = AudioResampler.resample(FloatArray(24000) { 0f }, 24000, 22050)

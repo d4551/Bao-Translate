@@ -141,11 +141,11 @@ class BaoTranslateLanguageMatrixE2eTest {
     ensure(ctx, listOf("whisper_base"))
     val cases = listOf(
       RecogCase("en", Locale.US, "Good morning, how are you today?", listOf("morning", "how", "today")),
-      RecogCase("es", Locale("es", "ES"), "Buenos dias, como estas hoy?", listOf("dias", "buenos", "como", "estas")),
+      RecogCase("es", Locale.forLanguageTag("es-ES"), "Buenos dias, como estas hoy?", listOf("dias", "buenos", "como", "estas")),
       RecogCase("fr", Locale.FRANCE, "Bonjour, comment allez-vous aujourd'hui?", listOf("bonjour", "comment", "allez", "vous")),
       RecogCase("de", Locale.GERMANY, "Guten Morgen, wie geht es dir heute?", listOf("morgen", "guten", "geht", "wie")),
       RecogCase("it", Locale.ITALY, "Buongiorno, come stai oggi?", listOf("buongiorno", "come", "stai", "oggi")),
-      RecogCase("ru", Locale("ru", "RU"), "Dobroe utro, kak dela segodnya?", listOf("утро", "добро", "дела"), 'Ѐ'..'ӿ'),
+      RecogCase("ru", Locale.forLanguageTag("ru-RU"), "Dobroe utro, kak dela segodnya?", listOf("утро", "добро", "дела"), 'Ѐ'..'ӿ'),
     )
     val whisperDir = BaoTranslateModelManager.getWhisperModelDir(ctx).absolutePath
     val failures = mutableListOf<String>()
