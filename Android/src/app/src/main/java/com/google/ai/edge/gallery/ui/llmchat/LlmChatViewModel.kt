@@ -50,8 +50,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.cancellation.CancellationException
 
 private const val TAG = "AGLlmChatViewModel"
+private const val MODEL_INSTANCE_WAIT_TIMEOUT_MS = 60_000L
+private const val MODEL_INSTANCE_POLL_INTERVAL_MS = 100L
+private const val MODEL_WARMUP_DELAY_MS = 500L
 
 @OptIn(ExperimentalApi::class)
 open class LlmChatViewModelBase(
@@ -97,12 +102,16 @@ open class LlmChatViewModelBase(
    * @param newPrompt The new system prompt to apply.
    * @param systemPromptUpdatedMessage The message to add to the chat after the system prompt is
    *   updated.
+   * @param supportImage Whether the reset session should be initialized with image input support.
+   * @param supportAudio Whether the reset session should be initialized with audio input support.
    */
   fun applySystemPromptChange(
     task: Task,
     model: Model,
     newPrompt: String,
     systemPromptUpdatedMessage: String,
+    supportImage: Boolean,
+    supportAudio: Boolean,
   ) {
     _uiSystemPrompt.value = newPrompt
     viewModelScope.launch {
@@ -111,8 +120,8 @@ open class LlmChatViewModelBase(
         task = task,
         model = model,
         systemInstruction = Contents.of(newPrompt),
-        supportImage = true,
-        supportAudio = true,
+        supportImage = supportImage,
+        supportAudio = supportAudio,
         onDone = { addMessage(model, ChatMessageInfo(content = systemPromptUpdatedMessage)) },
       )
     }
@@ -126,6 +135,7 @@ open class LlmChatViewModelBase(
     onFirstToken: (Model) -> Unit = {},
     onDone: () -> Unit = {},
     onError: (String) -> Unit,
+    modelInitializationTimeoutMessage: String,
     allowThinking: Boolean = false,
   ) {
     val accelerator = model.getStringConfigValue(key = ConfigKeys.ACCELERATOR, defaultValue = "")
@@ -137,10 +147,23 @@ open class LlmChatViewModelBase(
       addMessage(model = model, message = ChatMessageLoading(accelerator = accelerator))
 
       // Wait for instance to be initialized.
-      while (model.instance == null) {
-        delay(100)
+      val initialized =
+        withTimeoutOrNull(MODEL_INSTANCE_WAIT_TIMEOUT_MS) {
+          while (model.instance == null) {
+            delay(MODEL_INSTANCE_POLL_INTERVAL_MS)
+          }
+          true
+        } == true
+      if (!initialized) {
+        if (getLastMessage(model = model) is ChatMessageLoading) {
+          removeLastMessage(model = model)
+        }
+        setInProgress(false)
+        setPreparing(false)
+        onError(modelInitializationTimeoutMessage)
+        return@launch
       }
-      delay(500)
+      delay(MODEL_WARMUP_DELAY_MS)
 
       // Run inference.
       val audioClips: MutableList<ByteArray> = mutableListOf()
@@ -298,15 +321,15 @@ open class LlmChatViewModelBase(
           coroutineScope = viewModelScope,
           extraContext = extraContext,
         )
-      
-}.onFailure { e ->
-
+      }.onFailure { e ->
+        if (e is CancellationException) {
+          throw e
+        }
         BaoLog.e(TAG, "Error occurred while running inference", e)
         setInProgress(false)
         setPreparing(false)
         onError(e.message ?: "")
-      
-}
+      }
     }
   }
 
@@ -343,7 +366,6 @@ open class LlmChatViewModelBase(
       val maxRetries = 3
       while (retryCount < maxRetries) {
         runCatching {
-
           model.runtimeHelper.resetConversation(
             model = model,
             supportImage = supportImage,
@@ -354,16 +376,17 @@ open class LlmChatViewModelBase(
             initialMessages = initialMessages,
           )
           break
-        
-}.onFailure { e ->
+        }.onFailure { e ->
+          if (e is CancellationException) {
+            throw e
+          }
           retryCount++
           BaoLog.e(TAG, "Failed to reset session (attempt $retryCount/$maxRetries)", e)
           if (retryCount >= maxRetries) {
             BaoLog.e(TAG, "Max retries reached for resetSession, giving up", e)
             break
           }
-        
-}
+        }
         delay(200)
       }
       setIsResettingSession(false)
@@ -375,12 +398,21 @@ open class LlmChatViewModelBase(
     model: Model,
     message: ChatMessageText,
     onError: (String) -> Unit,
+    modelInitializationTimeoutMessage: String,
     allowThinking: Boolean = false,
   ) {
     viewModelScope.launch(Dispatchers.Default) {
       // Wait for model to be initialized.
-      while (model.instance == null) {
-        delay(100)
+      val initialized =
+        withTimeoutOrNull(MODEL_INSTANCE_WAIT_TIMEOUT_MS) {
+          while (model.instance == null) {
+            delay(MODEL_INSTANCE_POLL_INTERVAL_MS)
+          }
+          true
+        } == true
+      if (!initialized) {
+        onError(modelInitializationTimeoutMessage)
+        return@launch
       }
 
       // Clone the clicked message and add it.
@@ -391,6 +423,7 @@ open class LlmChatViewModelBase(
         model = model,
         input = message.content,
         onError = onError,
+        modelInitializationTimeoutMessage = modelInitializationTimeoutMessage,
         allowThinking = allowThinking,
       )
     }
@@ -402,6 +435,8 @@ open class LlmChatViewModelBase(
     model: Model,
     modelManagerViewModel: ModelManagerViewModel,
     errorMessage: String,
+    sessionReinitializedMessage: String,
+    sessionReinitializationFailedMessage: String,
   ) {
     // Remove the "loading" message.
     if (getLastMessage(model = model) is ChatMessageLoading) {
@@ -426,13 +461,13 @@ open class LlmChatViewModelBase(
               // Add a warning message for re-initializing the session.
               addMessage(
                 model = model,
-                message = ChatMessageWarning(content = "Session re-initialized"),
+                message = ChatMessageWarning(content = sessionReinitializedMessage),
               )
             },
             onError = {
               addMessage(
                 model = model,
-                message = ChatMessageError(content = "Failed to re-initialize session"),
+                message = ChatMessageError(content = sessionReinitializationFailedMessage),
               )
             },
           )

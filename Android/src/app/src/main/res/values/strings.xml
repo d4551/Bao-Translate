@@ -106,6 +106,9 @@
   <string name="chat_textinput_placeholder">Type message…</string>
   <string name="chat_you">You</string>
   <string name="chat_llm_agent_name">LLM</string>
+  <string name="chat_error_model_initialization_timeout">Model initialization timed out. Check the model status and try again.</string>
+  <string name="chat_session_reinitialized">Session re-initialized</string>
+  <string name="chat_session_reinitialization_failed">Failed to re-initialize session</string>
   <string name="show_thinking">Show thinking</string>
   <string name="checking_access">Checking access...</string>
   <string name="close">Close</string>
@@ -920,10 +923,6 @@
   <string name="bao_error_license_required">License required. Visit the model page and accept the license first.</string>
   <string name="bao_error_model_not_found">Model not found at %1$s</string>
   <string name="bao_error_incomplete_download">Incomplete download: %1$d/%2$d bytes</string>
-
-  <!-- OSS Licenses -->
-  <string name="oss_licenses_menu_title">Open Source Licenses</string>
-  <string name="oss_licenses_title">License Details</string>
 
   <!-- Accessibility -->
   <string name="cd_toggle_skill">Toggle %1$s</string>

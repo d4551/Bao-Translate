@@ -4,6 +4,7 @@
 # Android / Gradle build output
 build/
 .gradle/
+.gradle-local/
 .cxx/
 .externalNativeBuild/
 captures/

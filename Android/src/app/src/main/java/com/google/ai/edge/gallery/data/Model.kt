@@ -349,7 +349,7 @@ data class Model(
   fun preProcess() {
     val configValues: MutableMap<String, Any> = mutableMapOf()
     for (config in this.configs) {
-      configValues[config.key.label] = config.defaultValue
+      configValues[config.key.label] = config.defaultValue.rawValue()
     }
     this.configValues = configValues
     this.totalBytes = this.sizeInBytes + this.extraDataFiles.sumOf { it.sizeInBytes }

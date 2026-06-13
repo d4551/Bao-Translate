@@ -15,15 +15,12 @@
  limitations under the License.
 -->
 
-<resources xmlns:tools="http://schemas.android.com/tools">
+<resources>
   <style name="Theme.Gallery.SplashScreen" parent="Theme.SplashScreen">
     <!-- Surface (surfaceDark) so the splash matches the post-splash window with no color seam -->
     <item name="windowSplashScreenBackground">#FF131314</item>
     <!-- Icon carries the brand: character on a baked blue disc (legible on any surface) -->
     <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_splash</item>
     <item name="postSplashScreenTheme">@style/Theme.Gallery</item>
-  </style>
-  <style name="Theme.Gallery.OssLicenses" parent="Theme.AppCompat">
-    <item name="android:windowOptOutEdgeToEdgeEnforcement" tools:targetApi="35">true</item>
   </style>
 </resources>

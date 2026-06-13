@@ -39,14 +39,71 @@ sealed interface ConfigValue {
     /** Adapt an untyped value (e.g. from a JSON map) into a [ConfigValue] of [valueType]. */
     fun from(value: Any?, valueType: ValueType): ConfigValue =
       when (valueType) {
-        ValueType.INT -> IntValue((value as? Int) ?: (value as? Long)?.toInt() ?: 0)
-        ValueType.FLOAT -> FloatValue((value as? Float) ?: (value as? Double)?.toFloat() ?: 0f)
-        ValueType.DOUBLE -> DoubleValue((value as? Double) ?: (value as? Float)?.toDouble() ?: 0.0)
-        ValueType.STRING -> StringValue(value?.toString() ?: "")
-        ValueType.BOOLEAN -> BooleanValue((value as? Boolean) ?: false)
+        ValueType.INT -> IntValue(value.toConfigInt())
+        ValueType.FLOAT -> FloatValue(value.toConfigFloat())
+        ValueType.DOUBLE -> DoubleValue(value.toConfigDouble())
+        ValueType.STRING -> StringValue(value.toConfigString())
+        ValueType.BOOLEAN -> BooleanValue(value.toConfigBoolean())
       }
   }
 }
+
+private fun Any?.toConfigInt(): Int =
+  when (this) {
+    is ConfigValue.IntValue -> value
+    is ConfigValue.FloatValue -> value.toInt()
+    is ConfigValue.DoubleValue -> value.toInt()
+    is Number -> toInt()
+    is String -> toIntOrNull() ?: 0
+    else -> 0
+  }
+
+private fun Any?.toConfigFloat(): Float =
+  when (this) {
+    is ConfigValue.IntValue -> value.toFloat()
+    is ConfigValue.FloatValue -> value
+    is ConfigValue.DoubleValue -> value.toFloat()
+    is Number -> toFloat()
+    is String -> toFloatOrNull() ?: 0f
+    else -> 0f
+  }
+
+private fun Any?.toConfigDouble(): Double =
+  when (this) {
+    is ConfigValue.IntValue -> value.toDouble()
+    is ConfigValue.FloatValue -> value.toDouble()
+    is ConfigValue.DoubleValue -> value
+    is Number -> toDouble()
+    is String -> toDoubleOrNull() ?: 0.0
+    else -> 0.0
+  }
+
+private fun Any?.toConfigString(): String =
+  when (this) {
+    is ConfigValue.IntValue -> value.toString()
+    is ConfigValue.FloatValue -> value.toString()
+    is ConfigValue.DoubleValue -> value.toString()
+    is ConfigValue.StringValue -> value
+    is ConfigValue.BooleanValue -> value.toString()
+    else -> this?.toString() ?: ""
+  }
+
+private fun Any?.toConfigBoolean(): Boolean =
+  when (this) {
+    is ConfigValue.BooleanValue -> value
+    is Boolean -> this
+    is String -> equals("true", ignoreCase = true)
+    else -> false
+  }
+
+fun ConfigValue.rawValue(): Any =
+  when (this) {
+    is ConfigValue.IntValue -> value
+    is ConfigValue.FloatValue -> value
+    is ConfigValue.DoubleValue -> value
+    is ConfigValue.StringValue -> value
+    is ConfigValue.BooleanValue -> value
+  }
 
 /**
  * The types of configuration editors available.

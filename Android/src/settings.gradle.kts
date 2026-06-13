@@ -29,7 +29,7 @@ pluginManagement {
 }
 
 plugins {
-  // Auto-provision JDK toolchains (compile @ 17, daemon may run on JDK 26).
+  // Auto-provision JDK toolchains (JDK 26 host, Java 17 bytecode).
   // Ref: https://developer.android.com/build/jdks#toolchain
   id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }

@@ -126,6 +126,8 @@ class LlmChatTask @Inject constructor() : CustomTask {
           model = selectedModel,
           newPrompt = newPrompt,
           systemPromptUpdatedMessage = systemPromptUpdatedMessage,
+          supportImage = false,
+          supportAudio = false,
         )
       },
       emptyStateComposable = {
@@ -228,6 +230,8 @@ class LlmAskImageTask @Inject constructor() : CustomTask {
           model = selectedModel,
           newPrompt = newPrompt,
           systemPromptUpdatedMessage = systemPromptUpdatedMessage,
+          supportImage = true,
+          supportAudio = false,
         )
       },
     )
@@ -313,6 +317,8 @@ class LlmAskAudioTask @Inject constructor() : CustomTask {
           model = selectedModel,
           newPrompt = newPrompt,
           systemPromptUpdatedMessage = systemPromptUpdatedMessage,
+          supportImage = false,
+          supportAudio = true,
         )
       },
     )

@@ -161,7 +161,7 @@ Build notes:
 - `versionName = 1.0.15`; `versionCode = 33`.
 - `compileSdk = 37`; `minSdk = 31`; `targetSdk = 35`.
 - The wrapper uses Gradle 9.5.1 with AGP 9.2.1 and Kotlin 2.4.0.
-- Gradle toolchains provision JDK 26 for compilation and emit Java 17 bytecode.
+- Gradle toolchains use JDK 26 for compilation and emit Java 17 bytecode.
 - The vendored `sherpa-onnx` AAR lives under `Android/src/app/libs/`.
 - `sherpa-onnx` and `onnxruntime-android` both ship `libonnxruntime.so`; packaging keeps one shared object with `jniLibs.pickFirsts`.
 

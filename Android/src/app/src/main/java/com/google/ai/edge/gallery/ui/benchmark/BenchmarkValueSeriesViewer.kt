@@ -44,18 +44,19 @@ import androidx.compose.ui.graphics.PathEffect.Companion.dashPathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.proto.ValueSeries
 import com.google.ai.edge.gallery.ui.theme.customColors
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BenchmarkValueSeriesViewer(title: String, valueSeries: ValueSeries, onDismiss: () -> Unit) {
   val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+  val locale = LocalLocale.current.platformLocale
 
   ModalBottomSheet(
     onDismissRequest = onDismiss,
@@ -87,7 +88,7 @@ fun BenchmarkValueSeriesViewer(title: String, valueSeries: ValueSeries, onDismis
             if (tappedValue == null) {
               stringResource(R.string.tap_to_see_value)
             } else {
-              "Value: ${String.format(Locale.getDefault(), "%.2f", tappedValue)}"
+              "Value: ${String.format(locale, "%.2f", tappedValue)}"
             },
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -204,9 +205,10 @@ fun BenchmarkValueSeriesViewer(title: String, valueSeries: ValueSeries, onDismis
 
 @Composable
 private fun StatCell(key: String, value: Double) {
+  val locale = LocalLocale.current.platformLocale
   Column() {
     Text(
-      String.format(Locale.getDefault(), "%.2f", value),
+      String.format(locale, "%.2f", value),
       style = MaterialTheme.typography.labelMedium,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
       maxLines = 1,

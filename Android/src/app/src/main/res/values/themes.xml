@@ -15,7 +15,7 @@
  limitations under the License.
 -->
 
-<resources xmlns:tools="http://schemas.android.com/tools">
+<resources>
   <style name="Theme.Gallery" parent="android:Theme.Material.Light.NoActionBar">
       <!-- Match the app surface so the pre-Compose launch frame doesn't flash white -->
       <item name="android:windowBackground">@color/launch_window_background</item>
@@ -26,8 +26,5 @@
       <!-- Icon carries the brand: character on a baked blue disc (legible on any surface) -->
       <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_splash</item>
       <item name="postSplashScreenTheme">@style/Theme.Gallery</item>
-  </style>
-  <style name="Theme.Gallery.OssLicenses" parent="Theme.AppCompat.Light.DarkActionBar">
-      <item name="android:windowOptOutEdgeToEdgeEnforcement" tools:targetApi="35">true</item>
   </style>
 </resources>

@@ -326,8 +326,8 @@ fun SettingsDialog(
             }
           }
 
-          // In-app license viewer (AboutLibraries, build-time metadata from R.raw.aboutlibraries) —
-          // replaces the deprecated play-services OssLicensesMenuActivity.
+          // In-app license viewer (AboutLibraries, build-time metadata from R.raw.aboutlibraries)
+          // replaces the deprecated play-services license activities.
           if (showLicenses) {
             Dialog(
               onDismissRequest = { showLicenses = false },

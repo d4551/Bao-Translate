@@ -487,6 +487,8 @@ fun AgentChatScreen(
         model = modelManagerViewModel.uiState.value.selectedModel,
         newPrompt = newPrompt,
         systemPromptUpdatedMessage = systemPromptUpdatedMessage,
+        supportImage = true,
+        supportAudio = true,
       )
     },
     emptyStateComposable = { model ->

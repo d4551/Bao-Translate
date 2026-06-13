@@ -54,7 +54,7 @@ registered via Hilt `@IntoSet` and runs standalone within the app shell.
 cd src
 
 # Toolchain: Gradle 9.5.1 + AGP 9.2.1 + Kotlin 2.4.0 + compileSdk 37.
-# Gradle toolchains provision JDK 26 for compilation and emit Java 17 bytecode.
+# Gradle toolchains use JDK 26 for compilation and emit Java 17 bytecode.
 export PATH="$HOME/Library/Android/sdk/platform-tools:$PATH"
 
 ./gradlew :app:assembleDebug              # build the debug APK

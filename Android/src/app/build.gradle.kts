@@ -35,7 +35,7 @@ plugins {
   alias(libs.plugins.ksp)
 }
 
-// Host JDK 26 compiles Java 17 bytecode for Android (compileSdk 37). No separate JDK 17 install required.
+// Host JDK 26 compiles Java 17 bytecode for Android.
 // Ref: https://developer.android.com/build/jdks#toolchain
 java {
   toolchain {

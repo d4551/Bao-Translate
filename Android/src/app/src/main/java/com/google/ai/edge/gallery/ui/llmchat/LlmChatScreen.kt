@@ -230,6 +230,11 @@ fun ChatViewWrapper(
   val context = LocalContext.current
   val task = modelManagerViewModel.getTaskById(id = taskId) ?: return
   val scope = rememberCoroutineScope()
+  val modelInitializationTimeoutMessage =
+    stringResource(R.string.chat_error_model_initialization_timeout)
+  val sessionReinitializedMessage = stringResource(R.string.chat_session_reinitialized)
+  val sessionReinitializationFailedMessage =
+    stringResource(R.string.chat_session_reinitialization_failed)
 
   ChatView(
     task = task,
@@ -272,8 +277,11 @@ fun ChatViewWrapper(
               model = model,
               errorMessage = errorMessage,
               modelManagerViewModel = modelManagerViewModel,
+              sessionReinitializedMessage = sessionReinitializedMessage,
+              sessionReinitializationFailedMessage = sessionReinitializationFailedMessage,
             )
           },
+          modelInitializationTimeoutMessage = modelInitializationTimeoutMessage,
           allowThinking = task.allowCapability(ModelCapability.LLM_THINKING, model),
         )
 
@@ -311,8 +319,11 @@ fun ChatViewWrapper(
               model = model,
               errorMessage = errorMessage,
               modelManagerViewModel = modelManagerViewModel,
+              sessionReinitializedMessage = sessionReinitializedMessage,
+              sessionReinitializationFailedMessage = sessionReinitializationFailedMessage,
             )
           },
+          modelInitializationTimeoutMessage = modelInitializationTimeoutMessage,
           allowThinking = task.allowCapability(ModelCapability.LLM_THINKING, model),
         )
       }
