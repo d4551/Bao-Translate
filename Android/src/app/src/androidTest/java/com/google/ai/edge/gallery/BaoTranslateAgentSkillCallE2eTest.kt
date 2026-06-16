@@ -29,10 +29,12 @@ import com.google.ai.edge.gallery.customtasks.agentchat.DEFAULT_SYSTEM_PROMPT_SK
 import com.google.ai.edge.gallery.customtasks.agentchat.SkillManagerViewModel
 import com.google.ai.edge.gallery.customtasks.agentchat.injectSkillsAndMcpTools
 import com.google.ai.edge.gallery.customtasks.baotranslate.BaoTranslateModelManager
+import com.google.ai.edge.gallery.customtasks.baotranslate.ModelStatus
 import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.DefaultDataStoreRepository
 import com.google.ai.edge.gallery.proto.Skill
 import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.Capabilities
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
@@ -41,6 +43,7 @@ import com.google.ai.edge.litertlm.ExperimentalFlags
 import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.tool
 import java.io.File
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -70,9 +73,20 @@ class BaoTranslateAgentSkillCallE2eTest {
         BaoTranslateModelManager.getTranslationModelDir(context, "gemma4_e2b"),
         "gemma-4-E2B-it.litertlm",
       )
+    if (BaoTranslateModelManager.checkModelStatus(context, "gemma4_e2b") != ModelStatus.Ready) {
+      val result =
+        runBlocking { BaoTranslateModelManager.downloadModel(context, "gemma4_e2b", wifiOnly = false) }
+      assertTrue(
+        "Failed to provision agent model gemma4_e2b at ${gemma.absolutePath}: " +
+          result.exceptionOrNull()?.message,
+        result.isSuccess,
+      )
+    }
+    val gemmaStatus = BaoTranslateModelManager.checkModelStatus(context, "gemma4_e2b")
     assertTrue(
-      "Agent model gemma4_e2b not provisioned at ${gemma.absolutePath}",
-      gemma.exists() && gemma.length() > 0,
+      "Agent model gemma4_e2b was not ready after provisioning at ${gemma.absolutePath}; " +
+        "status=$gemmaStatus bytes=${gemma.length()}",
+      gemmaStatus == ModelStatus.Ready,
     )
 
     // Real AgentTools with a real SkillManagerViewModel (unique temp DataStores so we don't collide
@@ -121,17 +135,41 @@ class BaoTranslateAgentSkillCallE2eTest {
           cacheDir = context.cacheDir.absolutePath,
         )
       )
-    engine.initialize()
-    ExperimentalFlags.enableConversationConstrainedDecoding = true
-    val conversation =
-      engine.createConversation(
-        ConversationConfig(
-          samplerConfig = SamplerConfig(topK = 64, topP = 0.95, temperature = 1.0),
-          systemInstruction = systemInstruction,
-          tools = listOf(tool(agentTools)),
+    val supportsSpeculativeDecoding =
+      runCatching {
+          Capabilities(gemma.absolutePath).use { it.hasSpeculativeDecodingSupport() }
+        }
+        .getOrDefault(false)
+    val initResult =
+      runCatching {
+        ExperimentalFlags.enableSpeculativeDecoding = supportsSpeculativeDecoding
+        engine.initialize()
+      }
+    ExperimentalFlags.enableSpeculativeDecoding = false
+    if (initResult.isFailure) runCatching { engine.close() }
+    assertTrue(
+      "Failed to initialize Gemma agent engine; speculative=$supportsSpeculativeDecoding: " +
+        initResult.exceptionOrNull()?.message,
+      initResult.isSuccess,
+    )
+
+    val conversationResult =
+      runCatching {
+        ExperimentalFlags.enableConversationConstrainedDecoding = true
+        engine.createConversation(
+          ConversationConfig(
+            samplerConfig = SamplerConfig(topK = 64, topP = 0.95, temperature = 1.0),
+            systemInstruction = systemInstruction,
+            tools = listOf(tool(agentTools)),
+          )
         )
-      )
+      }
     ExperimentalFlags.enableConversationConstrainedDecoding = false
+    assertTrue(
+      "Failed to create Gemma agent conversation: ${conversationResult.exceptionOrNull()?.message}",
+      conversationResult.isSuccess,
+    )
+    val conversation = conversationResult.getOrThrow()
 
     val response = conversation.sendMessage("Calculate the SHA-1 hash of the text: hello")
     Log.i("AgentSkillCallTest", "AGENT_RESPONSE=$response")

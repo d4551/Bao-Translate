@@ -54,12 +54,15 @@ class VoskStreamingPipeline(private val modelDir: String) : StreamingCaptioner {
       }
       // Model()/Recognizer() declare IOException and can fail on a corrupt model; route that to a
       // null captioner (the read loop falls back to chunked-Whisper) instead of crashing the load.
+      var openedModel: Model? = null
       val built =
         runCatching {
             val m = Model(modelDir)
+            openedModel = m
             m to Recognizer(m, SAMPLE_RATE)
           }
           .getOrElse { e ->
+            openedModel?.close()
             BaoLog.w(TAG, "Vosk model failed to load from $modelDir: ${e.message}")
             return false
           }
@@ -83,10 +86,15 @@ class VoskStreamingPipeline(private val modelDir: String) : StreamingCaptioner {
 
   override fun release(): Unit =
     synchronized(lock) {
-      recognizer?.close()
-      model?.close()
+      val rec = recognizer
+      val mdl = model
       recognizer = null
       model = null
+      try {
+        rec?.close()
+      } finally {
+        mdl?.close()
+      }
     }
 
   // Vosk getPartialResult() returns {"partial" : "recognized text"}. Pull the field by hand: a pure

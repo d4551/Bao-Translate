@@ -4,6 +4,7 @@ import android.content.Context
 import com.google.ai.edge.gallery.common.BaoLog
 import com.google.ai.edge.gallery.R
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -62,6 +63,9 @@ object BaoTranslateModelManager {
   private const val SHERPA_ONNX_DIR = "sherpa_onnx_models"
   private const val TRANSLATION_DIR = "translation_models"
   private const val VERSION_FILE = "version.json"
+  private const val MODEL_DOWNLOAD_CONNECT_TIMEOUT_MS = 30_000
+  private const val MODEL_DOWNLOAD_READ_TIMEOUT_MS = 300_000
+  private const val MODEL_DOWNLOAD_MAX_ATTEMPTS = 5
   // English streaming-caption model — the SINGLE source of its name/URL, referenced by the ARCHIVES
   // download spec, the dir helper, and the CAPTION_MODELS["en"] entry (previously triplicated literals).
   private const val STREAMING_ASR_DIR = "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17"
@@ -707,25 +711,32 @@ object BaoTranslateModelManager {
       updateStatus(spec.modelId, ModelStatus.Downloading(0f, 0L, spec.sizeBytes))
       val baseDir = getSherpaOnnxDir(context)
       val archiveFile = File(baseDir, spec.archiveFileName)
+      val extractDir = File(baseDir, spec.extractDirName)
 
       val result =
         runCatchingCancellable {
-            if (!archiveFile.exists()) {
-              val dl =
-                downloadFileWithProgress(
-                  context,
-                  spec.downloadUrl,
-                  archiveFile,
-                  spec.sizeBytes,
-                  spec.sizeBytes,
-                ) { downloaded, total ->
-                  val progress = if (total > 0) downloaded.toFloat() / total else 0f
-                  updateStatus(spec.modelId, ModelStatus.Downloading(progress, downloaded, total))
-                }
-              if (dl.isFailure) {
-                archiveFile.delete()
-                return@runCatchingCancellable dl
+            // We are here only because the caption model is NOT ready. A leftover ZIP and partial
+            // extraction can only be trusted after the readiness check passes; otherwise a killed
+            // download/extract would make the next run reuse a truncated archive forever.
+            if (archiveFile.exists()) {
+              BaoLog.w(TAG, "${spec.modelId}: stale caption archive from an interrupted run; re-downloading clean")
+              archiveFile.delete()
+              extractDir.deleteRecursively()
+            }
+            val dl =
+              downloadFileWithProgress(
+                context,
+                spec.downloadUrl,
+                archiveFile,
+                spec.sizeBytes,
+                spec.sizeBytes,
+              ) { downloaded, total ->
+                val progress = if (total > 0) downloaded.toFloat() / total else 0f
+                updateStatus(spec.modelId, ModelStatus.Downloading(progress, downloaded, total))
               }
+            if (dl.isFailure) {
+              archiveFile.delete()
+              return@runCatchingCancellable dl
             }
             updateStatus(spec.modelId, ModelStatus.Extracting)
             if (hasSymlinks(baseDir)) {
@@ -910,7 +921,6 @@ object BaoTranslateModelManager {
     }
 
     if (downloadResult.isFailure) {
-      targetFile.delete()
       return@withContext downloadResult
     }
 
@@ -984,6 +994,46 @@ object BaoTranslateModelManager {
     reserveExtraBytes: Long = 0L,
     onProgress: (downloaded: Long, total: Long) -> Unit,
   ): Result<Unit> = withContext(Dispatchers.IO) {
+    var attempt = 1
+    var lastFailure: Throwable? = null
+    while (attempt <= MODEL_DOWNLOAD_MAX_ATTEMPTS) {
+      val result =
+        runCatchingCancellable {
+            downloadFileWithProgressAttempt(
+              context,
+              url,
+              targetFile,
+              expectedSize,
+              reserveExtraBytes,
+              onProgress,
+            )
+          }
+          .getOrElse { Result.failure(it) }
+      if (result.isSuccess) return@withContext result
+
+      lastFailure = result.exceptionOrNull()
+      if (attempt < MODEL_DOWNLOAD_MAX_ATTEMPTS) {
+        val retryDelayMs = attempt * 1_000L
+        BaoLog.w(
+          TAG,
+          "Download attempt $attempt/$MODEL_DOWNLOAD_MAX_ATTEMPTS failed for $url: " +
+            "${lastFailure?.message}; retrying with resume in ${retryDelayMs}ms",
+        )
+        delay(retryDelayMs)
+      }
+      attempt += 1
+    }
+    Result.failure(lastFailure ?: Exception("Download failed for $url"))
+  }
+
+  private suspend fun downloadFileWithProgressAttempt(
+    context: Context,
+    url: String,
+    targetFile: File,
+    expectedSize: Long,
+    reserveExtraBytes: Long = 0L,
+    onProgress: (downloaded: Long, total: Long) -> Unit,
+  ): Result<Unit> = withContext(Dispatchers.IO) {
     BaoLog.i(TAG, "Downloading $url")
     val parentDir = targetFile.parentFile
     parentDir?.mkdirs()
@@ -1011,6 +1061,8 @@ object BaoTranslateModelManager {
     val connection = com.google.ai.edge.gallery.common.network.HttpClient.openConnectionWithHeaders(
       url = parsedUrl,
       headers = if (resumeFrom > 0) mapOf("Range" to "bytes=$resumeFrom-") else emptyMap(),
+      connectTimeout = MODEL_DOWNLOAD_CONNECT_TIMEOUT_MS,
+      readTimeout = MODEL_DOWNLOAD_READ_TIMEOUT_MS,
     )
     connection.instanceFollowRedirects = true
 

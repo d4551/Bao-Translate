@@ -1142,6 +1142,7 @@ constructor(
           BuiltInTaskId.LLM_ASK_IMAGE,
           BuiltInTaskId.LLM_ASK_AUDIO,
           BuiltInTaskId.LLM_PROMPT_LAB,
+          BuiltInTaskId.LLM_AGENT_CHAT,
         )
     }
     val model =

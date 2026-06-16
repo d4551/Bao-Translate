@@ -124,71 +124,94 @@ object LlmChatModelHelper : LlmModelHelper {
           else null,
       )
 
-    // Check if the model file supports speculative decoding.
     var supportsSpeculativeDecoding = false
-    // Check if the model file supports speculative decoding.
     runCatching {
-
-      com.google.ai.edge.litertlm.Capabilities(modelPath).use {
-        supportsSpeculativeDecoding = it.hasSpeculativeDecodingSupport()
+        com.google.ai.edge.litertlm.Capabilities(modelPath).use {
+          supportsSpeculativeDecoding = it.hasSpeculativeDecodingSupport()
+        }
       }
-    
-}.onFailure { e ->
-
-      // Ignore exceptions and assume not supported.
-    
-}
-    // Create an instance of LiteRT LM engine and conversation.
-    runCatching {
-
-      var speculativeDecoding = false
-      // Check if the model supports speculative decoding for the given task type and if the
-      // speculative decoding is enabled in the settings.
-      if (
-        supportsSpeculativeDecoding &&
-          model.capabilityToTaskTypes[ModelCapability.SPECULATIVE_DECODING]?.contains(taskId) ==
-            true
-      ) {
-        speculativeDecoding =
-          model.getBooleanConfigValue(
-            key = ConfigKeys.ENABLE_SPECULATIVE_DECODING,
-            defaultValue = false,
-          )
+      .onFailure { e ->
+        BaoLog.w(TAG, "Failed to inspect LiteRT-LM capabilities for '${model.name}': ${e.message}")
       }
-      ExperimentalFlags.enableSpeculativeDecoding = speculativeDecoding
-      BaoLog.d(TAG, "Speculative decoding enabled: $speculativeDecoding")
-      val engine = Engine(engineConfig)
-      engine.initialize()
-      ExperimentalFlags.enableSpeculativeDecoding = false
 
-      ExperimentalFlags.enableConversationConstrainedDecoding =
-        enableConversationConstrainedDecoding
-      val conversation =
-        engine.createConversation(
-          ConversationConfig(
-            samplerConfig =
-              if (preferredBackend is Backend.NPU) {
-                null
-              } else {
-                SamplerConfig(
-                  topK = topK,
-                  topP = topP.toDouble(),
-                  temperature = temperature.toDouble(),
-                )
-              },
-            systemInstruction = systemInstruction,
-            tools = tools,
-          )
+    val configuredSpeculativeDecoding =
+      supportsSpeculativeDecoding &&
+        model.capabilityToTaskTypes[ModelCapability.SPECULATIVE_DECODING]?.contains(taskId) == true &&
+        model.getBooleanConfigValue(
+          key = ConfigKeys.ENABLE_SPECULATIVE_DECODING,
+          defaultValue = false,
         )
-      ExperimentalFlags.enableConversationConstrainedDecoding = false
-      model.instance = LlmModelInstance(engine = engine, conversation = conversation)
-    
-}.onFailure { e ->
 
-      onDone(cleanUpMediapipeTaskErrorMessage(e.message ?: "Unknown error"))
-      return
-    
-}
+    fun createModelInstance(speculativeDecoding: Boolean): Result<LlmModelInstance> {
+      var createdEngine: Engine? = null
+      val result =
+        runCatching {
+          ExperimentalFlags.enableSpeculativeDecoding = speculativeDecoding
+          BaoLog.d(TAG, "Speculative decoding enabled: $speculativeDecoding")
+
+          val engine = Engine(engineConfig)
+          createdEngine = engine
+          engine.initialize()
+
+          ExperimentalFlags.enableConversationConstrainedDecoding =
+            enableConversationConstrainedDecoding
+          val conversation =
+            engine.createConversation(
+              ConversationConfig(
+                samplerConfig =
+                  if (preferredBackend is Backend.NPU) {
+                    null
+                  } else {
+                    SamplerConfig(
+                      topK = topK,
+                      topP = topP.toDouble(),
+                      temperature = temperature.toDouble(),
+                    )
+                  },
+                systemInstruction = systemInstruction,
+                tools = tools,
+              )
+            )
+          LlmModelInstance(engine = engine, conversation = conversation)
+        }
+
+      ExperimentalFlags.enableSpeculativeDecoding = false
+      ExperimentalFlags.enableConversationConstrainedDecoding = false
+      result.onFailure {
+        createdEngine?.let { engine ->
+          runCatching { engine.close() }
+            .onFailure { closeError ->
+              BaoLog.e(TAG, "Failed to close engine after initialization failure", closeError)
+            }
+        }
+      }
+      return result
+    }
+
+    val firstInit = createModelInstance(configuredSpeculativeDecoding)
+    val initializedInstance =
+      if (
+        firstInit.isFailure &&
+          !configuredSpeculativeDecoding &&
+          supportsSpeculativeDecoding &&
+          firstInit.exceptionOrNull()?.message?.contains("TF_LITE_PREFILL_DECODE") == true
+      ) {
+        BaoLog.w(
+          TAG,
+          "Model '${model.name}' has no non-speculative prefill/decode signature; " +
+            "retrying with speculative decoding enabled.",
+        )
+        createModelInstance(speculativeDecoding = true)
+      } else {
+        firstInit
+      }
+
+    initializedInstance
+      .onSuccess { model.instance = it }
+      .onFailure { e ->
+        onDone(cleanUpMediapipeTaskErrorMessage(e.message ?: "Unknown error"))
+        return
+      }
     onDone("")
   }
 

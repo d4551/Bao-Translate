@@ -16,7 +16,9 @@
 
 package com.google.ai.edge.gallery
 
+import android.Manifest
 import android.content.Context
+import android.os.Build
 import android.os.SystemClock
 import androidx.annotation.StringRes
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -27,6 +29,7 @@ import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import com.google.ai.edge.gallery.customtasks.baotranslate.BaoTranslateModelManager
 import com.google.ai.edge.gallery.customtasks.baotranslate.BaoTranslateViewModel
+import com.google.ai.edge.gallery.customtasks.baotranslate.PipelineStatus
 import com.google.ai.edge.gallery.customtasks.baotranslate.RecordingController
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioCache
 import com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioDevice
@@ -60,9 +63,30 @@ class BaoTranslatePeerVoiceE2eTest {
   private val device: UiDevice = UiDevice.getInstance(instrumentation)
 
   private fun s(@StringRes id: Int): String = context.getString(id)
+  private fun grantRuntimePermissions() {
+    val permissions =
+      buildList {
+        add(Manifest.permission.RECORD_AUDIO)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+          add(Manifest.permission.BLUETOOTH_SCAN)
+          add(Manifest.permission.BLUETOOTH_CONNECT)
+          add(Manifest.permission.BLUETOOTH_ADVERTISE)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+          add(Manifest.permission.POST_NOTIFICATIONS)
+          add(Manifest.permission.NEARBY_WIFI_DEVICES)
+        } else {
+          add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+      }
+    permissions.forEach { permission ->
+      instrumentation.uiAutomation.grantRuntimePermission(context.packageName, permission)
+    }
+  }
 
   private fun reachReadyScreen(): BaoTranslateViewModel {
     BaoTranslateLiveTestSupport.prepareDevice(context)
+    grantRuntimePermissions()
     BaoTranslateLiveTestSupport.ensureRequiredModelsReady(context)
     runBlocking { BaoTranslateModelManager.downloadModel(context, "openvoice") }
     // Disable system animations so the Compose semantics tree settles and UiAutomator can read it —
@@ -70,8 +94,9 @@ class BaoTranslatePeerVoiceE2eTest {
     listOf("window_animation_scale", "transition_animation_scale", "animator_duration_scale").forEach {
       device.executeShellCommand("settings put global $it 0")
     }
+    BaoTranslateViewModel.testInstance = null
     device.executeShellCommand(
-      "am start -f 0x04000000 -n ${context.packageName}/com.google.ai.edge.gallery.MainActivity"
+      "am start -f 0x10008000 -n ${context.packageName}/com.google.ai.edge.gallery.MainActivity"
     )
     // Drive to the ready Bao Translate screen, tolerant of the entry state — restored state varies
     // (home task grid, the welcome/onboarding sheet, or already-ready) across launches and devices.
@@ -83,7 +108,6 @@ class BaoTranslatePeerVoiceE2eTest {
       if (welcome != null) { welcome.click(); device.waitForIdle(1_000); continue }
       val card =
         device.findObject(By.descContains("Bao Translate task"))
-          ?: device.findObject(By.text(s(R.string.bao_translate)))
       if (card != null) { card.click(); device.waitForIdle(1_000); continue }
       device.findObject(By.scrollable(true))?.scroll(Direction.DOWN, 0.8f)
       device.waitForIdle(1_000)
@@ -98,7 +122,19 @@ class BaoTranslatePeerVoiceE2eTest {
     while (BaoTranslateViewModel.testInstance == null && SystemClock.uptimeMillis() < vmDeadline) {
       SystemClock.sleep(250)
     }
-    return requireNotNull(BaoTranslateViewModel.testInstance) { "ViewModel not created" }
+    val vm = requireNotNull(BaoTranslateViewModel.testInstance) { "ViewModel not created" }
+    val readyDeadline = SystemClock.uptimeMillis() + 60_000
+    while (
+      SystemClock.uptimeMillis() < readyDeadline &&
+        !(vm.uiState.value.modelsReady && vm.uiState.value.pipelineStatus == PipelineStatus.Idle)
+    ) {
+      SystemClock.sleep(250)
+    }
+    assertTrue(
+      "Bao Translate runtime not ready after launch; state=${vm.uiState.value}",
+      vm.uiState.value.modelsReady && vm.uiState.value.pipelineStatus == PipelineStatus.Idle,
+    )
+    return vm
   }
 
   /** Loads a bundled reference-voice WAV and returns its 256-d OpenVoice speaker embedding. */
@@ -335,11 +371,10 @@ class BaoTranslatePeerVoiceE2eTest {
     try {
       instrumentation.runOnMainSync { vm.startRecording() }
       val recDeadline = SystemClock.uptimeMillis() + 30_000
-      while (!vm.uiState.value.isRecording &&
-        !vm.uiState.value.isStartingRecording &&
-        SystemClock.uptimeMillis() < recDeadline) {
+      while (!vm.uiState.value.isRecording && SystemClock.uptimeMillis() < recDeadline) {
         SystemClock.sleep(200)
       }
+      assertTrue("Injected recording never started; state=${vm.uiState.value}", vm.uiState.value.isRecording)
       SystemClock.sleep(7_000) // let the ~6s prompt feed in full, staying under the 8s window
       instrumentation.runOnMainSync { vm.stopRecording() }
       assertNotNull(
