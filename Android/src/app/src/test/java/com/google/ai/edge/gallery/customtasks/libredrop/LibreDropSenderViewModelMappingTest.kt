@@ -5,6 +5,8 @@
  */
 package com.google.ai.edge.gallery.customtasks.libredrop
 
+import android.content.Context
+import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.customtasks.libredrop.protocol.connection.CancelCause
 import com.google.ai.edge.gallery.customtasks.libredrop.protocol.connection.OutboundConnectionState
 import com.google.ai.edge.gallery.customtasks.libredrop.protocol.connection.OutboundResult
@@ -13,11 +15,29 @@ import com.google.ai.edge.gallery.customtasks.libredrop.protocol.sharing.Connect
 import com.google.ai.edge.gallery.testkit.Strict
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Before
 import org.junit.Test
 import org.junit.experimental.categories.Category
+import org.mockito.kotlin.any
+import org.mockito.kotlin.eq
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.whenever
 
 @Category(Strict::class)
 class LibreDropSenderViewModelMappingTest {
+
+  private lateinit var context: Context
+
+  @Before
+  fun setUp() {
+    context = mock()
+    whenever(context.getString(eq(R.string.libre_drop_error_rejected), any())).thenAnswer { inv ->
+      "Rejected: ${inv.arguments[1]}"
+    }
+    whenever(context.getString(eq(R.string.libre_drop_error_cancelled), any())).thenAnswer { inv ->
+      "Cancelled: ${inv.arguments[1]}"
+    }
+  }
 
   @Test
   fun `mapConnectionStateToUi maps Idle to CONNECTING`() {
@@ -142,51 +162,51 @@ class LibreDropSenderViewModelMappingTest {
   @Test
   fun `failureReasonFromState returns reason for Failed`() {
     val state = OutboundConnectionState.Failed(reason = "UKEY2 error")
-    assertEquals("UKEY2 error", failureReasonFromState(state))
+    assertEquals("UKEY2 error", failureReasonFromState(context, state))
   }
 
   @Test
   fun `failureReasonFromState returns formatted string for Rejected`() {
     val state = OutboundConnectionState.Rejected(status = ConnectionResponseStatus.NOT_ENOUGH_SPACE)
-    val reason = failureReasonFromState(state)
+    val reason = failureReasonFromState(context, state)
     assertEquals("Rejected: NOT_ENOUGH_SPACE", reason)
   }
 
   @Test
   fun `failureReasonFromState returns formatted string for Cancelled`() {
     val state = OutboundConnectionState.Cancelled(cause = CancelCause.PEER)
-    val reason = failureReasonFromState(state)
+    val reason = failureReasonFromState(context, state)
     assertEquals("Cancelled: PEER", reason)
   }
 
   @Test
   fun `failureReasonFromState returns null for non-terminal states`() {
-    assertNull(failureReasonFromState(OutboundConnectionState.Idle))
-    assertNull(failureReasonFromState(OutboundConnectionState.Connecting))
-    assertNull(failureReasonFromState(OutboundConnectionState.Handshaking))
-    assertNull(failureReasonFromState(OutboundConnectionState.Completed))
+    assertNull(failureReasonFromState(context, OutboundConnectionState.Idle))
+    assertNull(failureReasonFromState(context, OutboundConnectionState.Connecting))
+    assertNull(failureReasonFromState(context, OutboundConnectionState.Handshaking))
+    assertNull(failureReasonFromState(context, OutboundConnectionState.Completed))
   }
 
   @Test
   fun `failureReasonFromResult returns reason for Failed`() {
     val result = OutboundResult.Failed(reason = "Connection reset")
-    assertEquals("Connection reset", failureReasonFromResult(result))
+    assertEquals("Connection reset", failureReasonFromResult(context, result))
   }
 
   @Test
   fun `failureReasonFromResult returns formatted string for Rejected`() {
     val result = OutboundResult.Rejected(status = ConnectionResponseStatus.TIMED_OUT)
-    assertEquals("Rejected: TIMED_OUT", failureReasonFromResult(result))
+    assertEquals("Rejected: TIMED_OUT", failureReasonFromResult(context, result))
   }
 
   @Test
   fun `failureReasonFromResult returns formatted string for Cancelled`() {
     val result = OutboundResult.Cancelled(cause = CancelCause.LOCAL)
-    assertEquals("Cancelled: LOCAL", failureReasonFromResult(result))
+    assertEquals("Cancelled: LOCAL", failureReasonFromResult(context, result))
   }
 
   @Test
   fun `failureReasonFromResult returns null for Completed`() {
-    assertNull(failureReasonFromResult(OutboundResult.Completed))
+    assertNull(failureReasonFromResult(context, OutboundResult.Completed))
   }
 }

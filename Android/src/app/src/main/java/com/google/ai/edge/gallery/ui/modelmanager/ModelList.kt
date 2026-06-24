@@ -250,7 +250,7 @@ fun ModelList(
 
           // Description.
           Text(
-            task.description,
+            task.descriptionRes?.let { stringResource(it) } ?: task.description,
             textAlign = TextAlign.Center,
             style = bodyLargeNarrow,
             modifier =

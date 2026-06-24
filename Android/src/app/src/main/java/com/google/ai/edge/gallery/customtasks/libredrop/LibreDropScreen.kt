@@ -1,6 +1,7 @@
 package com.google.ai.edge.gallery.customtasks.libredrop
 
 import android.net.Uri
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -37,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -136,33 +139,45 @@ fun LibreDropScreen(data: CustomTaskData) {
         selectedPeerName = selectedPeer?.toDisplayPeer()?.name,
       )
 
-      if (selectedFiles.isNotEmpty() && selectedPeer != null) {
-        Button(
-          onClick = {
-            val target = selectedPeer ?: return@Button
-            val fileSources = selectedFiles.mapIndexed { index, sf ->
-              com.google.ai.edge.gallery.customtasks.libredrop.service.uploads.UriFileSource(
-                context = context,
-                uri = sf.uri,
-                payloadId = (index + 1).toLong(),
-              ).build()
-            }
-            senderViewModel.send(peer = target, files = fileSources)
-          },
-          modifier = Modifier.fillMaxWidth(),
-          enabled = !isSending,
-        ) {
-          if (isSending) {
-            CircularProgressIndicator(
-              modifier = Modifier.size(20.dp),
-              strokeWidth = 2.dp,
-            )
-            Spacer(modifier = Modifier.width(8.dp))
+      val canSend = selectedFiles.isNotEmpty() && selectedPeer != null
+      val sendDisabledReason = when {
+        selectedFiles.isEmpty() && selectedPeer == null ->
+          stringResource(R.string.libre_drop_send_disabled_both)
+        selectedFiles.isEmpty() ->
+          stringResource(R.string.libre_drop_send_disabled_no_files)
+        selectedPeer == null ->
+          stringResource(R.string.libre_drop_send_disabled_no_peer)
+        else -> null
+      }
+
+      Button(
+        onClick = {
+          val target = selectedPeer ?: return@Button
+          val fileSources = selectedFiles.mapIndexed { index, sf ->
+            com.google.ai.edge.gallery.customtasks.libredrop.service.uploads.UriFileSource(
+              context = context,
+              uri = sf.uri,
+              payloadId = (index + 1).toLong(),
+            ).build()
           }
-          Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
+          senderViewModel.send(peer = target, files = fileSources)
+        },
+        modifier = Modifier.fillMaxWidth(),
+        enabled = canSend && !isSending,
+      ) {
+        if (isSending) {
+          CircularProgressIndicator(
+            modifier = Modifier.size(20.dp),
+            strokeWidth = 2.dp,
+          )
           Spacer(modifier = Modifier.width(8.dp))
-          Text(stringResource(R.string.libre_drop_send_to, selectedPeer?.toDisplayPeer()?.name ?: ""))
         }
+        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = stringResource(R.string.libre_drop_send))
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+          if (canSend) stringResource(R.string.libre_drop_send_to, selectedPeer?.toDisplayPeer()?.name ?: "")
+          else sendDisabledReason ?: stringResource(R.string.libre_drop_send_disabled_both)
+        )
       }
 
       TransferStatusSection(transfers = transfers)
@@ -274,9 +289,47 @@ private fun PeerDiscoverySection(
         }
       }
       Spacer(modifier = Modifier.height(8.dp))
-      if (peers.isEmpty()) {
+      if (peers.isEmpty() && isDiscovering) {
         Text(
-          text = if (isDiscovering) stringResource(R.string.libre_drop_searching) else stringResource(R.string.libre_drop_no_devices_found),
+          text = stringResource(R.string.libre_drop_searching),
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        repeat(3) {
+          Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            Box(
+              modifier = Modifier
+                .size(24.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+              Box(
+                modifier = Modifier
+                  .fillMaxWidth(0.6f)
+                  .height(14.dp)
+                  .clip(RoundedCornerShape(4.dp))
+                  .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+              )
+              Spacer(modifier = Modifier.height(4.dp))
+              Box(
+                modifier = Modifier
+                  .fillMaxWidth(0.4f)
+                  .height(10.dp)
+                  .clip(RoundedCornerShape(4.dp))
+                  .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+              )
+            }
+          }
+        }
+      } else if (peers.isEmpty()) {
+        Text(
+          text = stringResource(R.string.libre_drop_no_devices_found),
           style = MaterialTheme.typography.bodySmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -342,102 +395,6 @@ private fun PeerListItem(
   }
 }
 
-@Composable
-private fun TransferStatusSection(transfers: List<TransferStatus>) {
-  Card(
-    modifier = Modifier.fillMaxWidth(),
-    colors = CardDefaults.cardColors(
-      containerColor = MaterialTheme.colorScheme.surfaceVariant,
-    ),
-  ) {
-    Column(
-      modifier = Modifier
-        .padding(16.dp)
-        .semantics { liveRegion = LiveRegionMode.Polite },
-    ) {
-      Text(
-        text = stringResource(R.string.libre_drop_transfers),
-        style = MaterialTheme.typography.titleSmall,
-      )
-      Spacer(modifier = Modifier.height(8.dp))
-      if (transfers.isEmpty()) {
-        Text(
-          text = stringResource(R.string.libre_drop_no_transfers),
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-      }
-      transfers.forEach { transfer ->
-        Row(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically,
-        ) {
-          Column(modifier = Modifier.weight(1f)) {
-            Text(
-              text = transfer.fileName,
-              style = MaterialTheme.typography.bodyMedium,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-              text = stringResource(R.string.libre_drop_to_peer, transfer.peerName),
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-          }
-          when (transfer.state) {
-            TransferState.CONNECTING -> Text(
-              text = stringResource(R.string.libre_drop_connecting),
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.primary,
-            )
-            TransferState.TRANSFERRING -> Row(verticalAlignment = Alignment.CenterVertically) {
-              CircularProgressIndicator(
-                modifier = Modifier.size(16.dp),
-                strokeWidth = 2.dp,
-                progress = { transfer.progress },
-              )
-              Spacer(modifier = Modifier.width(8.dp))
-              Text(
-                text = "${(transfer.progress * 100).toInt()}%",
-                style = MaterialTheme.typography.bodySmall,
-              )
-            }
-            TransferState.COMPLETE -> Text(
-              text = stringResource(R.string.libre_drop_done),
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.primary,
-            )
-            TransferState.FAILED -> Column(horizontalAlignment = Alignment.End) {
-              Text(
-                text = stringResource(R.string.libre_drop_failed),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-              )
-              if (transfer.failureReason != null) {
-                Text(
-                  text = transfer.failureReason,
-                  style = MaterialTheme.typography.labelSmall,
-                  color = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
-                  maxLines = 2,
-                  overflow = TextOverflow.Ellipsis,
-                )
-              }
-              Text(
-                text = stringResource(R.string.libre_drop_retry_hint),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-              )
-            }
-          }
-        }
-      }
-    }
-  }
-}
 
 private fun formatFileSize(bytes: Long): String {
   return when {

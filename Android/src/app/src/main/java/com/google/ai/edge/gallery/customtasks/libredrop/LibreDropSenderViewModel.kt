@@ -15,15 +15,21 @@ import com.google.ai.edge.gallery.customtasks.libredrop.protocol.connection.File
 import com.google.ai.edge.gallery.customtasks.libredrop.protocol.connection.OutboundConnection
 import com.google.ai.edge.gallery.customtasks.libredrop.protocol.connection.OutboundConnectionState
 import com.google.ai.edge.gallery.customtasks.libredrop.protocol.connection.OutboundResult
+import com.google.ai.edge.gallery.R
+import com.google.ai.edge.gallery.common.BaoLog
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+private const val TAG = "LibreDropSender"
 
 /**
  * Minimal sender orchestrator that wires mDNS [Discovery] to [OutboundConnection].
@@ -74,6 +80,19 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
 
     private var discoveryJob: Job? = null
 
+    private val sendExceptionHandler =
+        CoroutineExceptionHandler { _, throwable ->
+            BaoLog.e(TAG, "Send coroutine crashed", throwable)
+            val reason = appContext.getString(R.string.libre_drop_error_send_failed)
+            _transfers.update { list ->
+                list.map {
+                    if (it.state == TransferState.CONNECTING)
+                        it.copy(state = TransferState.FAILED, failureReason = reason)
+                    else it
+                }
+            }
+        }
+
     /** Begin mDNS browse. Idempotent — a second call while already browsing is a no-op. */
     fun startDiscovery() {
         if (discoveryJob != null && discoveryJob?.isActive == true) return
@@ -82,7 +101,10 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
         discoveryJob =
             viewModelScope.launch {
                 val discovery = Discovery(appContext.applicationContext)
-                discovery.browse().collect { event ->
+                discovery.browse().catch { e ->
+                    BaoLog.e(TAG, "Discovery stream error", e)
+                    _isDiscovering.value = false
+                }.collect { event ->
                     when (event) {
                         is DiscoveryEvent.Resolved -> {
                             val svc = event.service
@@ -121,10 +143,10 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
         val address =
             peer.primaryAddress()
                 ?: run {
-                    appendFailedTransfer(peer, files, "Peer has no reachable address")
+                    appendFailedTransfer(peer, files, appContext.getString(R.string.libre_drop_error_no_address))
                     return
                 }
-        viewModelScope.launch {
+        viewModelScope.launch(sendExceptionHandler) {
             val endpointInfoBytes = peer.endpointInfo?.serialize() ?: ByteArray(0)
             val connection =
                 OutboundConnection(
@@ -207,10 +229,10 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
         mapResultToTerminalProgress(result)
 
     private fun failureReasonFrom(state: OutboundConnectionState): String? =
-        failureReasonFromState(state)
+        failureReasonFromState(appContext, state)
 
     private fun failureReasonFrom(result: OutboundResult): String? =
-        failureReasonFromResult(result)
+        failureReasonFromResult(appContext, result)
 }
 
 internal fun mapConnectionStateToUi(state: OutboundConnectionState): TransferState =
@@ -244,18 +266,18 @@ internal fun mapResultToTerminalState(result: OutboundResult): TransferState =
 internal fun mapResultToTerminalProgress(result: OutboundResult): Float =
     if (result is OutboundResult.Completed) 1f else 0f
 
-internal fun failureReasonFromState(state: OutboundConnectionState): String? =
+internal fun failureReasonFromState(context: Context, state: OutboundConnectionState): String? =
     when (state) {
         is OutboundConnectionState.Failed -> state.reason
-        is OutboundConnectionState.Rejected -> "Rejected: ${state.status}"
-        is OutboundConnectionState.Cancelled -> "Cancelled: ${state.cause}"
+        is OutboundConnectionState.Rejected -> context.getString(R.string.libre_drop_error_rejected, state.status)
+        is OutboundConnectionState.Cancelled -> context.getString(R.string.libre_drop_error_cancelled, state.cause)
         else -> null
     }
 
-internal fun failureReasonFromResult(result: OutboundResult): String? =
+internal fun failureReasonFromResult(context: Context, result: OutboundResult): String? =
     when (result) {
         is OutboundResult.Failed -> result.reason
-        is OutboundResult.Rejected -> "Rejected: ${result.status}"
-        is OutboundResult.Cancelled -> "Cancelled: ${result.cause}"
+        is OutboundResult.Rejected -> context.getString(R.string.libre_drop_error_rejected, result.status)
+        is OutboundResult.Cancelled -> context.getString(R.string.libre_drop_error_cancelled, result.cause)
         is OutboundResult.Completed -> null
     }

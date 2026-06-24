@@ -43,6 +43,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -190,7 +191,7 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
       model = model,
       supportImage = false,
       supportAudio = false,
-      systemInstruction = getSystemPrompt(),
+      systemInstruction = getSystemPrompt(appContext),
       tools = tools,
     )
     _isResettingConversation.value = false
@@ -229,7 +230,7 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
                 onError(error)
               }
             },
-            systemInstruction = getSystemPrompt(),
+            systemInstruction = getSystemPrompt(appContext),
             tools = tools,
           )
         },
@@ -275,38 +276,31 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
     val cameraManager: CameraManager =
       context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
 
-    var cameraId: String? = null
+    val cameraIds = cameraManager.cameraIdList
+    if (cameraIds.isEmpty()) {
+      BaoLog.e(TAG, "No cameras available for flashlight")
+      return context.getString(R.string.unknown_error)
+    }
 
-    runCatching {
-
-      for (id in cameraManager.cameraIdList) {
+    val cameraId: String? = runCatching {
+      cameraIds.firstOrNull { id ->
         val characteristics = cameraManager.getCameraCharacteristics(id)
-        val isFlashAvailable =
-          characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) ?: false
-        if (isFlashAvailable) {
-          cameraId = id
-          break
-        }
+        characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) ?: false
       }
-    
-}.onFailure { e ->
+    }.onFailure { e ->
+      BaoLog.e(TAG, "Failed to enumerate cameras", e)
+      return context.getString(R.string.mobile_actions_error_no_camera)
+    }.getOrNull()
 
+    if (cameraId == null) {
+      BaoLog.w(TAG, "No camera with flash found")
+      return context.getString(R.string.mobile_actions_error_no_flash)
+    }
+
+    val result = runCatching { cameraManager.setTorchMode(cameraId, isEnabled) }
+    result.onFailure { e ->
       BaoLog.e(TAG, "Failed to set flashlight", e)
-      return e.message ?: context.getString(R.string.unknown_error)
-    
-}
-
-    cameraId?.let { id ->
-      runCatching {
-
-        cameraManager.setTorchMode(id, isEnabled)
-      
-}.onFailure { e ->
-
-        BaoLog.e(TAG, "Failed to set flashlight", e)
-        return e.message ?: context.getString(R.string.unknown_error)
-      
-}
+      return context.getString(R.string.mobile_actions_error_flashlight)
     }
 
     return ""
@@ -336,16 +330,11 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
           )
         }
 
-    runCatching {
-
-      context.startActivity(intent)
-    
-}.onFailure { e ->
-
-      BaoLog.e(TAG, "Failed to create contact", e)
-      return e.message ?: context.getString(R.string.unknown_error)
-    
-}
+    if (intent.resolveActivity(context.packageManager) == null) {
+      BaoLog.e(TAG, "No activity to handle contact creation")
+      return context.getString(R.string.mobile_actions_error_no_activity)
+    }
+    context.startActivity(intent)
 
     return ""
   }
@@ -360,16 +349,11 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
         putExtra(Intent.EXTRA_TEXT, body)
       }
 
-    runCatching {
-
-      context.startActivity(intent)
-    
-}.onFailure { e ->
-
-      BaoLog.e(TAG, "Failed to send email", e)
-      return e.message ?: context.getString(R.string.unknown_error)
-    
-}
+    if (intent.resolveActivity(context.packageManager) == null) {
+      BaoLog.e(TAG, "No activity to handle email sending")
+      return context.getString(R.string.mobile_actions_error_no_activity)
+    }
+    context.startActivity(intent)
 
     return ""
   }
@@ -378,69 +362,74 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
     val encodedLocation = URLEncoder.encode(location, StandardCharsets.UTF_8.toString())
     val intent = Intent(Intent.ACTION_VIEW).apply { data = "geo:0,0?q=$encodedLocation".toUri() }
 
-    runCatching {
-
-      context.startActivity(intent)
-    
-}.onFailure { e ->
-
-      BaoLog.e(TAG, "Failed to show location on map", e)
-      return e.message ?: context.getString(R.string.unknown_error)
-    
-}
+    if (intent.resolveActivity(context.packageManager) == null) {
+      BaoLog.e(TAG, "No activity to handle map display")
+      return context.getString(R.string.mobile_actions_error_no_activity)
+    }
+    context.startActivity(intent)
 
     return ""
   }
 
   private fun openWifiSettings(context: Context): String {
     val intent = Intent(Settings.ACTION_WIFI_SETTINGS)
-    runCatching {
-
-      context.startActivity(intent)
-    
-}.onFailure { e ->
-
-      BaoLog.e(TAG, "Failed to open wifi settings", e)
-      return e.message ?: context.getString(R.string.unknown_error)
-    
-}
+    if (intent.resolveActivity(context.packageManager) == null) {
+      BaoLog.e(TAG, "No activity to open wifi settings")
+      return context.getString(R.string.mobile_actions_error_no_activity)
+    }
+    context.startActivity(intent)
 
     return ""
   }
 
   private fun createCalendarEvent(context: Context, datetime: String, title: String): String {
-    var ms = System.currentTimeMillis()
-    runCatching {
-
-      val localDateTime = LocalDateTime.parse(datetime)
-      val systemDefaultZone = ZoneId.systemDefault()
-      val zonedDateTime = localDateTime.atZone(systemDefaultZone)
-      ms = zonedDateTime.toInstant().toEpochMilli()
-    
-}.onFailure { e ->
-
-      BaoLog.w(TAG, "Failed to parse date time: '$datetime'", e)
-    
-}
+    val parsed = parseDateTime(datetime)
+      ?: return context.getString(R.string.mobile_actions_error_invalid_datetime)
+    val systemDefaultZone = ZoneId.systemDefault()
+    val ms = parsed.atZone(systemDefaultZone).toInstant().toEpochMilli()
 
     val intent =
       Intent(Intent.ACTION_INSERT).apply {
         data = CalendarContract.Events.CONTENT_URI
         putExtra(CalendarContract.Events.TITLE, title)
         putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, ms)
-        putExtra(CalendarContract.EXTRA_EVENT_END_TIME, ms + 3600000)
+        putExtra(CalendarContract.EXTRA_EVENT_END_TIME, ms + DEFAULT_EVENT_DURATION_MS)
       }
-    runCatching {
-
-      context.startActivity(intent)
-    
-}.onFailure { e ->
-
-      BaoLog.e(TAG, "Failed to create calendar event", e)
-      return e.message ?: context.getString(R.string.unknown_error)
-    
-}
+    if (intent.resolveActivity(context.packageManager) == null) {
+      BaoLog.e(TAG, "No activity to create calendar event")
+      return context.getString(R.string.mobile_actions_error_no_activity)
+    }
+    context.startActivity(intent)
 
     return ""
+  }
+
+  private fun parseDateTime(datetime: String): LocalDateTime? {
+    if (!ISO_DATETIME_PATTERN.matches(datetime)) {
+      BaoLog.w(TAG, "Invalid date time format: '$datetime'")
+      return null
+    }
+    val parts = datetime.split("T")
+    val dateParts = parts[0].split("-")
+    val month = dateParts[1].toIntOrNull()
+    val day = dateParts[2].toIntOrNull()
+    if (month == null || month !in 1..12 || day == null || day !in 1..31) {
+      BaoLog.w(TAG, "Date component out of range: '$datetime'")
+      return null
+    }
+    val timeParts = parts[1].split(":")
+    val hour = timeParts[0].toIntOrNull()
+    val minute = timeParts[1].toIntOrNull()
+    val second = if (timeParts.size > 2) timeParts[2].toIntOrNull() else 0
+    if (hour !in 0..23 || minute !in 0..59 || second !in 0..59) {
+      BaoLog.w(TAG, "Time component out of range: '$datetime'")
+      return null
+    }
+    return LocalDateTime.parse(datetime, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+  }
+
+  companion object {
+    private val ISO_DATETIME_PATTERN = Regex("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2})?")
+    private const val DEFAULT_EVENT_DURATION_MS = 3_600_000L
   }
 }

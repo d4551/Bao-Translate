@@ -576,6 +576,26 @@
   <string name="prompt_template_label_show_location_on_map">地図で場所を表示</string>
   <string name="prompt_template_label_open_wifi_settings">Wi-Fi 設定を開く</string>
   <string name="prompt_template_label_capture_photo">200MP 写真を撮影</string>
+
+  <!-- MobileActions task metadata -->
+  <string name="mobile_actions_task_label">モバイルアクション</string>
+  <string name="mobile_actions_task_description">Function Gemma を通じてさまざまなデバイスアクションを実行</string>
+  <string name="mobile_actions_task_short_description">デバイスのモバイルアクションを活用</string>
+
+  <!-- MobileActions system prompt -->
+  <string name="mobile_actions_system_prompt_role">あなたは以下の関数を使って関数呼び出しができるモデルです</string>
+  <string name="mobile_actions_system_prompt_datetime">YYYY-MM-DDTHH:MM:SS 形式の現在の日時: %1$s\n曜日: %2$s</string>
+
+  <!-- MobileActions prompt template text -->
+  <string name="prompt_template_text_flash_on">フラッシュライトをオンにして</string>
+  <string name="prompt_template_text_flash_off">フラッシュライトをオフにして</string>
+  <string name="prompt_template_text_create_contact">John Smith の連絡先をメール js@example.com、電話番号 123 456 7890 で作成して。</string>
+  <string name="prompt_template_text_send_email">js@example.com に件名「Meeting」、本文「Hi John, let\'s meet at 3pm tomorrow.」でメールを送って。</string>
+  <string name="prompt_template_text_create_calendar_event">明日の午後 2:30 に「team meeting」のカレンダー予定を作成して</string>
+  <string name="prompt_template_text_show_location_on_map">Googleplex を地図で表示して</string>
+  <string name="prompt_template_text_open_wifi_settings">Wi-Fi 設定を開いて</string>
+  <string name="prompt_template_text_capture_photo">メインカメラで 200MP の写真を撮って</string>
+
   <string name="prompt_template_label_tone">トーン</string>
   <string name="prompt_template_label_style">スタイル</string>
   <string name="prompt_template_label_language">言語</string>
@@ -810,4 +830,28 @@
   <string name="cd_close_viewer">ビューアを閉じる</string>
   <string name="cd_clear_filter">フィルタをクリア</string>
   <string name="libre_drop_selected_peer">選択済み</string>
+  <string name="libre_drop_error_no_address">ピアに到達可能なアドレスがありません</string>
+  <string name="libre_drop_error_rejected">拒否されました: %1$s</string>
+  <string name="libre_drop_error_cancelled">キャンセルされました: %1$s</string>
+  <string name="libre_drop_error_failed">失敗しました: %1$s</string>
+  <string name="libre_drop_error_unknown">不明なエラー</string>
+  <string name="libre_drop_error_send_failed">送信に失敗しました</string>
+  <string name="libre_drop_send">送信</string>
+  <string name="libre_drop_send_to">%1$s に送信</string>
+  <string name="libre_drop_send_disabled_no_files">送信するファイルを選択</string>
+  <string name="libre_drop_send_disabled_no_peer">近くのデバイスを選択</string>
+  <string name="libre_drop_send_disabled_both">ファイルとデバイスを選択</string>
+  <string name="mobile_actions_permission_denied_title">マイク権限が必要です</string>
+  <string name="mobile_actions_permission_denied_description">音声入力には RECORD_AUDIO 権限が必要です。設定で許可するか、下をタップして再試行してください。</string>
+  <string name="mobile_actions_retry_permission">権限を許可</string>
+  <string name="mobile_actions_model_init_error_title">モデル初期化に失敗しました</string>
+  <string name="mobile_actions_model_init_error_retry">初期化を再試行</string>
+  <string name="mobile_actions_capture_dir_error">キャプチャディレクトリの作成に失敗しました</string>
+  <string name="mobile_actions_loading_model">モデルを読み込み中…</string>
+  <string name="mobile_actions_error_no_camera">カメラが利用できません</string>
+  <string name="mobile_actions_error_no_flash">フラッシュ付きカメラが見つかりません</string>
+  <string name="mobile_actions_error_flashlight">フラッシュライトの操作に失敗しました</string>
+  <string name="mobile_actions_error_no_activity">このアクションを処理できるアプリがありません</string>
+  <string name="mobile_actions_error_invalid_datetime">日時の形式が無効です</string>
+  <string name="libre_drop_retry_hint">送信をタップして再試行</string>
 </resources>

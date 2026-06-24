@@ -22,6 +22,21 @@ import com.google.ai.edge.litertlm.ToolSet
 
 private const val TAG = "AGMATools"
 
+internal fun maskEmail(email: String): String {
+  val at = email.indexOf('@')
+  if (at <= 0) return "***"
+  val local = email.substring(0, at)
+  val domain = email.substring(at)
+  val masked = if (local.length <= 1) "***" else "${local[0]}***"
+  return "$masked$domain"
+}
+
+internal fun maskPhone(phone: String): String {
+  val digits = phone.filter { it.isDigit() }
+  if (digits.length < 4) return "***"
+  return "${digits.take(2)}***${digits.takeLast(2)}"
+}
+
 class MobileActionsTools(val onFunctionCalled: (Action) -> Unit) : ToolSet {
   /** Turns on flashlight. */
   @Tool(description = "Turns the flashlight on")
@@ -53,7 +68,7 @@ class MobileActionsTools(val onFunctionCalled: (Action) -> Unit) : ToolSet {
   ): Map<String, String> {
     BaoLog.d(
       TAG,
-      "create contact. First name: '$firstName', last name: '$lastName', phone number: '$phoneNumber', email: '$email'",
+      "create contact. phone='${maskPhone(phoneNumber)}', email='${maskEmail(email)}'",
     )
 
     onFunctionCalled(
@@ -81,7 +96,7 @@ class MobileActionsTools(val onFunctionCalled: (Action) -> Unit) : ToolSet {
     @ToolParam(description = "The subject of the email.") subject: String,
     @ToolParam(description = "The body of the email.") body: String,
   ): Map<String, String> {
-    BaoLog.d(TAG, "send email. To: '$to', subject: '$subject', body: '$body'")
+    BaoLog.d(TAG, "send email. to='${maskEmail(to)}', subject=[${subject.length} chars], body=[${body.length} chars]")
 
     onFunctionCalled(SendEmailAction(to = to, subject = subject, body = body))
 
@@ -97,7 +112,7 @@ class MobileActionsTools(val onFunctionCalled: (Action) -> Unit) : ToolSet {
     )
     location: String
   ): Map<String, String> {
-    BaoLog.d(TAG, "Show location on map. Location: '$location'")
+    BaoLog.d(TAG, "Show location on map. location=[${location.length} chars]")
 
     onFunctionCalled(ShowLocationOnMap(location = location))
 
@@ -121,7 +136,7 @@ class MobileActionsTools(val onFunctionCalled: (Action) -> Unit) : ToolSet {
     datetime: String,
     @ToolParam(description = "The title of the event.") title: String,
   ): Map<String, String> {
-    BaoLog.d(TAG, "Create calendar event. Datetime: '$datetime', title: '$title'")
+    BaoLog.d(TAG, "Create calendar event. datetime=[${datetime.length} chars], title=[${title.length} chars]")
 
     onFunctionCalled(CreateCalendarEventAction(datetime = datetime, title = title))
 

@@ -1089,7 +1089,7 @@ private fun TaskCard(
             style = MaterialTheme.typography.titleMedium,
           )
           Text(
-            task.shortDescription,
+            task.shortDescriptionRes?.let { stringResource(it) } ?: task.shortDescription,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp, lineHeight = 14.sp),
             modifier = Modifier.clearAndSetSemantics {},

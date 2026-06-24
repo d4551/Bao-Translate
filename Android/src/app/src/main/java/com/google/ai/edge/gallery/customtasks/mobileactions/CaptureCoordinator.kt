@@ -18,6 +18,7 @@ package com.google.ai.edge.gallery.customtasks.mobileactions
 import android.content.Context
 import android.net.Uri
 import androidx.core.content.FileProvider
+import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.common.BaoLog
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -95,7 +96,10 @@ class CaptureCoordinator(
     val displaySuffix = sanitizeFileToken(action.resolutionHint)
     val fileName = "capture-$timestamp$displaySuffix.jpg"
     val dir = java.io.File(appContext.cacheDir, CAPTURE_SUBDIR)
-    if (!dir.exists()) dir.mkdirs()
+    if (!dir.exists() && !dir.mkdirs()) {
+      BaoLog.w(TAG, "Failed to create capture directory: ${dir.absolutePath}")
+      return appContext.getString(R.string.mobile_actions_capture_dir_error)
+    }
     val file = java.io.File(dir, fileName)
     val uri = uriProvider(appContext, "${appContext.packageName}.provider", file)
     _outputUri.value = uri

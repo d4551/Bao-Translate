@@ -119,43 +119,41 @@ import kotlinx.coroutines.launch
 
 private const val TAG = "AGMAScreen"
 
-data class PromptTemplate(@StringRes val labelResId: Int, val prompt: String)
+data class PromptTemplate(@StringRes val labelResId: Int, @StringRes val promptResId: Int)
 
 internal val PROMPT_TEMPLATES =
   listOf(
     PromptTemplate(
       labelResId = R.string.prompt_template_label_flash_on,
-      prompt = "Turn on flashlight",
+      promptResId = R.string.prompt_template_text_flash_on,
     ),
     PromptTemplate(
       labelResId = R.string.prompt_template_label_flash_off,
-      prompt = "Turn off flashlight",
+      promptResId = R.string.prompt_template_text_flash_off,
     ),
     PromptTemplate(
       labelResId = R.string.prompt_template_label_create_contact,
-      prompt =
-        "Create contact John Smith with email address js@example.com and phone number 123 456 7890.",
+      promptResId = R.string.prompt_template_text_create_contact,
     ),
     PromptTemplate(
       labelResId = R.string.prompt_template_label_send_email,
-      prompt =
-        "Send an email to js@example.com with subject \"Meeting\" and body \"Hi John, let's meet at 3pm tomorrow.\"",
+      promptResId = R.string.prompt_template_text_send_email,
     ),
     PromptTemplate(
       labelResId = R.string.prompt_template_label_create_calendar_event,
-      prompt = "Create a calendar event at 2:30pm tomorrow for \"team meeting\"",
+      promptResId = R.string.prompt_template_text_create_calendar_event,
     ),
     PromptTemplate(
       labelResId = R.string.prompt_template_label_show_location_on_map,
-      prompt = "Show Googleplex on map",
+      promptResId = R.string.prompt_template_text_show_location_on_map,
     ),
     PromptTemplate(
       labelResId = R.string.prompt_template_label_open_wifi_settings,
-      prompt = "Open WIFI settings",
+      promptResId = R.string.prompt_template_text_open_wifi_settings,
     ),
     PromptTemplate(
       labelResId = R.string.prompt_template_label_capture_photo,
-      prompt = "Capture a 200MP photo with the main camera",
+      promptResId = R.string.prompt_template_text_capture_photo,
     ),
   )
 
@@ -261,6 +259,10 @@ fun MobileActionsScreen(
         onProcessingStarted = onProcessingStarted,
       )
     }
+  } else {
+    PermissionDeniedUi(
+      onRetry = { recordAudioClipsPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+    )
   }
 }
 
@@ -314,16 +316,35 @@ fun MainUi(
 
   DisposableEffect(Unit) { onDispose { viewModel.cleanUp() } }
 
-  if (!modelManagerUiState.isModelInitialized(model = model)) {
-    Row(
-      modifier = Modifier.fillMaxSize(),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.Center,
+  val initStatus = modelManagerUiState.modelInitializationStatus[model.name]
+  val initError = initStatus?.status == ModelInitializationStatusType.ERROR
+
+  if (initError) {
+    ModelInitErrorUi(
+      context = context,
+      task = task,
+      model = model,
+      initStatus = initStatus!!,
+      modelManagerViewModel = modelManagerViewModel,
+    )
+  } else if (!modelManagerUiState.isModelInitialized(model = model)) {
+    Column(
+      modifier = Modifier
+        .fillMaxSize()
+        .semantics { liveRegion = LiveRegionMode.Polite },
+      verticalArrangement = Arrangement.Center,
+      horizontalAlignment = Alignment.CenterHorizontally,
     ) {
       CircularProgressIndicator(
         trackColor = MaterialTheme.colorScheme.surfaceVariant,
         strokeWidth = 3.dp,
         modifier = Modifier.size(24.dp),
+      )
+      Spacer(modifier = Modifier.size(16.dp))
+      Text(
+        text = stringResource(R.string.mobile_actions_loading_model),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
     }
   }

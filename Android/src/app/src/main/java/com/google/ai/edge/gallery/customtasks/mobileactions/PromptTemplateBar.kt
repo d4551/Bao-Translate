@@ -38,6 +38,7 @@ fun PromptTemplateBar(processing: Boolean, onSend: (String) -> Unit) {
   ) {
     Spacer(modifier = Modifier.width(12.dp))
     for (item in PROMPT_TEMPLATES) {
+      val promptText = stringResource(item.promptResId)
       Text(
         stringResource(item.labelResId),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -45,7 +46,7 @@ fun PromptTemplateBar(processing: Boolean, onSend: (String) -> Unit) {
         modifier =
           Modifier.clip(RoundedCornerShape(12.dp))
             .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
-            .clickable(enabled = !processing) { onSend(item.prompt) }
+            .clickable(enabled = !processing) { onSend(promptText) }
             .background(color = MaterialTheme.colorScheme.surfaceContainerLow)
             .border(
               width = 1.dp,

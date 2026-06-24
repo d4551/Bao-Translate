@@ -313,6 +313,25 @@
   <string name="prompt_template_label_open_wifi_settings">Open WIFI settings</string>
   <string name="prompt_template_label_capture_photo">Capture 200MP photo</string>
 
+  <!-- MobileActions task metadata -->
+  <string name="mobile_actions_task_label">Mobile Actions</string>
+  <string name="mobile_actions_task_description">Perform various device actions through Function Gemma</string>
+  <string name="mobile_actions_task_short_description">Leverage device mobile actions</string>
+
+  <!-- MobileActions system prompt -->
+  <string name="mobile_actions_system_prompt_role">You are a model that can do function calling with the following functions</string>
+  <string name="mobile_actions_system_prompt_datetime">Current date and time given in YYYY-MM-DDTHH:MM:SS format: %1$s\nDay of week is %2$s</string>
+
+  <!-- MobileActions prompt template text -->
+  <string name="prompt_template_text_flash_on">Turn on flashlight</string>
+  <string name="prompt_template_text_flash_off">Turn off flashlight</string>
+  <string name="prompt_template_text_create_contact">Create contact John Smith with email address js@example.com and phone number 123 456 7890.</string>
+  <string name="prompt_template_text_send_email">Send an email to js@example.com with subject \"Meeting\" and body \"Hi John, let\'s meet at 3pm tomorrow.\"</string>
+  <string name="prompt_template_text_create_calendar_event">Create a calendar event at 2:30pm tomorrow for \"team meeting\"</string>
+  <string name="prompt_template_text_show_location_on_map">Show Googleplex on map</string>
+  <string name="prompt_template_text_open_wifi_settings">Open WIFI settings</string>
+  <string name="prompt_template_text_capture_photo">Capture a 200MP photo with the main camera</string>
+
   <!-- Prompt template editor labels -->
   <string name="prompt_template_label_tone">Tone</string>
   <string name="prompt_template_label_style">Style</string>
@@ -944,6 +963,7 @@
   <string name="libre_drop_scan">Scan</string>
   <string name="libre_drop_searching">Searching for devices…</string>
   <string name="libre_drop_no_devices_found">No devices found. Tap Scan to discover.</string>
+  <string name="libre_drop_send">Send</string>
   <string name="libre_drop_send_to">Send to %1$s</string>
   <string name="libre_drop_transfers">Transfers</string>
   <string name="libre_drop_to_peer">to %1$s</string>
@@ -953,6 +973,29 @@
   <string name="libre_drop_no_transfers">No transfers yet</string>
   <string name="libre_drop_retry_hint">Tap Send to retry</string>
   <string name="libre_drop_selected_peer">Selected</string>
+  <string name="libre_drop_error_no_address">Peer has no reachable address</string>
+  <string name="libre_drop_error_rejected">Rejected: %1$s</string>
+  <string name="libre_drop_error_cancelled">Cancelled: %1$s</string>
+  <string name="libre_drop_error_failed">Failed: %1$s</string>
+  <string name="libre_drop_error_unknown">Unknown error</string>
+  <string name="libre_drop_error_send_failed">Send failed unexpectedly</string>
+
+  <!-- UI-UX: permission denied, model init error, send disabled -->
+  <string name="mobile_actions_permission_denied_title">Microphone access required</string>
+  <string name="mobile_actions_permission_denied_description">Voice input needs RECORD_AUDIO permission. Grant it in Settings or tap below to try again.</string>
+  <string name="mobile_actions_retry_permission">Grant permission</string>
+  <string name="mobile_actions_model_init_error_title">Model initialization failed</string>
+  <string name="mobile_actions_model_init_error_retry">Retry initialization</string>
+  <string name="mobile_actions_capture_dir_error">Failed to create capture directory</string>
+  <string name="mobile_actions_loading_model">Loading model…</string>
+  <string name="mobile_actions_error_no_camera">No camera available</string>
+  <string name="mobile_actions_error_no_flash">No camera with flash found</string>
+  <string name="mobile_actions_error_flashlight">Failed to control flashlight</string>
+  <string name="mobile_actions_error_no_activity">No app available to handle this action</string>
+  <string name="mobile_actions_error_invalid_datetime">Invalid date or time format</string>
+  <string name="libre_drop_send_disabled_no_files">Select files to send</string>
+  <string name="libre_drop_send_disabled_no_peer">Select a nearby device</string>
+  <string name="libre_drop_send_disabled_both">Select files and a device</string>
 
   <!-- LibreDrop Consent Notification -->
   <string name="consent_notification_channel_name">LibreDrop Incoming Transfers</string>
