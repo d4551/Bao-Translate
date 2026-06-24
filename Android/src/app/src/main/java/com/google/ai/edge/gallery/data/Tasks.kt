@@ -158,6 +158,7 @@ object BuiltInTaskId {
   const val MP_SCRAPBOOK = "mp_scrapbook"
   const val LLM_AGENT_CHAT = "llm_agent_chat"
   const val BAO_TRANSLATE = "bao_translate"
+  const val LIBRE_DROP = "libre_drop"
 }
 
 private val allLegacyTaskIds: MutableSet<String> =

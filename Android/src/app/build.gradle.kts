@@ -177,6 +177,9 @@ dependencies {
   // transport for the multi-device conversation mesh (see BleConversationManager).
   implementation(libs.play.services.nearby)
   implementation(libs.commons.compress)
+  implementation(libs.kotlinx.coroutines.core)
+  implementation(libs.kotlinx.coroutines.android)
+  implementation(libs.zxing.core)
 }
 
 // CI verification gate. `:app:verifyReleaseReady` runs every guard the release
@@ -285,6 +288,7 @@ protobuf {
   protoc { artifact = "com.google.protobuf:protoc:${libs.versions.protobufJavaLite.get()}" }
   generateProtoTasks { all().forEach { it.plugins { create("java") { option("lite") } } } }
 }
+
 
 // Sync skills/ into the app bundle as a pre-build step.
 // skills/ is the single source of truth; the Android copy is gitignored.

@@ -931,4 +931,63 @@
   <string name="cd_close_viewer">Close viewer</string>
   <string name="cd_clear_filter">Clear filter</string>
 
+  <!-- LibreDrop -->
+  <string name="libre_drop">LibreDrop</string>
+  <string name="libre_drop_task_description">Quick Share file transfers with AI assistance. Send files to nearby devices using the Quick Share protocol with AI-powered file descriptions, voice commands, and multilingual metadata.</string>
+  <string name="libre_drop_task_short_description">AI-powered Quick Share file transfers</string>
+  <string name="libre_drop_subtitle">Quick Share file transfers with AI assistance</string>
+  <string name="libre_drop_files_to_share">Files to Share</string>
+  <string name="libre_drop_no_files_selected">No files selected. Tap to pick files.</string>
+  <string name="libre_drop_nearby_devices">Nearby Devices</string>
+  <string name="libre_drop_scanning">Scanning</string>
+  <string name="libre_drop_scan">Scan</string>
+  <string name="libre_drop_searching">Searching for devices…</string>
+  <string name="libre_drop_no_devices_found">No devices found. Tap Scan to discover.</string>
+  <string name="libre_drop_send_to">Send to %1$s</string>
+  <string name="libre_drop_transfers">Transfers</string>
+  <string name="libre_drop_to_peer">to %1$s</string>
+  <string name="libre_drop_connecting">Connecting</string>
+  <string name="libre_drop_done">Done</string>
+  <string name="libre_drop_failed">Failed</string>
+
+  <!-- LibreDrop Consent Notification -->
+  <string name="consent_notification_channel_name">LibreDrop Incoming Transfers</string>
+  <string name="consent_notification_channel_description">Notifications for incoming file transfer requests</string>
+  <string name="consent_notification_title_with_name">%1$s wants to share files</string>
+  <string name="consent_notification_title_unknown_sender">Incoming file transfer</string>
+  <string name="consent_notification_summary_no_items">No items</string>
+  <string name="consent_notification_summary_folder">Folder</string>
+  <string name="consent_notification_summary_n_items">%1$d items</string>
+  <string name="consent_notification_body">Tap to accept or reject this transfer</string>
+  <string name="consent_notification_bigtext_pin_line">PIN: %1$s</string>
+  <string name="consent_notification_action_accept">Accept</string>
+  <string name="consent_notification_action_reject">Reject</string>
+  <string name="consent_notification_segment_files">%1$d files</string>
+  <string name="consent_notification_segment_urls">%1$d URLs</string>
+  <string name="consent_notification_segment_addresses">%1$d addresses</string>
+  <string name="consent_notification_segment_phone_numbers">%1$d phone numbers</string>
+  <string name="consent_notification_segment_texts">%1$d text messages</string>
+  <string name="consent_notification_summary_kinds_with_size">%1$s (%2$s)</string>
+
+  <!-- LibreDrop Transfer Progress Notification -->
+  <string name="transfer_progress_channel_name">LibreDrop Transfer Progress</string>
+  <string name="transfer_progress_channel_description">Shows progress of ongoing file transfers</string>
+  <string name="transfer_progress_action_cancel">Cancel</string>
+  <string name="transfer_progress_title_with_name">Receiving from %1$s</string>
+  <string name="transfer_progress_title_unknown_sender">Receiving files</string>
+  <string name="transfer_progress_body_size">%1$s of %2$s</string>
+  <string name="transfer_progress_body_rate">%1$s/s</string>
+  <string name="transfer_progress_body_eta">ETA: %1$s</string>
+  <string name="transfer_progress_duration_few_seconds">a few seconds</string>
+  <string name="transfer_progress_duration_seconds">%1$d seconds</string>
+  <string name="transfer_progress_duration_about_minutes">about %1$d minutes</string>
+  <string name="transfer_progress_duration_about_hours">about %1$d hours</string>
+
+  <!-- LibreDrop Receiver Notification -->
+  <string name="receiver_notification_channel_name">LibreDrop Receiver</string>
+  <string name="receiver_notification_channel_description">LibreDrop file receiver service</string>
+  <string name="receiver_notification_title">LibreDrop is ready</string>
+  <string name="receiver_notification_text_unknown_ssid">Waiting for incoming transfers</string>
+  <string name="receiver_notification_text_with_ssid">Connected to %1$s</string>
+
 </resources>
