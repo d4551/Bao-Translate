@@ -23,15 +23,11 @@ import com.google.ai.edge.gallery.common.BaoLog
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -51,9 +47,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.text.TextAutoSize
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Article
 import androidx.compose.material.icons.outlined.CalendarMonth
@@ -61,6 +54,7 @@ import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.FlashlightOn
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material.icons.rounded.Functions
 import androidx.compose.material3.AlertDialog
@@ -68,15 +62,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -93,7 +83,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -104,13 +93,10 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.google.ai.edge.gallery.GalleryEvent
@@ -118,10 +104,7 @@ import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.data.ModelDownloadStatusType
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.firebaseAnalytics
-import com.google.ai.edge.gallery.ui.common.MarkdownText
-import com.google.ai.edge.gallery.ui.common.chat.ChatMessageWarning
 import com.google.ai.edge.gallery.ui.common.chat.MessageBodyLoading
-import com.google.ai.edge.gallery.ui.common.chat.MessageBodyWarning
 import com.google.ai.edge.gallery.ui.common.getTaskBgGradientColors
 import com.google.ai.edge.gallery.ui.common.getTaskIconColor
 import com.google.ai.edge.gallery.ui.common.textandvoiceinput.HoldToDictateViewModel
@@ -138,7 +121,7 @@ private const val TAG = "AGMAScreen"
 
 data class PromptTemplate(@StringRes val labelResId: Int, val prompt: String)
 
-private val PROMPT_TEMPLATES =
+internal val PROMPT_TEMPLATES =
   listOf(
     PromptTemplate(
       labelResId = R.string.prompt_template_label_flash_on,
@@ -170,11 +153,15 @@ private val PROMPT_TEMPLATES =
       labelResId = R.string.prompt_template_label_open_wifi_settings,
       prompt = "Open WIFI settings",
     ),
+    PromptTemplate(
+      labelResId = R.string.prompt_template_label_capture_photo,
+      prompt = "Capture a 200MP photo with the main camera",
+    ),
   )
 
-private data class SampleActionItem(@StringRes val labelResId: Int, val icon: ImageVector)
+internal data class SampleActionItem(@StringRes val labelResId: Int, val icon: ImageVector)
 
-private val SAMPLE_ACTION_ITEMS =
+internal val SAMPLE_ACTION_ITEMS =
   listOf(
     SampleActionItem(
       labelResId = R.string.prompt_template_label_flash_on_off,
@@ -200,17 +187,21 @@ private val SAMPLE_ACTION_ITEMS =
       labelResId = R.string.prompt_template_label_open_wifi_settings,
       icon = Icons.Outlined.Wifi,
     ),
+    SampleActionItem(
+      labelResId = R.string.prompt_template_label_capture_photo,
+      icon = Icons.Outlined.PhotoCamera,
+    ),
   )
 
-private data class Tab(@StringRes val labelResId: Int, val icon: ImageVector)
+internal data class MobileActionsTab(@StringRes val labelResId: Int, val icon: ImageVector)
 
-private val TABS =
+internal val TABS =
   listOf(
-    Tab(
+    MobileActionsTab(
       labelResId = R.string.mobile_actions_tab_model_response,
       icon = Icons.AutoMirrored.Rounded.Article,
     ),
-    Tab(labelResId = R.string.mobile_actions_tab_function_called, icon = Icons.Rounded.Functions),
+    MobileActionsTab(labelResId = R.string.mobile_actions_tab_function_called, icon = Icons.Rounded.Functions),
   )
 
 /**
@@ -233,7 +224,8 @@ fun MobileActionsScreen(
   var recordAudioPermissionGranted by remember { mutableStateOf(false) }
   val context = LocalContext.current
 
-  // Permission request when recording audio clips.
+  CaptureLauncherEffect(coordinator = mobileActionsViewModel.captureCoordinator)
+
   val recordAudioClipsPermissionLauncher =
     rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
       permissionGranted ->
@@ -242,16 +234,12 @@ fun MobileActionsScreen(
       }
     }
 
-  // Ask for audio recording permission.
   LaunchedEffect(Unit) {
-    // Check permission.
     when (PackageManager.PERMISSION_GRANTED) {
-      // Already got permission. Call the lambda.
       ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) -> {
         recordAudioPermissionGranted = true
       }
 
-      // Otherwise, ask for permission
       else -> {
         recordAudioClipsPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
       }
@@ -313,7 +301,6 @@ fun MainUi(
       (!modelManagerUiState.isModelInitialized(model = model) || uiState.processing)
   )
 
-  // Reset states on config changes.
   LaunchedEffect(model.configValues) {
     if (model.configValues != initialModelConfigValues) {
       BaoLog.d(TAG, "model config values changed.")
@@ -327,7 +314,6 @@ fun MainUi(
 
   DisposableEffect(Unit) { onDispose { viewModel.cleanUp() } }
 
-  // Show a loading indicator before the model is initialized.
   if (!modelManagerUiState.isModelInitialized(model = model)) {
     Row(
       modifier = Modifier.fillMaxSize(),
@@ -341,80 +327,31 @@ fun MainUi(
       )
     }
   }
-  // Main UI.
   else {
     val noFunctionCallSnackbarMessage = stringResource(R.string.snackbar_no_function_call)
 
     val send: (String) -> Unit = { text ->
-      scope.launch(Dispatchers.Main) {
-        selectedTabIndex = 0
-        clearInputTextTrigger = System.currentTimeMillis()
-        focusManager.clearFocus()
-      }
-
-      onProcessingStarted()
-
-      // Figure out the correct action from user prompt.
-      doneGeneratingResponse = false
-      viewModel.processUserPrompt(
+      sendPrompt(
+        text = text,
+        task = task,
         model = model,
-        userPrompt = text,
         tools = tools,
-        onProcessDone = {
-          doneGeneratingResponse = true
-          BaoLog.d(TAG, "Actions count: ${curActions.size}")
-
-          // Execute functions.
-          if (curActions.isNotEmpty()) {
-            val errors = mutableListOf<String>()
-            for (action in curActions) {
-              val curError = viewModel.performAction(action = action, context = context)
-              if (curError.isEmpty()) {
-                viewModel.addFunctionCallDetails(
-                  details = genFormattedFunctionCall(action = action, resources = resources)
-                )
-              } else {
-                errors.add(curError)
-              }
-            }
-            if (errors.isNotEmpty()) {
-              scope.launch {
-                snackbarHostState.showSnackbar(
-                  errors.joinToString(separator = "; "),
-                  withDismissAction = true,
-                  duration = SnackbarDuration.Long,
-                )
-              }
-            }
-          }
-          // No function recognized.
-          else {
-            viewModel.setNoFunctionRecognized(value = true)
-
-            // Show a snack bar for unrecognized command.
-            scope.launch {
-              snackbarHostState.showSnackbar(
-                noFunctionCallSnackbarMessage,
-                withDismissAction = true,
-                duration = SnackbarDuration.Long,
-              )
-            }
-          }
-        },
+        viewModel = viewModel,
+        curActions = curActions,
+        scope = scope,
+        snackbarHostState = snackbarHostState,
+        focusManager = focusManager,
+        context = context,
+        resources = resources,
+        noFunctionCallSnackbarMessage = noFunctionCallSnackbarMessage,
+        onSelectedTabReset = { selectedTabIndex = 0 },
+        onClearInputTrigger = { clearInputTextTrigger = System.currentTimeMillis() },
+        onProcessingStarted = onProcessingStarted,
+        onDoneGenerating = { doneGeneratingResponse = true },
         onError = { error ->
           doneGeneratingResponse = true
-
-          // Show error dialog for users to reset the engine.
           errorDialogContent = error
           showErrorDialog = true
-        },
-      )
-
-      firebaseAnalytics?.logEvent(
-        GalleryEvent.GENERATE_ACTION.id,
-        Bundle().apply {
-          putString("capability_name", task.id)
-          putString("model_id", model.name)
         },
       )
     }
@@ -429,53 +366,10 @@ fun MainUi(
             )
             .imePadding()
       ) {
-        // Message shown when no prompt has been processed yet.
         if (uiState.showWelcomeMessage) {
-          Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-            Column(
-              horizontalAlignment = Alignment.CenterHorizontally,
-              modifier = Modifier.fillMaxWidth(),
-            ) {
-              Text(
-                stringResource(R.string.mobile_actions_title),
-                style = MaterialTheme.typography.headlineLarge,
-                color = getTaskIconColor(task = task),
-              )
-              Text(
-                stringResource(R.string.mobile_actions_description),
-                style = MaterialTheme.typography.bodyMedium,
-                color = getTaskIconColor(task = task),
-              )
-              Column {
-                Text(
-                  stringResource(R.string.mobile_actions_supported_actions),
-                  style = MaterialTheme.typography.labelLarge,
-                  modifier =
-                    Modifier.padding(top = 64.dp, bottom = 8.dp).graphicsLayer { alpha = 0.7f },
-                  color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                for (item in SAMPLE_ACTION_ITEMS) {
-                  Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                      item.icon,
-                      contentDescription = null,
-                      modifier = Modifier.size(24.dp).padding(end = 8.dp),
-                      tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                      stringResource(item.labelResId),
-                      style = MaterialTheme.typography.labelLarge,
-                      color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                  }
-                }
-              }
-            }
-          }
+          WelcomeSection(task = task)
         }
-        // Current user prompt and model response.
         else {
-          // The current user prompt.
           Box(
             modifier =
               Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer),
@@ -489,134 +383,24 @@ fun MainUi(
             )
           }
 
-          // Loader when processing.
           if (uiState.processing) {
             Box(
-              modifier = Modifier.weight(1f).fillMaxWidth().padding(16.dp),
+              modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(16.dp)
+                .semantics { liveRegion = LiveRegionMode.Assertive },
               contentAlignment = Alignment.TopStart,
             ) {
               MessageBodyLoading()
             }
           }
-          // Response.
           else {
-            // Tab bar.
-            Row(modifier = Modifier.fillMaxWidth()) {
-              PrimaryTabRow(
-                selectedTabIndex = selectedTabIndex,
-                containerColor = Color.Transparent,
-                indicator = {
-                  TabRowDefaults.PrimaryIndicator(
-                    modifier =
-                      Modifier.tabIndicatorOffset(selectedTabIndex, matchContentSize = true),
-                    color = taskColor,
-                    width = Dp.Unspecified,
-                  )
-                },
-              ) {
-                for ((index, tab) in TABS.withIndex()) {
-                  val enabled = index == 0 || (index == 1 && !uiState.noFunctionRecognized)
-                  Tab(
-                    selected = selectedTabIndex == index,
-                    enabled = enabled,
-                    onClick = { selectedTabIndex = index },
-                    modifier = Modifier.graphicsLayer { alpha = if (enabled) 1f else 0.3f },
-                    text = {
-                      Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                      ) {
-                        val titleColor =
-                          if (selectedTabIndex == index) taskColor
-                          else MaterialTheme.colorScheme.onSurfaceVariant
-                        Icon(
-                          tab.icon,
-                          contentDescription = null,
-                          modifier = Modifier.size(16.dp).alpha(0.7f),
-                          tint = titleColor,
-                        )
-                        BasicText(
-                          text = stringResource(tab.labelResId),
-                          maxLines = 1,
-                          color = { titleColor },
-                          style =
-                            MaterialTheme.typography.bodyMedium.copy(
-                              fontWeight = FontWeight.Medium
-                            ),
-                          autoSize =
-                            TextAutoSize.StepBased(
-                              minFontSize = 9.sp,
-                              maxFontSize = 14.sp,
-                              stepSize = 1.sp,
-                            ),
-                        )
-                      }
-                    },
-                  )
-                }
-              }
-            }
-
-            // Content.
-            Column(
-              modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
-            ) {
-              AnimatedContent(
-                selectedTabIndex,
-                transitionSpec = {
-                  if (targetState > initialState) {
-                    slideInHorizontally { 40 } + fadeIn() togetherWith
-                      slideOutHorizontally { -40 } + fadeOut(animationSpec = tween(50))
-                  } else {
-                    slideInHorizontally { -40 } + fadeIn() togetherWith
-                      slideOutHorizontally { 40 } + fadeOut(animationSpec = tween(50))
-                  }
-                },
-                modifier = Modifier.weight(1f),
-              ) { selectedTabIndex ->
-                // Model response.
-                if (selectedTabIndex == 0) {
-                  Column(modifier = Modifier.fillMaxWidth()) {
-                    val cdResponse = stringResource(R.string.cd_model_response_text)
-                    MarkdownText(
-                      text = uiState.modelResponse,
-                      modifier =
-                        Modifier.semantics(mergeDescendants = true) {
-                            contentDescription = cdResponse
-                            // Only announce when message is complete.
-                            if (doneGeneratingResponse) {
-                              liveRegion = LiveRegionMode.Polite
-                            }
-                          }
-                          .padding(16.dp),
-                    )
-
-                    if (uiState.noFunctionRecognized) {
-                      MessageBodyWarning(
-                        ChatMessageWarning(
-                          content = stringResource(R.string.warning_no_function_call)
-                        )
-                      )
-                    }
-                  }
-                }
-                // Function called.
-                else if (selectedTabIndex == 1) {
-                  Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                  ) {
-                    for ((index, details) in uiState.functionCallDetails.withIndex()) {
-                      MarkdownText(text = details, modifier = Modifier.padding(16.dp))
-
-                      if (index != uiState.functionCallDetails.size - 1) {
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                      }
-                    }
-                  }
-                }
-              }
-            }
+            ResponseTabs(
+              task = task,
+              uiState = uiState,
+              doneGeneratingResponse = doneGeneratingResponse,
+            )
           }
         }
 
@@ -624,36 +408,8 @@ fun MainUi(
           modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
           verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-          // A list of prompt templates.
-          Row(
-            modifier =
-              Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).graphicsLayer {
-                alpha = if (uiState.processing) 0.5f else 1f
-              },
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-          ) {
-            Spacer(modifier = Modifier.width(12.dp))
-            for (item in PROMPT_TEMPLATES) {
-              Text(
-                stringResource(item.labelResId),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelLarge,
-                modifier =
-                  Modifier.clip(RoundedCornerShape(12.dp))
-                    .clickable(enabled = !uiState.processing) { send(item.prompt) }
-                    .background(color = MaterialTheme.colorScheme.surfaceContainerLow)
-                    .border(
-                      width = 1.dp,
-                      color = MaterialTheme.colorScheme.outlineVariant,
-                      shape = RoundedCornerShape(12.dp),
-                    )
-                    .padding(all = 12.dp),
-              )
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-          }
+          PromptTemplateBar(processing = uiState.processing, onSend = send)
 
-          // Text and voice Input.
           Row(
             modifier = Modifier.padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -672,7 +428,6 @@ fun MainUi(
         }
       }
 
-      // Show an overlay during speech recognition.
       AnimatedVisibility(
         holdToDictateUiState.recognizing,
         enter = fadeIn(animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing)),
@@ -698,59 +453,23 @@ fun MainUi(
   }
 
   if (showErrorDialog) {
-    AlertDialog(
-      title = { Text(stringResource(R.string.error)) },
-      text = { Text(errorDialogContent, style = MaterialTheme.typography.bodyMedium) },
-      onDismissRequest = {
+    ErrorResetDialog(
+      task = task,
+      errorContent = errorDialogContent,
+      context = context,
+      viewModel = viewModel,
+      model = model,
+      tools = tools,
+      modelManagerViewModel = modelManagerViewModel,
+      onDismiss = {
         showErrorDialog = false
         errorDialogContent = ""
       },
-      dismissButton = {
-        TextButton(
-          onClick = {
-            showErrorDialog = false
-            errorDialogContent = ""
-          }
-        ) {
-          Text(stringResource(R.string.cancel))
-        }
-      },
-      confirmButton = {
-        Button(
-          onClick = {
-            showErrorDialog = false
-            errorDialogContent = ""
-
-            viewModel.resetEngine(
-              context = context,
-              model = model,
-              tools = tools,
-              modelManagerViewModel = modelManagerViewModel,
-              onError = {
-                errorDialogContent = it
-                showErrorDialog = true
-              },
-            )
-          },
-          colors = ButtonDefaults.buttonColors(containerColor = taskColor),
-        ) {
-          Text(stringResource(R.string.reset), color = Color.White)
-        }
+      onError = {
+        errorDialogContent = it
+        showErrorDialog = true
       },
     )
   }
 }
 
-private fun genFormattedFunctionCall(action: Action, resources: Resources): String {
-  val strFunctionName = action.functionCallDetails.functionName
-  val functionNameLabel = resources.getString(R.string.function_name)
-  var content = "**$functionNameLabel**:\n- $strFunctionName"
-  if (action.functionCallDetails.parameters.isNotEmpty()) {
-    val parametersLabel =
-      resources.getQuantityString(R.plurals.parameter, action.functionCallDetails.parameters.size)
-    val strParameters =
-      action.functionCallDetails.parameters.joinToString("\n") { "- ${it.first}: \"${it.second}\"" }
-    content += "\n\n**$parametersLabel**:\n$strParameters"
-  }
-  return content
-}

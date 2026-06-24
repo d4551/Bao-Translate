@@ -575,6 +575,7 @@
   <string name="prompt_template_label_create_calendar_event">カレンダー予定を作成</string>
   <string name="prompt_template_label_show_location_on_map">地図で場所を表示</string>
   <string name="prompt_template_label_open_wifi_settings">Wi-Fi 設定を開く</string>
+  <string name="prompt_template_label_capture_photo">200MP 写真を撮影</string>
   <string name="prompt_template_label_tone">トーン</string>
   <string name="prompt_template_label_style">スタイル</string>
   <string name="prompt_template_label_language">言語</string>
@@ -808,4 +809,5 @@
   <string name="cd_error_message">エラー: %1$s</string>
   <string name="cd_close_viewer">ビューアを閉じる</string>
   <string name="cd_clear_filter">フィルタをクリア</string>
+  <string name="libre_drop_selected_peer">選択済み</string>
 </resources>

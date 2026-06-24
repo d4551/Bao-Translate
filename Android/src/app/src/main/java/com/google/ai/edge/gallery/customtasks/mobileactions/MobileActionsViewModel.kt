@@ -75,6 +75,9 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
   private val _isResettingConversation = MutableStateFlow(false)
   private val isResettingConversation = _isResettingConversation.asStateFlow()
 
+  /** Owns the stock-camera capture lifecycle. See [CaptureCoordinator]. */
+  val captureCoordinator = CaptureCoordinator(appContext)
+
   fun reset() {
     val unused = setFlashlight(context = appContext, isEnabled = false)
     setShowWelcomeMessage(showWelcomeMessage = true)
@@ -82,6 +85,7 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
     setModelResponse(response = "")
     setNoFunctionRecognized(value = false)
     clearFunctionCallDetails()
+    captureCoordinator.reset()
   }
 
   fun cleanUp() {
@@ -141,20 +145,16 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
       setProcessing(processing = true)
       setShowWelcomeMessage(showWelcomeMessage = false)
 
-      // Clean up.
       setModelResponse(response = "")
       setNoFunctionRecognized(value = false)
       clearFunctionCallDetails()
 
-      // Set user prompt.
       setUserPrompt(prompt = userPrompt)
 
-      // Wait until the conversation is NOT resetting.
       BaoLog.d(TAG, "Waiting for any ongoing conversation reset to be done...")
       isResettingConversation.first { !it }
       BaoLog.d(TAG, "Done waiting. Start inference.")
 
-      // Run inference.
       val instance = model.instance as? LlmModelInstance
       if (instance == null) {
         BaoLog.w(TAG, "No LlmModelInstance available; aborting inference.")
@@ -239,13 +239,10 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
 
   fun performAction(action: Action, context: Context): String {
     return when (action) {
-      // Flashlight on.
       is FlashlightOnAction -> setFlashlight(context = context, isEnabled = true)
 
-      // Flashlight off.
       is FlashlightOffAction -> setFlashlight(context = context, isEnabled = false)
 
-      // Create contact.
       is CreateContactAction ->
         createContact(
           context = context,
@@ -255,19 +252,17 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
           email = action.email,
         )
 
-      // Send email.
       is SendEmailAction ->
         sendEmail(context = context, to = action.to, subject = action.subject, body = action.body)
 
-      // Show location on map.
       is ShowLocationOnMap -> showLocationOnMap(context = context, location = action.location)
 
-      // Open wifi settings.
       is OpenWifiSettingsAction -> openWifiSettings(context = context)
 
-      // Create calendar events.
       is CreateCalendarEventAction ->
         createCalendarEvent(context = context, datetime = action.datetime, title = action.title)
+
+      is CapturePhotoAction -> captureCoordinator.arm(action = action)
 
       else -> {
         BaoLog.w(TAG, "Unknown action type: ${action::class.simpleName}")
@@ -280,12 +275,10 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
     val cameraManager: CameraManager =
       context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
 
-    // Assuming the device has a rear camera with a flash unit (usually camera ID '0')
     var cameraId: String? = null
 
     runCatching {
 
-      // Find the ID of the camera that supports the flash unit
       for (id in cameraManager.cameraIdList) {
         val characteristics = cameraManager.getCameraCharacteristics(id)
         val isFlashAvailable =
@@ -330,15 +323,12 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
       Intent(ContactsContract.Intents.Insert.ACTION)
         .apply { type = ContactsContract.RawContacts.CONTENT_TYPE }
         .apply {
-          // Name
           putExtra(ContactsContract.Intents.Insert.NAME, "$firstName $lastName")
-          // Inserts an email address
           putExtra(ContactsContract.Intents.Insert.EMAIL, email)
           putExtra(
             ContactsContract.Intents.Insert.EMAIL_TYPE,
             ContactsContract.CommonDataKinds.Email.TYPE_WORK,
           )
-          // Inserts a phone number
           putExtra(ContactsContract.Intents.Insert.PHONE, phoneNumber)
           putExtra(
             ContactsContract.Intents.Insert.PHONE_TYPE,
@@ -419,7 +409,6 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
   }
 
   private fun createCalendarEvent(context: Context, datetime: String, title: String): String {
-    // Convert datetime string to ms.
     var ms = System.currentTimeMillis()
     runCatching {
 
@@ -430,7 +419,6 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
     
 }.onFailure { e ->
 
-      // Ignore parsing error.
       BaoLog.w(TAG, "Failed to parse date time: '$datetime'", e)
     
 }

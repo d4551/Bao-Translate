@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.FlashOff
 import androidx.compose.material.icons.outlined.FlashlightOn
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.ui.graphics.vector.ImageVector
 
@@ -34,6 +35,7 @@ enum class ActionType {
   ACTION_SHOW_LOCATION_ON_MAP,
   ACTION_OPEN_WIFI_SETTINGS,
   ACTION_CREATE_CALENDAR_EVENT,
+  ACTION_CAPTURE_PHOTO,
 }
 
 data class FunctionCallDetails(
@@ -135,5 +137,35 @@ class CreateCalendarEventAction(val datetime: String, val title: String) :
       FunctionCallDetails(
         functionName = "createCalendarEvent",
         parameters = listOf(Pair("datetime", datetime), Pair("title", title)),
+      ),
+  )
+
+/**
+ * Action to capture a high-resolution photo via the device's stock camera app.
+ *
+ * [resolutionHint] is an advisory string ("12mp", "50mp", "200mp") the stock
+ * camera may or may not honor — on Samsung S26 Ultra the user picks the mode
+ * in-camera. [mode] selects "main" / "ultrawide" / "tele" when the device
+ * exposes a lens selector.
+ *
+ * The action does NOT block on the capture. [MobileActionsViewModel.performAction]
+ * delegates to [CaptureCoordinator.arm] which provisions a FileProvider Uri and
+ * launches ACTION_IMAGE_CAPTURE asynchronously.
+ */
+class CapturePhotoAction(
+  val resolutionHint: String,
+  val mode: String,
+) :
+  Action(
+    type = ActionType.ACTION_CAPTURE_PHOTO,
+    icon = Icons.Outlined.PhotoCamera,
+    functionCallDetails =
+      FunctionCallDetails(
+        functionName = "capturePhoto",
+        parameters =
+          listOf(
+            Pair("resolution", resolutionHint),
+            Pair("mode", mode),
+          ),
       ),
   )

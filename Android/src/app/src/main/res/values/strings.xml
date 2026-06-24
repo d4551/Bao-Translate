@@ -311,6 +311,7 @@
   <string name="prompt_template_label_create_calendar_event">Create calendar event</string>
   <string name="prompt_template_label_show_location_on_map">Show location on map</string>
   <string name="prompt_template_label_open_wifi_settings">Open WIFI settings</string>
+  <string name="prompt_template_label_capture_photo">Capture 200MP photo</string>
 
   <!-- Prompt template editor labels -->
   <string name="prompt_template_label_tone">Tone</string>
@@ -949,6 +950,9 @@
   <string name="libre_drop_connecting">Connecting</string>
   <string name="libre_drop_done">Done</string>
   <string name="libre_drop_failed">Failed</string>
+  <string name="libre_drop_no_transfers">No transfers yet</string>
+  <string name="libre_drop_retry_hint">Tap Send to retry</string>
+  <string name="libre_drop_selected_peer">Selected</string>
 
   <!-- LibreDrop Consent Notification -->
   <string name="consent_notification_channel_name">LibreDrop Incoming Transfers</string>
