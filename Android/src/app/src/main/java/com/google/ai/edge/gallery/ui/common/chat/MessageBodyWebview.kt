@@ -49,6 +49,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.ui.common.GalleryWebView
+import com.google.ai.edge.gallery.ui.common.GalleryWebViewJavaScriptMode
 import kotlinx.coroutines.launch
 
 private const val TAG = "AGMessageBodyWebview"
@@ -60,14 +61,21 @@ fun MessageBodyWebview(message: ChatMessageWebView, modifier: Modifier = Modifie
   var showBottomSheet by remember { mutableStateOf(false) }
   val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
   val scope = rememberCoroutineScope()
+  val javaScriptMode =
+    if (message.trustedLocalContent) {
+      GalleryWebViewJavaScriptMode.TrustedLocalContent
+    } else {
+      GalleryWebViewJavaScriptMode.Disabled
+    }
 
   Column(modifier = modifier) {
     GalleryWebView(
       modifier = Modifier.fillMaxWidth().aspectRatio(message.aspectRatio),
       initialUrl = message.url,
       useIframeWrapper = message.iframe,
+      javaScriptMode = javaScriptMode,
       preventParentScrolling = true,
-      allowRequestPermission = true,
+      allowRequestPermission = message.trustedLocalContent,
     )
     AssistChip(
       onClick = { showBottomSheet = true },
@@ -94,8 +102,9 @@ fun MessageBodyWebview(message: ChatMessageWebView, modifier: Modifier = Modifie
           modifier = Modifier.fillMaxSize(),
           initialUrl = message.url,
           useIframeWrapper = message.iframe,
+          javaScriptMode = javaScriptMode,
           preventParentScrolling = true,
-          allowRequestPermission = true,
+          allowRequestPermission = message.trustedLocalContent,
         )
         OutlinedIconButton(
           onClick = {

@@ -72,7 +72,6 @@ import java.io.OutputStream
  * @param treeUri The picked tree URI. Caller already verified the
  *   persistable grant was taken; this constructor does not re-check.
  */
-@RequiresApi(android.os.Build.VERSION_CODES.LOLLIPOP)
 internal class SafTreeDownloadsEnvironment(
     private val contentResolver: ContentResolver,
     private val treeUri: Uri,

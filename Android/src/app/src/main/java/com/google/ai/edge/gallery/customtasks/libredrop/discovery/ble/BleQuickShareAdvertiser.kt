@@ -17,9 +17,7 @@ import android.bluetooth.le.AdvertisingSetParameters
 import android.bluetooth.le.BluetoothLeAdvertiser
 import android.content.Context
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.ParcelUuid
-import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat
 import com.google.ai.edge.gallery.customtasks.libredrop.protocol.endpoint.BleAdvertisement
@@ -597,16 +595,8 @@ public fun interface AdvertisePermissionChecker {
 internal class AndroidAdvertisePermissionChecker(
     private val context: Context,
 ) : AdvertisePermissionChecker {
-    override fun hasAdvertisePermission(): Boolean {
-        // On API ≤ 30 the install-time BLUETOOTH / BLUETOOTH_ADMIN
-        // permissions are declared in the umbrella manifest and the
-        // runtime check below trivially passes. From API 31+ we need
-        // the runtime BLUETOOTH_ADVERTISE grant.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
-        return checkSPermission()
-    }
+    override fun hasAdvertisePermission(): Boolean = checkSPermission()
 
-    @RequiresApi(Build.VERSION_CODES.S)
     private fun checkSPermission(): Boolean =
         ContextCompat.checkSelfPermission(
             context,
@@ -923,7 +913,6 @@ internal class AndroidBleAdvertiserGate(
         serviceData: ByteArray,
         mode: Int,
     ): DctRegistration? {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null
         if (!adapter.isLeExtendedAdvertisingSupported) {
             Log.w(
                 BleQuickShareAdvertiser.TAG,
@@ -977,7 +966,6 @@ internal class AndroidBleAdvertiserGate(
         mode: Int,
     ): ExtendedRegistration? {
         if (serviceData == null) return null
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null
         if (!adapter.isLeExtendedAdvertisingSupported) {
             Log.w(
                 BleQuickShareAdvertiser.TAG,
@@ -1022,7 +1010,6 @@ internal class AndroidBleAdvertiserGate(
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     private fun buildExtendedParameters(
         mode: Int,
         connectable: Boolean,
@@ -1040,7 +1027,6 @@ internal class AndroidBleAdvertiserGate(
             .setTxPowerLevel(AdvertisingSetParameters.TX_POWER_HIGH)
             .build()
 
-    @RequiresApi(Build.VERSION_CODES.O)
     private fun Int.toExtendedInterval(): Int =
         when (this) {
             AdvertiseSettings.ADVERTISE_MODE_LOW_POWER -> AdvertisingSetParameters.INTERVAL_HIGH
@@ -1053,7 +1039,6 @@ internal class AndroidBleAdvertiserGate(
         val advertiser: BluetoothLeAdvertiser,
     )
 
-    @RequiresApi(Build.VERSION_CODES.O)
     private class AdvertisingSetCallbackImpl(
         private val label: String,
     ) : AdvertisingSetCallback() {
@@ -1114,7 +1099,6 @@ internal class AndroidBleAdvertiserGate(
             }
         }
 
-        @RequiresApi(Build.VERSION_CODES.O)
         class Extended(
             private val callback: AdvertisingSetCallbackImpl,
         ) : DctRegistration() {
@@ -1125,7 +1109,6 @@ internal class AndroidBleAdvertiserGate(
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     private class ExtendedRegistration(
         private val callback: AdvertisingSetCallbackImpl,
     ) {
@@ -1157,7 +1140,7 @@ internal class AndroidBleAdvertiserGate(
                     Log.w(BleQuickShareAdvertiser.TAG, "stop DCT advertise threw", t)
                 }
             }
-            if (visibleRegistration != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (visibleRegistration != null) {
                 try {
                     visibleRegistration.close(advertiser)
                 } catch (

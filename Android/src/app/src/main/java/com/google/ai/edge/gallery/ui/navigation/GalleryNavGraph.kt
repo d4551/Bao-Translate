@@ -102,6 +102,7 @@ private const val ROUTE_BENCHMARK = "benchmark"
 private const val ROUTE_MODEL_MANAGER = "model_manager"
 private const val ROUTE_NOTIFICATIONS = "notifications"
 private const val ROUTE_BAO_TRANSLATE = "bao_translate"
+private const val ROUTE_LIBRE_DROP = "libre_drop"
 private const val ENTER_ANIMATION_DURATION_MS = 500
 private val ENTER_ANIMATION_EASING = EaseOutExpo
 private const val ENTER_ANIMATION_DELAY_MS = 100
@@ -215,7 +216,11 @@ fun GalleryNavHost(
             navigateToTaskScreen = { task ->
               pickedTask = task
               enableModelListAnimation = true
-              val route = if (task.id == "bao_translate") ROUTE_BAO_TRANSLATE else ROUTE_MODEL_LIST
+              val route = when (task.id) {
+                "bao_translate" -> ROUTE_BAO_TRANSLATE
+                "libre_drop" -> ROUTE_LIBRE_DROP
+                else -> ROUTE_MODEL_LIST
+              }
               navController.navigate(route)
               firebaseAnalytics?.logEvent(
                 GalleryEvent.CAPABILITY_SELECT.id,
@@ -410,6 +415,31 @@ fun GalleryNavHost(
     ) {
       val customTask = modelManagerViewModel.getCustomTaskByTaskId("bao_translate")
       val innerPadding = WindowInsets.statusBars.asPaddingValues()
+      BackHandler {
+        enableHomeScreenAnimation = false
+        navController.navigateUp()
+      }
+      Scaffold(
+        topBar = {},
+        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.background,
+      ) { padding ->
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+          customTask?.MainScreen(
+            data = CustomTaskData(
+              modelManagerViewModel = modelManagerViewModel,
+            )
+          )
+        }
+      }
+    }
+
+    // LibreDrop direct route — bypasses model picker since it has no models
+    composable(
+      route = ROUTE_LIBRE_DROP,
+      enterTransition = { slideEnter() },
+      exitTransition = { slideExit() },
+    ) {
+      val customTask = modelManagerViewModel.getCustomTaskByTaskId("libre_drop")
       BackHandler {
         enableHomeScreenAnimation = false
         navController.navigateUp()

@@ -21,7 +21,6 @@ import android.bluetooth.BluetoothSocket
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
-import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat
 import com.google.ai.edge.gallery.customtasks.libredrop.discovery.diagnostics.DiagnosticLog
@@ -91,7 +90,6 @@ public interface BluetoothL2capIo {
      * ownership of the socket — the caller MUST close it when the
      * upgrade either completes or aborts.
      */
-    @RequiresApi(Build.VERSION_CODES.Q)
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     public fun listen(): Listener?
 
@@ -114,7 +112,6 @@ public interface BluetoothL2capIo {
      * has no `Code` attribute and any test that even references it
      * fails at JUnit's class-resolution stage with `ClassFormatError`.
      */
-    @RequiresApi(Build.VERSION_CODES.Q)
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     public fun connect(
         macAddress: String,
@@ -145,7 +142,6 @@ public interface BluetoothL2capIo {
          * socket is closed before a connection arrives. The caller MUST
          * close the returned socket when done.
          */
-        @RequiresApi(Build.VERSION_CODES.Q)
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
         public fun accept(): L2capChannel
 
@@ -225,24 +221,17 @@ public class DefaultBluetoothL2capIo(
             return manager.adapter
         }
 
-    override fun hasConnectPermission(): Boolean {
-        // API 29–30 used the legacy install-time BLUETOOTH /
-        // BLUETOOTH_ADMIN permissions; they are always granted when
-        // declared, so we short-circuit. API 31+ uses the runtime
-        // BLUETOOTH_CONNECT grant.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
-        return ContextCompat.checkSelfPermission(
+    override fun hasConnectPermission(): Boolean =
+        ContextCompat.checkSelfPermission(
             appContext,
             Manifest.permission.BLUETOOTH_CONNECT,
         ) == PackageManager.PERMISSION_GRANTED
-    }
 
     override fun hasBleHardware(): Boolean =
         appContext.packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)
 
     override fun isBluetoothEnabled(): Boolean = adapter?.isEnabled == true
 
-    @RequiresApi(Build.VERSION_CODES.Q)
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     override fun listen(): BluetoothL2capIo.Listener? {
         val adapter = adapter ?: return null
@@ -263,7 +252,6 @@ public class DefaultBluetoothL2capIo(
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.Q)
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     override fun connect(
         macAddress: String,
@@ -308,13 +296,11 @@ public class DefaultBluetoothL2capIo(
      * Adapter for `BluetoothServerSocket` that exposes the assigned PSM
      * via the API 29+ `BluetoothServerSocket.getPsm()` accessor.
      */
-    @RequiresApi(Build.VERSION_CODES.Q)
     private class DefaultListener(
         private val server: BluetoothServerSocket,
     ) : BluetoothL2capIo.Listener {
         override val psm: Int = server.psm
 
-        @RequiresApi(Build.VERSION_CODES.Q)
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
         override fun accept(): L2capChannel = BluetoothL2capChannel(server.accept())
 

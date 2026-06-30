@@ -15,7 +15,6 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.ParcelUuid
 import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat
@@ -621,17 +620,11 @@ public fun interface PermissionChecker {
 internal class AndroidPermissionChecker(
     private val context: Context,
 ) : PermissionChecker {
-    override fun hasScanPermission(): Boolean {
-        // On API ≤ 30 the install-time BLUETOOTH / BLUETOOTH_ADMIN
-        // permissions are declared in the umbrella manifest and the
-        // runtime check below trivially passes. From API 31+ we need
-        // the runtime BLUETOOTH_SCAN grant.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
-        return ContextCompat.checkSelfPermission(
+    override fun hasScanPermission(): Boolean =
+        ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.BLUETOOTH_SCAN,
         ) == PackageManager.PERMISSION_GRANTED
-    }
 }
 
 /**

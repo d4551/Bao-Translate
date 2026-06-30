@@ -97,6 +97,7 @@ import com.google.ai.edge.gallery.firebaseAnalytics
 import com.google.ai.edge.gallery.ui.common.ClickableLink
 import com.google.ai.edge.gallery.ui.common.SmallFilledTonalButton
 import com.google.ai.edge.gallery.ui.common.SmallOutlinedButton
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.customColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -161,8 +162,8 @@ fun McpManagerBottomSheet(
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
           CircularProgressIndicator(
             trackColor = MaterialTheme.colorScheme.surfaceVariant,
-            strokeWidth = 3.dp,
-            modifier = Modifier.size(24.dp),
+            strokeWidth = Dimensions.Stroke.medium,
+            modifier = Modifier.size(Dimensions.Icon.medium),
           )
         }
       }
@@ -192,7 +193,7 @@ fun McpManagerBottomSheet(
       else {
         Column(
           modifier =
-            Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp).fillMaxSize().pointerInput(
+            Modifier.padding(horizontal = Dimensions.Spacing.medium).padding(bottom = Dimensions.Spacing.medium).fillMaxSize().pointerInput(
               Unit
             ) {
               detectTapGestures(onTap = { focusManager.clearFocus() })
@@ -200,7 +201,7 @@ fun McpManagerBottomSheet(
         ) {
           // Title Row
           Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = Dimensions.Spacing.small),
             verticalAlignment = Alignment.CenterVertically,
           ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -211,7 +212,7 @@ fun McpManagerBottomSheet(
               ClickableLink(
                 url = "https://github.com/google-ai-edge/gallery/tree/main/mcp",
                 linkText = stringResource(R.string.learn_more_about_mcp_short),
-                modifier = Modifier.padding(top = 4.dp),
+                modifier = Modifier.padding(top = Dimensions.Spacing.xs),
                 textAlign = TextAlign.Start,
               )
             }
@@ -234,9 +235,9 @@ fun McpManagerBottomSheet(
           // Search and Add Button Row
           Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.md),
             modifier =
-              Modifier.padding(top = 8.dp, bottom = if (searchQuery.isEmpty()) 8.dp else 18.dp)
+              Modifier.padding(top = Dimensions.Spacing.small, bottom = if (searchQuery.isEmpty()) Dimensions.Spacing.small else 18.dp)
                 .height(IntrinsicSize.Min),
           ) {
             TextField(
@@ -292,7 +293,7 @@ fun McpManagerBottomSheet(
             Row(
               horizontalArrangement = Arrangement.SpaceBetween,
               verticalAlignment = Alignment.CenterVertically,
-              modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+              modifier = Modifier.fillMaxWidth().padding(bottom = Dimensions.Spacing.small),
             ) {
               // MCP Server Count
               Text(
@@ -322,7 +323,7 @@ fun McpManagerBottomSheet(
               LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.md),
               ) {
                 items(filteredServers, key = { it.mcpServer.url }) { serverState ->
                   McpServerItemRow(
@@ -359,7 +360,7 @@ fun McpManagerBottomSheet(
           colors =
             ButtonDefaults.buttonColors(
               containerColor = MaterialTheme.customColors.errorTextColor,
-              contentColor = Color.White,
+              contentColor = MaterialTheme.colorScheme.onError,
             ),
         ) {
           Text(stringResource(R.string.delete))
@@ -403,14 +404,14 @@ private fun EmptyMcpServerView(onAddClick: () -> Unit, onDismiss: () -> Unit) {
 
   Column(
     modifier =
-      Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp).fillMaxSize().pointerInput(
+      Modifier.padding(horizontal = Dimensions.Spacing.medium).padding(bottom = Dimensions.Spacing.medium).fillMaxSize().pointerInput(
         Unit
       ) {
         detectTapGestures(onTap = { focusManager.clearFocus() })
       }
   ) {
     Row(
-      modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+      modifier = Modifier.fillMaxWidth().padding(bottom = Dimensions.Spacing.small),
       horizontalArrangement = Arrangement.End,
       verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -424,14 +425,14 @@ private fun EmptyMcpServerView(onAddClick: () -> Unit, onDismiss: () -> Unit) {
           onClick = onAddClick,
           colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
         ) {
-          Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-          Spacer(modifier = Modifier.width(4.dp))
+          Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(Dimensions.Component.iconSmall))
+          Spacer(modifier = Modifier.width(Dimensions.Spacing.xs))
           Text(stringResource(R.string.add_mcp_server))
         }
         ClickableLink(
           url = "https://github.com/google-ai-edge/gallery/tree/main/mcp",
           linkText = stringResource(R.string.learn_more_about_mcp),
-          modifier = Modifier.padding(top = 16.dp),
+          modifier = Modifier.padding(top = Dimensions.Spacing.medium),
         )
       }
     }
@@ -449,17 +450,17 @@ private fun McpServerItemRow(
   Row(
     modifier =
       Modifier.fillMaxWidth()
-        .clip(shape = RoundedCornerShape(20.dp))
+        .clip(shape = RoundedCornerShape(Dimensions.Component.chipCornerRadius))
         .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-        .padding(horizontal = 16.dp, vertical = 12.dp),
+        .padding(horizontal = Dimensions.Spacing.medium, vertical = Dimensions.Spacing.md),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     Column(modifier = Modifier.weight(1f)) {
-      Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small)) {
         // Column to display server details like name, URL, and any error messages.
         Column(
-          modifier = Modifier.weight(1f).padding(top = 2.dp),
-          verticalArrangement = Arrangement.spacedBy(6.dp),
+          modifier = Modifier.weight(1f).padding(top = Dimensions.Spacing.xxs),
+          verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.sm),
         ) {
           val hasName = server.name.isNotEmpty()
           val primaryText = if (hasName) server.name else server.url
@@ -507,7 +508,7 @@ private fun McpServerItemRow(
           onCheckedChange = onEnabledChange,
           enabled = serverState.error == null,
           modifier =
-            Modifier.offset(y = (-4).dp).semantics { contentDescription = toggleServerDesc },
+            Modifier.offset(y = -Dimensions.Spacing.xs).semantics { contentDescription = toggleServerDesc },
         )
       }
 
@@ -515,7 +516,7 @@ private fun McpServerItemRow(
       Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Start,
-        modifier = Modifier.padding(top = 16.dp),
+        modifier = Modifier.padding(top = Dimensions.Spacing.medium),
       ) {
         val enabledToolsCount = server.toolsList.count { it.enabled }
         val totalToolsCount = server.toolsList.size
@@ -525,7 +526,7 @@ private fun McpServerItemRow(
           imageVector = Icons.Outlined.Tune,
           enabled = serverState.error == null,
         )
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(Dimensions.Spacing.small))
         SmallOutlinedButton(
           onClick = onDeleteClick,
           labelResId = R.string.delete,

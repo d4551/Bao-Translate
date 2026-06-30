@@ -22,7 +22,6 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
-import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat
 import com.google.location.nearby.mediums.proto.BleFramesProto
@@ -129,12 +128,8 @@ public class BleGattInitialControlServer(
         return adapter.isEnabled
     }
 
-    private fun hasConnectPermission(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
-        return checkSPermission()
-    }
+    private fun hasConnectPermission(): Boolean = checkSPermission()
 
-    @RequiresApi(Build.VERSION_CODES.S)
     private fun checkSPermission(): Boolean =
         ContextCompat.checkSelfPermission(
             appContext,

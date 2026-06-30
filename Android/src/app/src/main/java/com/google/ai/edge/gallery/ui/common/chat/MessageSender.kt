@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.R
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.bodySmallNarrow
 
 data class MessageLayoutConfig(
@@ -78,13 +79,13 @@ fun MessageSender(message: ChatMessage, agentName: String = "", imageHistoryCurI
         // Benchmark running status.
         is ChatMessageBenchmarkResult -> {
           if (message.isRunning()) {
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(Dimensions.Spacing.small))
             CircularProgressIndicator(
-              modifier = Modifier.size(10.dp),
-              strokeWidth = 1.5.dp,
+              modifier = Modifier.size(Dimensions.Indicator.medium),
+              strokeWidth = Dimensions.Component.borderWidth,
               color = MaterialTheme.colorScheme.secondary,
             )
-            Spacer(modifier = Modifier.width(4.dp))
+            Spacer(modifier = Modifier.width(Dimensions.Spacing.xs))
           }
           val statusLabel =
             if (message.isWarmingUp()) {
@@ -100,10 +101,10 @@ fun MessageSender(message: ChatMessage, agentName: String = "", imageHistoryCurI
         // Benchmark LLM running status.
         is ChatMessageBenchmarkLlmResult -> {
           if (message.running) {
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(Dimensions.Spacing.small))
             CircularProgressIndicator(
-              modifier = Modifier.size(10.dp),
-              strokeWidth = 1.5.dp,
+              modifier = Modifier.size(Dimensions.Indicator.medium),
+              strokeWidth = Dimensions.Component.borderWidth,
               color = MaterialTheme.colorScheme.secondary,
             )
           }
@@ -112,13 +113,13 @@ fun MessageSender(message: ChatMessage, agentName: String = "", imageHistoryCurI
         // Image generation running status.
         is ChatMessageImageWithHistory -> {
           if (message.isRunning()) {
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(Dimensions.Spacing.small))
             CircularProgressIndicator(
-              modifier = Modifier.size(10.dp),
-              strokeWidth = 1.5.dp,
+              modifier = Modifier.size(Dimensions.Indicator.medium),
+              strokeWidth = Dimensions.Component.borderWidth,
               color = MaterialTheme.colorScheme.secondary,
             )
-            Spacer(modifier = Modifier.width(4.dp))
+            Spacer(modifier = Modifier.width(Dimensions.Spacing.xs))
             Text(
               stringResource(R.string.running),
               color = MaterialTheme.colorScheme.secondary,
@@ -149,7 +150,7 @@ private fun getMessageLayoutConfig(
   var userLabel = stringResource(R.string.chat_you)
   var rightSideLabel = ""
   var horizontalArrangement = Arrangement.End
-  var modifier = Modifier.padding(bottom = 2.dp)
+  var modifier = Modifier.padding(bottom = Dimensions.Spacing.xxs)
 
   if (message.side == ChatSide.AGENT) {
     userLabel = agentName
@@ -180,7 +181,7 @@ private fun getMessageLayoutConfig(
     is ChatMessageImageWithHistory -> {
       horizontalArrangement = Arrangement.SpaceBetween
       if (message.bitmaps.isNotEmpty()) {
-        modifier = modifier.width(200.dp)
+        modifier = modifier.width(Dimensions.Component.thumbnailWidth)
       }
       rightSideLabel = "${imageHistoryCurIndex + 1}/${message.totalIterations}"
     }

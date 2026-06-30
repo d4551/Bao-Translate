@@ -114,10 +114,10 @@ public data class ConsentNotificationContent(
                     entry.items.isNotEmpty() ->
                         kindBreakdownSummary(resolver, entry.items, entry.totalSize)
                     else ->
-                        resolver.formatted(
-                            R.string.consent_notification_summary_n_items,
+                        resolver.quantity(
+                            R.plurals.consent_notification_summary_n_items,
                             entry.itemCount,
-                            humanReadableSize(entry.totalSize),
+                            entry.itemCount,
                         )
                 }
 
@@ -179,21 +179,21 @@ public data class ConsentNotificationContent(
 
             val segments = mutableListOf<String>()
             if (files > 0) {
-                segments += resolver.formatted(R.string.consent_notification_segment_files, files)
+                segments += resolver.quantity(R.plurals.consent_notification_segment_files, files, files)
             }
             if (urls > 0) {
-                segments += resolver.formatted(R.string.consent_notification_segment_urls, urls)
+                segments += resolver.quantity(R.plurals.consent_notification_segment_urls, urls, urls)
             }
             if (addresses > 0) {
                 segments +=
-                    resolver.formatted(R.string.consent_notification_segment_addresses, addresses)
+                    resolver.quantity(R.plurals.consent_notification_segment_addresses, addresses, addresses)
             }
             if (phones > 0) {
                 segments +=
-                    resolver.formatted(R.string.consent_notification_segment_phone_numbers, phones)
+                    resolver.quantity(R.plurals.consent_notification_segment_phone_numbers, phones, phones)
             }
             if (texts > 0) {
-                segments += resolver.formatted(R.string.consent_notification_segment_texts, texts)
+                segments += resolver.quantity(R.plurals.consent_notification_segment_texts, texts, texts)
             }
 
             // Defensive fallback: an items list whose entries do not
@@ -201,10 +201,10 @@ public data class ConsentNotificationContent(
             // back to the generic "N item(s)" form so the summary is
             // never empty.
             if (segments.isEmpty()) {
-                return resolver.formatted(
-                    R.string.consent_notification_summary_n_items,
+                return resolver.quantity(
+                    R.plurals.consent_notification_summary_n_items,
                     items.size,
-                    humanReadableSize(totalSize),
+                    items.size,
                 )
             }
 
@@ -308,19 +308,39 @@ public fun interface TextResolver {
         vararg formatArgs: Any,
     ): String
 
+    public fun quantity(
+        resourceId: Int,
+        quantity: Int,
+        vararg formatArgs: Any,
+    ): String = formatted(resourceId, *formatArgs)
+
     public companion object {
         /**
          * Production adapter wrapping a real [Resources]. Inline so
          * we don't allocate per consent post.
          */
         public fun from(resources: Resources): TextResolver =
-            TextResolver { resourceId, args ->
-                if (args.isEmpty()) {
-                    resources.getString(resourceId)
-                } else {
-                    @Suppress("SpreadOperator") // Resources.getString requires a vararg; this site is rare.
-                    resources.getString(resourceId, *args)
-                }
+            object : TextResolver {
+                override fun formatted(
+                    resourceId: Int,
+                    vararg formatArgs: Any,
+                ): String =
+                    if (formatArgs.isEmpty()) {
+                        resources.getString(resourceId)
+                    } else {
+                        resources.getString(resourceId, *formatArgs)
+                    }
+
+                override fun quantity(
+                    resourceId: Int,
+                    quantity: Int,
+                    vararg formatArgs: Any,
+                ): String =
+                    if (formatArgs.isEmpty()) {
+                        resources.getQuantityString(resourceId, quantity)
+                    } else {
+                        resources.getQuantityString(resourceId, quantity, *formatArgs)
+                    }
             }
     }
 }

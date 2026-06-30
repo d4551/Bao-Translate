@@ -43,7 +43,6 @@ import kotlin.coroutines.resume
  * Wi-Fi association if it survived), which would fail because the
  * sender's gateway IP is only reachable on the hotspot subnet.
  */
-@RequiresApi(Build.VERSION_CODES.Q)
 public class AndroidWifiNetworkSpecifierClient(
     context: Context,
     /**

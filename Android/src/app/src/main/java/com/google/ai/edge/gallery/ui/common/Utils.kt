@@ -441,11 +441,7 @@ suspend fun Context.saveBitmapToMediaStore(
   return withContext(dispatcher) {
     val resolver: ContentResolver = contentResolver
     val imageCollection: Uri =
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-      } else {
-        MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-      }
+      MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
 
     val contentValues =
       ContentValues().apply {

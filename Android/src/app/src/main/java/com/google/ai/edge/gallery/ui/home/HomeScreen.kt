@@ -53,7 +53,6 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ListAlt
@@ -78,7 +77,6 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -97,10 +95,11 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.semantics.Role
@@ -113,6 +112,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -135,13 +135,13 @@ import com.google.ai.edge.gallery.ui.common.taskLabelText
 import com.google.ai.edge.gallery.ui.common.tos.AppTosDialog
 import com.google.ai.edge.gallery.ui.common.tos.TosViewModel
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.customColors
 import com.google.ai.edge.gallery.ui.theme.homePageTitleStyle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val TAG = "AGHomeScreen"
-private const val TASK_COUNT_ANIMATION_DURATION = 250
 private const val ANIMATION_INIT_DELAY = 0L
 private const val TOP_APP_BAR_ANIMATION_DURATION = 600
 private const val TITLE_FIRST_LINE_ANIMATION_DURATION = 600
@@ -256,7 +256,7 @@ fun HomeScreen(
       drawerState = drawerState,
       drawerContent = {
         ModalDrawerSheet {
-          Column(modifier = Modifier.padding(16.dp)) {
+          Column(modifier = Modifier.padding(Dimensions.Spacing.medium)) {
             Row(modifier = Modifier.fillMaxWidth()) {
               SquareDrawerItem(
                 label = stringResource(R.string.drawer_settings_label),
@@ -276,7 +276,7 @@ fun HomeScreen(
                       )
                   ),
               )
-              Spacer(modifier = Modifier.width(16.dp))
+              Spacer(modifier = Modifier.width(Dimensions.Spacing.medium))
               SquareDrawerItem(
                 label = stringResource(R.string.drawer_models_label),
                 description = stringResource(R.string.drawer_models_description),
@@ -299,7 +299,7 @@ fun HomeScreen(
                   ),
               )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(Dimensions.Spacing.medium))
             Row(modifier = Modifier.fillMaxWidth()) {
               SquareDrawerItem(
                 label = stringResource(R.string.drawer_notifications_label),
@@ -347,7 +347,7 @@ fun HomeScreen(
             modifier =
               Modifier.graphicsLayer {
                 alpha = progress
-                translationY = ((-16).dp * (1 - progress)).toPx()
+                translationY = (-Dimensions.Home.entranceOffset * (1 - progress)).toPx()
               }
           ) {
             GalleryTopAppBar(
@@ -383,24 +383,24 @@ fun HomeScreen(
               modifier = Modifier
                 .fillMaxWidth()
                 .padding(
-                  start = 16.dp,
-                  end = 16.dp,
-                  top = innerPadding.calculateTopPadding() + 8.dp
+                  start = Dimensions.Spacing.medium,
+                  end = Dimensions.Spacing.medium,
+                  top = innerPadding.calculateTopPadding() + Dimensions.Spacing.small
                 ),
               colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.errorContainer,
               ),
             ) {
               Row(
-                modifier = Modifier.padding(12.dp),
+                modifier = Modifier.padding(Dimensions.Spacing.md),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
               ) {
                 Icon(
                   Icons.Rounded.Error,
                   contentDescription = null,
                   tint = MaterialTheme.colorScheme.onErrorContainer,
-                  modifier = Modifier.size(20.dp),
+                  modifier = Modifier.size(Dimensions.Icon.medium),
                 )
                 Text(
                   text = stringResource(R.string.error_check_internet),
@@ -438,15 +438,18 @@ fun HomeScreen(
                     animationLabel = "bg star",
                   )
                 }
-              val configuration = LocalConfiguration.current
-              val screenWidth = configuration.screenWidthDp.dp
+              val screenWidth =
+                with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
               val targetWidth = screenWidth * 1.5f
               Image(
                 painter = painterResource(id = R.drawable.bg_star),
                 contentDescription = null,
                 modifier =
                   Modifier.requiredWidth(targetWidth)
-                    .blur(radius = 35.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded)
+                    .blur(
+                      radius = Dimensions.Home.backgroundStarBlur,
+                      edgeTreatment = BlurredEdgeTreatment.Unbounded,
+                    )
                     .offset(x = screenWidth * 0.25f, y = -screenWidth * 0.1f)
                     .graphicsLayer {
                       rotationZ = (1f - progress) * 40f
@@ -466,12 +469,16 @@ fun HomeScreen(
               Column(
                 modifier =
                   Modifier.padding(
-                      horizontal = if (gm4) 24.dp else 40.dp,
-                      vertical = if (gm4) 0.dp else 48.dp,
+                      horizontal =
+                        if (gm4) Dimensions.Spacing.large
+                        else Dimensions.Home.heroHorizontalPadding,
+                      vertical =
+                        if (gm4) 0.dp
+                        else Dimensions.Home.heroVerticalPadding,
                     )
-                    .padding(top = 24.dp, bottom = 16.dp)
+                    .padding(top = Dimensions.Spacing.large, bottom = Dimensions.Spacing.medium)
                     .semantics(mergeDescendants = true) {},
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
               ) {
                 if (gm4) {
                   AppTitleGm4(enableAnimation = enableAnimation)
@@ -518,7 +525,7 @@ fun HomeScreen(
                 grid = grid,
               )
 
-              Spacer(modifier = Modifier.height(innerPadding.calculateBottomPadding() + 10.dp))
+              Spacer(modifier = Modifier.height(innerPadding.calculateBottomPadding() + Dimensions.Spacing.smd))
             }
           }
 
@@ -564,8 +571,8 @@ private fun AppTitle(enableAnimation: Boolean) {
   val firstLineText = stringResource(R.string.app_name_first_part)
   val secondLineText = stringResource(R.string.app_name_second_part)
   val titleColor = MaterialTheme.customColors.appTitleGradientColors[1]
-  val screenWidthInDp = LocalConfiguration.current.screenWidthDp.dp
-  val fontSize = with(LocalDensity.current) { (screenWidthInDp.toPx() * 0.12f).toSp() }
+  val screenWidthPx = LocalWindowInfo.current.containerSize.width
+  val fontSize = with(LocalDensity.current) { (screenWidthPx * 0.12f).toSp() }
   val titleStyle = homePageTitleStyle.copy(fontSize = fontSize, lineHeight = fontSize)
 
   // First line text "Google AI" and its animation.
@@ -607,7 +614,7 @@ private fun AppTitle(enableAnimation: Boolean) {
         text = secondLineText,
         style = titleStyle,
         color = titleColor,
-        modifier = Modifier.offset(y = (-16).dp),
+        modifier = Modifier.offset(y = -Dimensions.Home.entranceOffset),
         animationDelay = delay,
         animationDurationMs = TITLE_SECOND_LINE_ANIMATION_DURATION,
       )
@@ -616,7 +623,7 @@ private fun AppTitle(enableAnimation: Boolean) {
         text = secondLineText,
         style = titleStyle,
         color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.offset(y = (-16).dp),
+        modifier = Modifier.offset(y = -Dimensions.Home.entranceOffset),
         animationDelay = delay,
         animationDurationMs = TITLE_SECOND_LINE_ANIMATION_DURATION,
       )
@@ -628,7 +635,11 @@ private fun AppTitle(enableAnimation: Boolean) {
         titleStyle.copy(
           brush = linearGradient(colors = MaterialTheme.customColors.appTitleGradientColors)
         ),
-      modifier = Modifier.offset(x = (-16).dp, y = (-16).dp),
+      modifier =
+        Modifier.offset(
+          x = -Dimensions.Home.entranceOffset,
+          y = -Dimensions.Home.entranceOffset,
+        ),
       animationDelay = if (enableAnimation) delay else 0,
       animationDurationMs = if (enableAnimation) TITLE_SECOND_LINE_ANIMATION_DURATION2 else 0,
     )
@@ -722,17 +733,17 @@ private fun TryGm4IntroText(enableAnimation: Boolean) {
     }
   Row(
     modifier =
-      Modifier.padding(top = 24.dp).graphicsLayer {
+      Modifier.padding(top = Dimensions.Spacing.large).graphicsLayer {
         alpha = progress
         translationY = (CONTENT_COMPOSABLES_OFFSET_Y.dp * (1 - progress)).toPx()
       },
     verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(8.dp),
+    horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
   ) {
     Icon(
       ImageVector.vectorResource(R.drawable.gemma_logo),
       contentDescription = stringResource(R.string.home_try_gemma4),
-      modifier = Modifier.size(24.dp),
+      modifier = Modifier.size(Dimensions.Icon.medium),
       tint = MaterialTheme.colorScheme.primary,
     )
     Text(
@@ -784,19 +795,19 @@ private fun CategoryTabHeader(
   LazyRow(
     state = listState,
     modifier =
-      Modifier.fillMaxWidth().padding(bottom = 32.dp).graphicsLayer {
+      Modifier.fillMaxWidth().padding(bottom = Dimensions.Spacing.xl).graphicsLayer {
         alpha = progress
         translationY = (CONTENT_COMPOSABLES_OFFSET_Y.dp * (1 - progress)).toPx()
       },
-    horizontalArrangement = Arrangement.spacedBy(16.dp),
+    horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.medium),
   ) {
-    item(key = "spacer_start") { Spacer(modifier = Modifier.width(8.dp)) }
+    item(key = "spacer_start") { Spacer(modifier = Modifier.width(Dimensions.Spacing.small)) }
     itemsIndexed(items = sortedCategories) { index, category ->
       val isSelected = selectedIndex == index
       val categoryLabel = getCategoryLabel(context = context, category = category)
       Row(
         modifier =
-          Modifier.height(40.dp)
+          Modifier.height(Dimensions.Home.categoryTabHeight)
             .clip(CircleShape)
             .background(
               color =
@@ -833,14 +844,14 @@ private fun CategoryTabHeader(
       ) {
         Text(
           categoryLabel,
-          modifier = Modifier.padding(horizontal = 16.dp),
+          modifier = Modifier.padding(horizontal = Dimensions.Spacing.medium),
           style = MaterialTheme.typography.labelLarge,
           color =
-            if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+            if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
         )
       }
     }
-    item(key = "spacer_end") { Spacer(modifier = Modifier.width(8.dp)) }
+    item(key = "spacer_end") { Spacer(modifier = Modifier.width(Dimensions.Spacing.small)) }
   }
 }
 
@@ -880,9 +891,9 @@ private fun TaskList(
   // The highlighted tiles at the top.
   if (gm4) {
     Column(
-      verticalArrangement = Arrangement.spacedBy(10.dp),
+      verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.smd),
       modifier =
-        Modifier.padding(horizontal = 24.dp).graphicsLayer {
+        Modifier.padding(horizontal = Dimensions.Spacing.large).graphicsLayer {
           alpha = progress
           translationY = (CONTENT_COMPOSABLES_OFFSET_Y.dp * (1 - progress)).toPx()
         },
@@ -917,7 +928,11 @@ private fun TaskList(
             lineHeight = 24.sp,
           ),
         color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(top = 22.dp, bottom = 16.dp),
+        modifier =
+          Modifier.padding(
+            top = Dimensions.Home.featuredHeaderTopPadding,
+            bottom = Dimensions.Spacing.medium,
+          ),
       )
     }
   }
@@ -925,21 +940,21 @@ private fun TaskList(
   HorizontalPager(
     state = pagerState,
     verticalAlignment = Alignment.Top,
-    contentPadding = PaddingValues(horizontal = 20.dp),
+    contentPadding = PaddingValues(horizontal = Dimensions.Spacing.lg),
   ) { pageIndex ->
     val tasks = tasksByCategories[sortedCategories[pageIndex].id] ?: emptyList()
     if (grid) {
       Column(
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.medium),
         modifier =
-          Modifier.fillMaxWidth().padding(4.dp).graphicsLayer {
+          Modifier.fillMaxWidth().padding(Dimensions.Spacing.xs).graphicsLayer {
             translationY = (CONTENT_COMPOSABLES_OFFSET_Y.dp * (1 - progress)).toPx()
           },
       ) {
         for (i in tasks.indices step 2) {
           Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.medium),
           ) {
             // First item in the row
             TaskCard(
@@ -973,10 +988,10 @@ private fun TaskList(
     } else {
       Column(
         modifier =
-          Modifier.fillMaxWidth().padding(4.dp).graphicsLayer {
+          Modifier.fillMaxWidth().padding(Dimensions.Spacing.xs).graphicsLayer {
             translationY = (CONTENT_COMPOSABLES_OFFSET_Y.dp * (1 - progress)).toPx()
           },
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.smd),
       ) {
         for ((index, task) in tasks.withIndex()) {
           TaskCard(
@@ -1004,35 +1019,15 @@ private fun TaskCard(
   description: String = "",
   square: Boolean = false,
 ) {
-  // Observes the model count and updates the model count label with a fade-in/fade-out animation
-  // whenever the count changes.
-  val modelCount by remember {
-    derivedStateOf {
-      val trigger = task.updateTrigger.value
-      task.modelCountOverride ?: if (trigger >= 0) {
-        task.models.size
-      } else {
-        0
-      }
-    }
-  }
-  val modelCountLabel = when (modelCount) {
-    1 -> stringResource(R.string.model_count_single)
-    else -> stringResource(R.string.model_count_many, modelCount)
-  }
-  var curModelCountLabel by remember { mutableStateOf("") }
-  var modelCountLabelVisible by remember { mutableStateOf(true) }
-
-  LaunchedEffect(modelCountLabel) {
-    if (curModelCountLabel.isEmpty()) {
-      curModelCountLabel = modelCountLabel
-    } else {
-      modelCountLabelVisible = false
-      delay(TASK_COUNT_ANIMATION_DURATION.toLong())
-      curModelCountLabel = modelCountLabel
-      modelCountLabelVisible = true
-    }
-  }
+  val taskUpdateTrigger = task.updateTrigger.value
+  val modelCount =
+    remember(task, taskUpdateTrigger) { task.modelCountOverride ?: task.models.size }
+  val modelCountLabel = pluralStringResource(R.plurals.model_count, modelCount, modelCount)
+  val taskLabel = taskLabelText(task)
+  val taskSummary =
+    description
+      .ifBlank { task.shortDescriptionRes?.let { stringResource(it) } ?: task.shortDescription }
+      .trim()
 
   // Task card animation:
   //
@@ -1048,14 +1043,19 @@ private fun TaskCard(
       )
     else 1f
 
-  val cbTask = stringResource(R.string.cd_task_card, taskLabelText(task), task.modelCountOverride ?: task.models.size)
+  val cbTask =
+    if (taskSummary.isNotEmpty()) {
+      stringResource(R.string.cd_task_card_with_detail, taskLabel, taskSummary, modelCountLabel)
+    } else {
+      stringResource(R.string.cd_task_card, taskLabel, modelCountLabel)
+    }
   Card(
     modifier =
       modifier
-        .clip(RoundedCornerShape(24.dp))
+        .clip(RoundedCornerShape(Dimensions.Component.cardCornerRadius))
         .clickable(onClick = onClick)
         .graphicsLayer { alpha = progress }
-        .semantics {
+        .semantics(mergeDescendants = true) {
           contentDescription = cbTask
           role = Role.Button
         },
@@ -1065,71 +1065,71 @@ private fun TaskCard(
           if (description.isNotEmpty() || square) {
             MaterialTheme.colorScheme.surfaceContainer
           } else {
-
             MaterialTheme.customColors.taskCardBgColor
           }
       ),
   ) {
     if (square) {
       Column(
-        modifier = Modifier.fillMaxSize().padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxSize().padding(Dimensions.Spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.medium),
       ) {
-        TaskIcon(task = task, width = 40.dp)
-        Column() {
+        TaskIcon(task = task, width = Dimensions.Home.taskCardIconWidth)
+        Column {
           Text(
-            curModelCountLabel,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
-            modifier = Modifier.clearAndSetSemantics {},
-          )
-          Text(
-            taskLabelText(task),
+            taskLabel,
             color = MaterialTheme.colorScheme.onSurface,
             style = MaterialTheme.typography.titleMedium,
           )
+          if (taskSummary.isNotEmpty()) {
+            Text(
+              taskSummary,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              style = MaterialTheme.typography.bodySmall,
+              modifier = Modifier.clearAndSetSemantics {},
+              minLines = 2,
+              maxLines = 2,
+              overflow = TextOverflow.Ellipsis,
+            )
+          }
           Text(
-            task.shortDescriptionRes?.let { stringResource(it) } ?: task.shortDescription,
+            modelCountLabel,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp, lineHeight = 14.sp),
+            style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.clearAndSetSemantics {},
-            minLines = 2,
-            maxLines = 2,
-            autoSize =
-              TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = 12.sp, stepSize = 1.sp),
           )
         }
       }
     } else {
       Row(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 20.dp),
+        modifier =
+          Modifier.fillMaxSize()
+            .padding(horizontal = Dimensions.Spacing.large, vertical = Dimensions.Spacing.lg),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
       ) {
         if (description.isNotEmpty()) {
-          // Icon.
-          TaskIcon(task = task, width = 40.dp)
+          TaskIcon(task = task, width = Dimensions.Home.taskCardIconWidth)
 
-          // Title and description.
-          Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
+          Column(modifier = Modifier.weight(1f).padding(start = Dimensions.Spacing.medium)) {
             Row(
               modifier = Modifier.fillMaxWidth(),
               verticalAlignment = Alignment.CenterVertically,
               horizontalArrangement = Arrangement.SpaceBetween,
             ) {
               Text(
-                taskLabelText(task),
+                taskLabel,
                 color = MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.titleMedium,
               )
               if (task.newFeature) {
                 Box(
                   modifier =
-                    Modifier.offset(y = (-6).dp, x = 6.dp)
-                      .clip(RoundedCornerShape(8.dp))
+                    Modifier.offset(y = -Dimensions.Spacing.sm, x = Dimensions.Spacing.sm)
+                      .clip(RoundedCornerShape(Dimensions.Spacing.small))
                       .background(MaterialTheme.customColors.newFeatureContainerColor)
-                      .padding(horizontal = 12.dp)
-                      .height(26.dp),
+                      .padding(horizontal = Dimensions.Spacing.md)
+                      .height(Dimensions.Component.badgeHeight),
                   contentAlignment = Alignment.Center,
                 ) {
                   Text(
@@ -1141,19 +1141,19 @@ private fun TaskCard(
               }
             }
             Text(
-              description,
+              taskSummary,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
-              style =
-                MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp, lineHeight = 15.sp),
+              style = MaterialTheme.typography.bodySmall,
               modifier = Modifier.clearAndSetSemantics {},
+              maxLines = 2,
+              overflow = TextOverflow.Ellipsis,
             )
           }
         } else {
-          // Title and model count
-          Column {
+          Column(modifier = Modifier.weight(1f).padding(end = Dimensions.Spacing.medium)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
               Text(
-                taskLabelText(task),
+                taskLabel,
                 color = MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.titleMedium,
               )
@@ -1161,21 +1161,23 @@ private fun TaskCard(
                 Icon(
                   painter = painterResource(R.drawable.ic_experiment),
                   contentDescription = stringResource(R.string.experimental_badge),
-                  modifier = Modifier.size(20.dp).padding(start = 4.dp),
+                  modifier =
+                    Modifier.size(Dimensions.Icon.small).padding(start = Dimensions.Spacing.xs),
                   tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
               }
             }
             Text(
-              curModelCountLabel,
+              if (taskSummary.isNotEmpty()) taskSummary else modelCountLabel,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
-              style = MaterialTheme.typography.bodyMedium,
+              style = MaterialTheme.typography.bodySmall,
               modifier = Modifier.clearAndSetSemantics {},
+              maxLines = 2,
+              overflow = TextOverflow.Ellipsis,
             )
           }
 
-          // Icon.
-          TaskIcon(task = task, width = 40.dp)
+          TaskIcon(task = task, width = Dimensions.Home.taskCardIconWidth)
         }
       }
     }

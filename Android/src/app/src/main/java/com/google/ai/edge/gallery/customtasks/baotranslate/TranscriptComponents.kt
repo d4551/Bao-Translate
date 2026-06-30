@@ -38,6 +38,7 @@ import com.google.ai.edge.gallery.ui.theme.rememberPulseFloat
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.SemanticsPropertyKey
@@ -319,7 +320,11 @@ internal fun ConversationModeBadge(
           text = if (isFaceToFace) {
             stringResource(R.string.bao_translate_face_to_face_badge)
           } else {
-            stringResource(R.string.bao_translate_group_conversation_badge, connectedCount)
+            pluralStringResource(
+              R.plurals.bao_translate_group_conversation_badge,
+              connectedCount,
+              connectedCount,
+            )
           },
           style = MaterialTheme.typography.labelLarge,
           fontWeight = FontWeight.SemiBold,

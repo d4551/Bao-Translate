@@ -92,7 +92,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.google.ai.edge.gallery.R
-import com.google.ai.edge.gallery.common.safeAs
 import com.google.ai.edge.gallery.data.BooleanSwitchConfig
 import com.google.ai.edge.gallery.data.BottomSheetSelectorConfig
 import com.google.ai.edge.gallery.data.BottomSheetSelectorItem
@@ -103,6 +102,7 @@ import com.google.ai.edge.gallery.data.LabelConfig
 import com.google.ai.edge.gallery.data.NumberSliderConfig
 import com.google.ai.edge.gallery.data.SegmentedButtonConfig
 import com.google.ai.edge.gallery.data.ValueType
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.labelSmallNarrow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -157,15 +157,15 @@ fun ConfigDialog(
       shape = MaterialTheme.shapes.large,
     ) {
       Column(
-        modifier = Modifier.padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.padding(Dimensions.Spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.medium),
       ) {
         // Dialog title and subtitle.
         Column {
           Text(
             title,
             style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(bottom = 8.dp),
+            modifier = Modifier.padding(bottom = Dimensions.Spacing.small),
           )
           // Subtitle.
           if (subtitle.isNotEmpty()) {
@@ -173,7 +173,7 @@ fun ConfigDialog(
               subtitle,
               style = labelSmallNarrow,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
-              modifier = Modifier.offset(y = (-6).dp),
+              modifier = Modifier.offset(y = -Dimensions.Spacing.sm),
             )
           }
         }
@@ -188,7 +188,7 @@ fun ConfigDialog(
                 text = {
                   Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs),
                   ) {
                     val titleColor =
                       if (selectedTabIndex == index) MaterialTheme.colorScheme.primary
@@ -205,7 +205,7 @@ fun ConfigDialog(
           // List of config rows.
           Column(
             modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.medium),
           ) {
             ConfigEditorsPanel(configs = configs, values = values)
           }
@@ -218,7 +218,7 @@ fun ConfigDialog(
             placeholder = {
               Text(
                 text = stringResource(R.string.system_prompt_placeholder),
-                modifier = Modifier.offset(y = (4).dp), // Adjust to align the cursor with the text.
+                modifier = Modifier.offset(y = Dimensions.Spacing.xs), // Adjust to align the cursor with the text.
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
               )
@@ -235,7 +235,7 @@ fun ConfigDialog(
               Arrangement.End
             },
           verticalAlignment = Alignment.CenterVertically,
-          modifier = Modifier.padding(top = 8.dp),
+          modifier = Modifier.padding(top = Dimensions.Spacing.small),
         ) {
           // Restore default button to restore system prompt.
           if (showSystemPromptEditorTab && selectedTabIndex == 1) {
@@ -314,7 +314,7 @@ fun LabelRow(config: LabelConfig, values: SnapshotStateMap<String, Any>) {
     // Field label.
     Text(config.key.label, style = MaterialTheme.typography.titleSmall)
     // Content label.
-    val label = values[config.key.label].safeAs("")
+    val label = values[config.key.label]?.toString().orEmpty()
     Text(label, style = MaterialTheme.typography.bodyMedium)
   }
 }
@@ -338,6 +338,17 @@ fun getTextFieldDisplayValue(valueType: ValueType, value: Float): String {
     ""
   }
 }
+
+/** Returns a numeric config value as a slider-ready float. */
+private fun numericConfigValue(value: Any?): Float =
+  when (value) {
+    is ConfigValue.FloatValue -> value.value
+    is ConfigValue.DoubleValue -> value.value.toFloat()
+    is ConfigValue.IntValue -> value.value.toFloat()
+    is Number -> value.toFloat()
+    is String -> value.toFloatOrNull() ?: 0f
+    else -> 0f
+  }
 
 /**
  * Composable function to display a number slider with an associated text input field.
@@ -365,15 +376,15 @@ fun NumberSliderRow(config: NumberSliderConfig, values: SnapshotStateMap<String,
       // while the user is editing.
       var textFieldDisplayValue by remember {
         mutableStateOf(
-          getTextFieldDisplayValue(config.valueType, values[config.key.label].safeAs(0f))
+          getTextFieldDisplayValue(config.valueType, numericConfigValue(values[config.key.label]))
         )
       }
 
       // Number slider.
-      val sliderValue = values[config.key.label].safeAs(0f)
+      val sliderValue = numericConfigValue(values[config.key.label])
 
       Slider(
-        modifier = Modifier.height(24.dp).weight(1f).padding(end = 8.dp),
+        modifier = Modifier.height(Dimensions.Icon.medium).weight(1f).padding(end = Dimensions.Spacing.small),
         value = sliderValue,
         valueRange = config.sliderMin..config.sliderMax,
         onValueChange = {
@@ -382,19 +393,19 @@ fun NumberSliderRow(config: NumberSliderConfig, values: SnapshotStateMap<String,
         },
       )
 
-      Spacer(modifier = Modifier.width(8.dp))
+      Spacer(modifier = Modifier.width(Dimensions.Spacing.small))
 
       // A smaller text field.
       BasicTextField(
         value = textFieldDisplayValue,
         modifier =
-          Modifier.width(80.dp).focusRequester(focusRequester).onFocusChanged {
+          Modifier.width(Dimensions.Component.imagePreviewHeight).focusRequester(focusRequester).onFocusChanged {
             isFocused = it.isFocused
 
             // When leaving focus, display the internal value so that any invalid value is cleared.
             if (!isFocused) {
               textFieldDisplayValue =
-                getTextFieldDisplayValue(config.valueType, values[config.key.label].safeAs(0f))
+                getTextFieldDisplayValue(config.valueType, numericConfigValue(values[config.key.label]))
             }
           },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -416,26 +427,26 @@ fun NumberSliderRow(config: NumberSliderConfig, values: SnapshotStateMap<String,
         Box(
           modifier =
             Modifier.border(
-              width = if (isFocused) 2.dp else 1.dp,
+              width = if (isFocused) Dimensions.Component.strokeWidth else Dimensions.Stroke.hairline,
               color =
                 if (isFocused) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.outline,
               shape = MaterialTheme.shapes.extraSmall,
             )
         ) {
-          Box(modifier = Modifier.padding(8.dp)) { innerTextField() }
+          Box(modifier = Modifier.padding(Dimensions.Spacing.small)) { innerTextField() }
         }
       }
     }
 
     if (config.key == ConfigKeys.MAX_TOKENS) {
-      val sliderValue = values[config.key.label].safeAs(0f)
+      val sliderValue = numericConfigValue(values[config.key.label])
       if (sliderValue >= 10000f) {
         Text(
           text = stringResource(R.string.max_tokens_warning_message),
           style = MaterialTheme.typography.bodySmall,
           color = MaterialTheme.colorScheme.error,
-          modifier = Modifier.padding(top = 8.dp),
+          modifier = Modifier.padding(top = Dimensions.Spacing.small),
         )
       }
     }
@@ -450,7 +461,7 @@ fun NumberSliderRow(config: NumberSliderConfig, values: SnapshotStateMap<String,
  */
 @Composable
 fun BooleanSwitchRow(config: BooleanSwitchConfig, values: SnapshotStateMap<String, Any>) {
-  val switchValue = values[config.key.label].safeAs(false)
+  val switchValue = values[config.key.label] == true
   Column(modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
     Text(config.key.label, style = MaterialTheme.typography.titleSmall)
     Switch(checked = switchValue, onCheckedChange = { values[config.key.label] = it })
@@ -465,7 +476,9 @@ fun BooleanSwitchRow(config: BooleanSwitchConfig, values: SnapshotStateMap<Strin
  */
 @Composable
 fun SegmentedButtonRow(config: SegmentedButtonConfig, values: SnapshotStateMap<String, Any>) {
-  val selectedOptions: List<String> = remember { values[config.key.label].safeAs("").split(",") }
+  val selectedOptions: List<String> = remember {
+    values[config.key.label]?.toString().orEmpty().split(",")
+  }
   var selectionStates: List<Boolean> by remember {
     mutableStateOf(
       List(config.options.size) { index -> selectedOptions.contains(config.options[index]) }
@@ -528,7 +541,12 @@ fun BottomSheetSelectorRow(
       if (config.options.isEmpty()) {
         null
       } else {
-        config.options.find { it.label == (config.defaultValue as? ConfigValue.StringValue)?.value }
+        config.options.find { option ->
+          when (val value = config.defaultValue) {
+            is ConfigValue.StringValue -> option.label == value.value
+            else -> false
+          }
+        }
       }
     )
   }
@@ -538,7 +556,7 @@ fun BottomSheetSelectorRow(
 
   Column(
     modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
-    verticalArrangement = Arrangement.spacedBy(4.dp),
+    verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs),
   ) {
     if (showLabel) {
       Text(config.key.label, style = MaterialTheme.typography.titleSmall)
@@ -547,11 +565,11 @@ fun BottomSheetSelectorRow(
       horizontalArrangement = Arrangement.SpaceBetween,
       verticalAlignment = Alignment.CenterVertically,
       modifier =
-        Modifier.height(40.dp)
+        Modifier.height(Dimensions.Component.rowHeight)
           .clip(CircleShape)
           .clickable { showBottomSheet = true }
-          .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-          .padding(start = 12.dp, end = 8.dp),
+          .border(Dimensions.Stroke.hairline, MaterialTheme.colorScheme.outline, CircleShape)
+          .padding(start = Dimensions.Spacing.md, end = Dimensions.Spacing.small),
     ) {
       Text(
         selectedOption?.label ?: "-",
@@ -582,7 +600,7 @@ fun BottomSheetSelectorRow(
             stringResource(titleResId),
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(Dimensions.Spacing.medium),
           )
         }
         LazyColumn {
@@ -599,10 +617,10 @@ fun BottomSheetSelectorRow(
                       showBottomSheet = false
                     }
                   }
-                  .padding(horizontal = 16.dp, vertical = 12.dp)
+                  .padding(horizontal = Dimensions.Spacing.medium, vertical = Dimensions.Spacing.md)
                   .fillMaxWidth(),
               verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(16.dp),
+              horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.medium),
             ) {
               Icon(
                 Icons.Rounded.CheckCircle,

@@ -17,10 +17,10 @@
 package com.google.ai.edge.gallery.customtasks.agentchat
 
 import android.content.Context
+import android.net.Uri
 import android.os.Bundle
 import com.google.ai.edge.gallery.common.BaoLog
 import android.webkit.ConsoleMessage
-import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -73,6 +73,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.webkit.JavaScriptReplyProxy
+import androidx.webkit.WebMessageCompat
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import com.google.ai.edge.gallery.GalleryEvent
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.common.AskInfoAgentAction
@@ -89,6 +93,7 @@ import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.firebaseAnalytics
 import com.google.ai.edge.gallery.ui.common.BaseGalleryWebViewClient
 import com.google.ai.edge.gallery.ui.common.GalleryWebView
+import com.google.ai.edge.gallery.ui.common.GalleryWebViewJavaScriptMode
 import com.google.ai.edge.gallery.ui.common.buildTrackableUrlAnnotatedString
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessage
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageCollapsableProgressPanel
@@ -100,6 +105,7 @@ import com.google.ai.edge.gallery.ui.common.chat.ChatSide
 import com.google.ai.edge.gallery.ui.common.chat.LogMessage
 import com.google.ai.edge.gallery.ui.common.chat.LogMessageLevel
 import com.google.ai.edge.gallery.ui.common.chat.SendMessageTrigger
+import com.google.ai.edge.gallery.ui.common.isTrustedLocalWebViewUrl
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatScreen
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatViewModel
 import com.google.ai.edge.gallery.ui.modelmanager.ModelInitializationStatusType
@@ -115,7 +121,6 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONObject
 
 private const val TAG = "AGAgentChatScreen"
-private val chatViewJavascriptInterface = ChatWebViewJavascriptInterface()
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -147,6 +152,8 @@ fun AgentChatScreen(
   }
   var askInfoInputValue by remember { mutableStateOf("") }
   var webViewRef: WebView? by remember { mutableStateOf(null) }
+  var webMessageBridgeAvailable by remember { mutableStateOf(false) }
+  var onSkillResultReady by remember { mutableStateOf<((String) -> Unit)?>(null) }
   val chatWebViewClient = remember { ChatWebViewClient(context = context) }
   var curSystemPrompt by remember { mutableStateOf(task.defaultSystemPrompt) }
   val systemPromptUpdatedMessage = stringResource(R.string.system_prompt_updated)
@@ -259,6 +266,7 @@ fun AgentChatScreen(
                 url = url,
                 iframe = iframe,
                 aspectRatio = aspectRatio,
+                trustedLocalContent = isTrustedLocalWebViewUrl(url),
                 hideSenderLabel = true,
               ),
           )
@@ -311,6 +319,16 @@ fun AgentChatScreen(
               )
             }
             is CallJsAgentAction -> {
+              if (!isTrustedLocalWebViewUrl(action.url)) {
+                BaoLog.e(TAG, "Blocked JavaScript skill execution outside local assets")
+                action.result.complete("{\"error\":\"Skill JavaScript URL must be a local app asset.\"}")
+                continue
+              }
+              if (!webMessageBridgeAvailable) {
+                BaoLog.e(TAG, "Blocked JavaScript skill execution because WebMessage bridge is unavailable")
+                action.result.complete("{\"error\":\"Skill WebView bridge is unavailable.\"}")
+                continue
+              }
               val skillName =
                 if (action.url.contains("/skills/")) {
                   action.url.substringAfter("/skills/").substringBefore("/")
@@ -328,6 +346,7 @@ fun AgentChatScreen(
                   delay(60000L) // 60 seconds max
                   if (!action.result.isCompleted) {
                     BaoLog.e(TAG, "JS Execution timed out, completing with error.")
+                    onSkillResultReady = null
                     BaoLog.d(
                       TAG,
                       "Analytics: skill_execution, capability_name=${task.id}, skill_name=$skillName, success=false, error_type=timeout",
@@ -360,8 +379,9 @@ fun AgentChatScreen(
 
                 // Execute JS.
                 BaoLog.d(TAG, "Start to run js")
-                chatViewJavascriptInterface.onResultListener = { result ->
+                onSkillResultReady = { result ->
                   BaoLog.d(TAG, "Got result:\n$result")
+                  onSkillResultReady = null
                   action.result.complete(result)
                   val isSuccess = !result.contains("\"error\":")
                   val errorType = if (isSuccess) "" else "js_error"
@@ -399,7 +419,7 @@ fun AgentChatScreen(
                         }
                       }
                       var result = await ai_edge_gallery_get_result($safeData, $safeSecret);
-                      AiEdgeGallery.onResultReady(result);
+                      AiEdgeGallery.postMessage(result);
                   })()
                   """
                     .trimIndent()
@@ -423,6 +443,7 @@ fun AgentChatScreen(
                   },
                 )
                 action.result.completeExceptionally(e)
+                onSkillResultReady = null
               
 }
             }
@@ -444,9 +465,40 @@ fun AgentChatScreen(
 
       GalleryWebView(
         modifier = Modifier.size(300.dp),
+        javaScriptMode = GalleryWebViewJavaScriptMode.TrustedLocalContent,
         onWebViewCreated = { webView ->
           webViewRef = webView
-          webView.addJavascriptInterface(chatViewJavascriptInterface, "AiEdgeGallery")
+          if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            WebViewCompat.addWebMessageListener(
+              webView,
+              "AiEdgeGallery",
+              setOf(LOCAL_URL_BASE),
+              object : WebViewCompat.WebMessageListener {
+                override fun onPostMessage(
+                  view: WebView,
+                  message: WebMessageCompat,
+                  sourceOrigin: Uri,
+                  isMainFrame: Boolean,
+                  replyProxy: JavaScriptReplyProxy,
+                ) {
+                  val data = message.data
+                  if (
+                    sourceOrigin.toString() == LOCAL_URL_BASE &&
+                      message.type == WebMessageCompat.TYPE_STRING &&
+                      data != null
+                  ) {
+                    onSkillResultReady?.invoke(data)
+                  } else {
+                    BaoLog.w(TAG, "Blocked WebMessage from origin=$sourceOrigin")
+                  }
+                }
+              },
+            )
+            webMessageBridgeAvailable = true
+          } else {
+            webMessageBridgeAvailable = false
+            BaoLog.e(TAG, "WebMessage listener unsupported by current WebView package")
+          }
         },
         customWebViewClient = chatWebViewClient,
         onConsoleMessage = { consoleMessage ->
@@ -790,22 +842,16 @@ private fun resetSessionWithCurrentSkillsAndMcps(
   )
 }
 
-class ChatWebViewJavascriptInterface {
-  var onResultListener: ((String) -> Unit)? = null
-
-  @JavascriptInterface
-  fun onResultReady(result: String) {
-    onResultListener?.invoke(result)
-  }
-}
-
+/** WebView client that signals when a local skill page is ready for JavaScript execution. */
 class ChatWebViewClient(val context: Context) : BaseGalleryWebViewClient(context = context) {
   private var onPageLoaded: (() -> Unit)? = null
 
+  /** Sets the one-shot listener used by skill execution before evaluating script. */
   fun setPageLoadListener(listener: (() -> Unit)?) {
     onPageLoaded = listener
   }
 
+  /** Notifies the waiting skill action after local asset page load completes. */
   override fun onPageFinished(view: WebView?, url: String?) {
     super.onPageFinished(view, url)
     BaoLog.d(TAG, "page loaded")

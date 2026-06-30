@@ -65,6 +65,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.data.AllowedSkill
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import kotlinx.coroutines.launch
 
 /** A ModalBottomSheet Composable for displaying and adding skills from a featured list. */
@@ -136,10 +137,10 @@ fun AddSkillFromFeatureListBottomSheet(
     sheetState = sheetState,
     containerColor = MaterialTheme.colorScheme.surfaceContainer,
   ) {
-    Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
+    Column(modifier = Modifier.padding(horizontal = Dimensions.Spacing.medium).padding(bottom = Dimensions.Spacing.medium)) {
       // Header section with title, description, and close button.
       Row(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(bottom = Dimensions.Spacing.small),
         verticalAlignment = Alignment.CenterVertically,
       ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -154,7 +155,7 @@ fun AddSkillFromFeatureListBottomSheet(
           )
         }
         IconButton(
-          modifier = Modifier.padding(end = 3.dp),
+          modifier = Modifier.padding(end = Dimensions.Spacing.xs),
           onClick = {
             scope.launch {
               sheetState.hide()
@@ -170,13 +171,13 @@ fun AddSkillFromFeatureListBottomSheet(
       //
       // Show a loading indicator while fetching the skill allowlist.
       if (uiState.loadingSkillAllowlist) {
-        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
+        Box(modifier = Modifier.fillMaxWidth().padding(vertical = Dimensions.Spacing.medium)) {
           Row(
             modifier = Modifier.align(Alignment.Center),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
           ) {
-            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+            CircularProgressIndicator(modifier = Modifier.size(Dimensions.Component.iconMedium), strokeWidth = Dimensions.Component.strokeWidth)
             Text(
               stringResource(R.string.loading_skills_allowlist),
               style = MaterialTheme.typography.bodyMedium,
@@ -190,14 +191,14 @@ fun AddSkillFromFeatureListBottomSheet(
           text = uiState.skillAllowlistError.orEmpty(),
           style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.error,
-          modifier = Modifier.padding(vertical = 16.dp),
+          modifier = Modifier.padding(vertical = Dimensions.Spacing.medium),
         )
       } else {
         // Search bar for filtering skills.
         TextField(
           value = searchQuery,
           onValueChange = { searchQuery = it },
-          modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp, top = 8.dp),
+          modifier = Modifier.fillMaxWidth().padding(bottom = Dimensions.Spacing.medium, top = Dimensions.Spacing.small),
           shape = CircleShape,
           placeholder = { Text(stringResource(R.string.search_skill)) },
           leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
@@ -219,7 +220,7 @@ fun AddSkillFromFeatureListBottomSheet(
         )
 
         // LazyColumn to display the list of featured skills.
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.md)) {
           items(filteredSkills) { skill ->
             val validationError = skillValidationErrors[skill.skillUrl]
             FeaturedSkillItem(
@@ -281,10 +282,10 @@ private fun FeaturedSkillItem(
   Row(
     modifier =
       Modifier.fillMaxWidth()
-        .clip(shape = RoundedCornerShape(20.dp))
+        .clip(shape = RoundedCornerShape(Dimensions.Component.chipCornerRadius))
         .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-        .padding(vertical = 12.dp)
-        .padding(start = 16.dp, end = 8.dp),
+        .padding(vertical = Dimensions.Spacing.md)
+        .padding(start = Dimensions.Spacing.medium, end = Dimensions.Spacing.small),
     verticalAlignment = Alignment.Top,
   ) {
     Column(modifier = Modifier.weight(1f)) {
@@ -296,8 +297,8 @@ private fun FeaturedSkillItem(
         val hasUrl = !skill.attributionUrl.isNullOrBlank()
         Row(
           verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(2.dp),
-          modifier = Modifier.padding(top = 2.dp),
+          horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xxs),
+          modifier = Modifier.padding(top = Dimensions.Spacing.xxs),
         ) {
           if (hasUrl) {
             Text(
@@ -312,7 +313,7 @@ private fun FeaturedSkillItem(
             Icon(
               Icons.AutoMirrored.Outlined.OpenInNew,
               contentDescription = null,
-              modifier = Modifier.size(14.dp),
+              modifier = Modifier.size(Dimensions.Spacing.smd + Dimensions.Spacing.xs),
               tint = MaterialTheme.colorScheme.primary,
             )
           } else {
@@ -330,7 +331,7 @@ private fun FeaturedSkillItem(
         skill.description,
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 12.dp),
+        modifier = Modifier.padding(top = Dimensions.Spacing.md),
       )
 
       // Validation Error
@@ -339,17 +340,17 @@ private fun FeaturedSkillItem(
           text = error,
           style = MaterialTheme.typography.bodySmall,
           color = MaterialTheme.colorScheme.error,
-          modifier = Modifier.padding(top = 8.dp),
+          modifier = Modifier.padding(top = Dimensions.Spacing.small),
         )
       }
     }
 
     // Add Button
-    Box(modifier = Modifier.padding(top = 4.dp).height(32.dp).padding(end = 8.dp)) {
+    Box(modifier = Modifier.padding(top = Dimensions.Spacing.xs).height(Dimensions.Component.chipHeight).padding(end = Dimensions.Spacing.small)) {
       if (isAdding) {
         CircularProgressIndicator(
-          modifier = Modifier.size(24.dp).align(Alignment.Center),
-          strokeWidth = 2.dp,
+          modifier = Modifier.size(Dimensions.Icon.medium).align(Alignment.Center),
+          strokeWidth = Dimensions.Component.strokeWidth,
           color = MaterialTheme.colorScheme.primary,
         )
       } else {
@@ -362,7 +363,7 @@ private fun FeaturedSkillItem(
             Text(
               stringResource(R.string.added),
               style = MaterialTheme.typography.labelMedium,
-              modifier = Modifier.padding(start = 4.dp),
+              modifier = Modifier.padding(start = Dimensions.Spacing.xs),
             )
           }
         } else {
@@ -374,12 +375,12 @@ private fun FeaturedSkillItem(
               Icons.Outlined.Add,
               contentDescription = null,
               tint = MaterialTheme.colorScheme.onSurfaceVariant,
-              modifier = Modifier.size(18.dp),
+              modifier = Modifier.size(Dimensions.Component.iconSmall),
             )
             Text(
               stringResource(R.string.add),
               style = MaterialTheme.typography.labelMedium,
-              modifier = Modifier.padding(start = 4.dp),
+              modifier = Modifier.padding(start = Dimensions.Spacing.xs),
             )
           }
         }

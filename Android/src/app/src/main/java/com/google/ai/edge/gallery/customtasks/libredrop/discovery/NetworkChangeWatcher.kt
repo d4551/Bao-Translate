@@ -119,7 +119,7 @@ internal class NetworkChangeWatcher(
 internal class NetworkChangeTracker<T>(
     initialNetworks: Set<T>,
 ) {
-    private val lock = Object()
+    private val lock = Any()
     private val knownNetworks: MutableSet<T> = initialNetworks.toMutableSet()
 
     fun recordAvailable(network: T): Boolean =

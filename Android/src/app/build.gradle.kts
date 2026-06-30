@@ -17,6 +17,7 @@
 import java.io.ByteArrayOutputStream
 import java.util.Properties
 import org.gradle.api.tasks.Exec
+import com.mikepenz.aboutlibraries.plugin.AboutLibrariesExtension
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.gradle.api.tasks.testing.Test
 import org.gradle.jvm.toolchain.JavaLanguageVersion
@@ -25,14 +26,19 @@ import org.gradle.jvm.toolchain.JavaLanguageVersion
 // Ref: https://developer.android.com/build/migrate-to-built-in-kotlin
 plugins {
   alias(libs.plugins.android.application)
-  // Note: set apply to true to enable google-services (requires google-services.json).
   alias(libs.plugins.google.services) apply false
   alias(libs.plugins.kotlin.compose)
   alias(libs.plugins.kotlin.serialization)
   alias(libs.plugins.protobuf)
   alias(libs.plugins.hilt.application)
-  alias(libs.plugins.aboutlibraries.android)
+  alias(libs.plugins.aboutlibraries.android) apply false
   alias(libs.plugins.ksp)
+}
+
+val firebaseConfigured = layout.projectDirectory.file("google-services.json").asFile.isFile
+
+if (firebaseConfigured) {
+  pluginManager.apply("com.google.gms.google-services")
 }
 
 // Host JDK 26 compiles Java 17 bytecode for Android.
@@ -53,25 +59,68 @@ kotlin {
 
 android {
   namespace = "com.google.ai.edge.gallery"
-  // compileSdk 37: required by androidx.core 1.19 / activity-compose 1.13 / lifecycle 2.10.
-  // targetSdk stays 35 deliberately — raising it opts into new runtime behavior and needs its
-  // own device-verification pass (Android 16 ABF, predictive back, etc.).
+  // compileSdk 37: required by androidx.core 1.19 / activity-compose 1.13 / lifecycle 2.11.
   compileSdk = 37
 
   defaultConfig {
-    applicationId = "com.bao.translate"
+    val huggingFaceClientId =
+      providers.gradleProperty("huggingFaceClientId")
+        .orElse(providers.environmentVariable("HUGGING_FACE_CLIENT_ID"))
+        .orElse("")
+        .get()
+    val huggingFaceRedirectUri =
+      providers.gradleProperty("huggingFaceRedirectUri")
+        .orElse(providers.environmentVariable("HUGGING_FACE_REDIRECT_URI"))
+        .orElse("")
+        .get()
+    val huggingFaceRedirectScheme =
+      providers.gradleProperty("huggingFaceRedirectScheme")
+        .orElse(providers.environmentVariable("HUGGING_FACE_REDIRECT_SCHEME"))
+        .orElse("com.google.ai.edge.gallery")
+        .get()
+    val huggingFaceAuthEndpoint =
+      providers.gradleProperty("huggingFaceAuthEndpoint")
+        .orElse(providers.environmentVariable("HUGGING_FACE_AUTH_ENDPOINT"))
+        .orElse("")
+        .get()
+    val huggingFaceTokenEndpoint =
+      providers.gradleProperty("huggingFaceTokenEndpoint")
+        .orElse(providers.environmentVariable("HUGGING_FACE_TOKEN_ENDPOINT"))
+        .orElse("")
+        .get()
+
+    applicationId = "com.google.ai.edge.gallery"
     minSdk = 31
-    targetSdk = 35
+    targetSdk = 37
     versionCode = 33
     versionName = "1.0.15"
 
-    // Needed for HuggingFace auth workflows.
-    // Use the scheme of the "Redirect URLs" in HuggingFace app.
-    manifestPlaceholders["appAuthRedirectScheme"] =
-        "REPLACE_WITH_YOUR_REDIRECT_SCHEME_IN_HUGGINGFACE_APP"
+    manifestPlaceholders["appAuthRedirectScheme"] = huggingFaceRedirectScheme
     manifestPlaceholders["applicationName"] = "com.google.ai.edge.gallery.GalleryApplication"
     manifestPlaceholders["appIcon"] = "@mipmap/ic_launcher"
     manifestPlaceholders["appRoundIcon"] = "@mipmap/ic_launcher_round"
+
+    buildConfigField(
+      "String",
+      "HUGGING_FACE_CLIENT_ID",
+      "\"${huggingFaceClientId.replace("\\", "\\\\").replace("\"", "\\\"")}\"",
+    )
+    buildConfigField(
+      "String",
+      "HUGGING_FACE_REDIRECT_URI",
+      "\"${huggingFaceRedirectUri.replace("\\", "\\\\").replace("\"", "\\\"")}\"",
+    )
+    buildConfigField(
+      "String",
+      "HUGGING_FACE_AUTH_ENDPOINT",
+      "\"${huggingFaceAuthEndpoint.replace("\\", "\\\\").replace("\"", "\\\"")}\"",
+    )
+    buildConfigField(
+      "String",
+      "HUGGING_FACE_TOKEN_ENDPOINT",
+      "\"${huggingFaceTokenEndpoint.replace("\\", "\\\\").replace("\"", "\\\"")}\"",
+    )
+    buildConfigField("boolean", "FIREBASE_CONFIGURED", firebaseConfigured.toString())
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -93,10 +142,55 @@ android {
   }
   packaging {
     jniLibs {
-      // sherpa-onnx and onnxruntime-android both ship libonnxruntime.so (both the official ORT
-      // 1.24.3 build — byte-identical), so either copy satisfies both consumers. Keep one.
+      // sherpa-onnx and onnxruntime-android both ship libonnxruntime.so. Keep one packaged copy.
       pickFirsts += "**/libonnxruntime.so"
+      keepDebugSymbols +=
+        listOf(
+          "**/libLiteRt.so",
+          "**/libLiteRtClGlAccelerator.so",
+          "**/libandroidx.graphics.path.so",
+          "**/libdatastore_shared_counter.so",
+          "**/libimage_processing_util_jni.so",
+          "**/libjnidispatch.so",
+          "**/liblitertlm_jni.so",
+          "**/libonnxruntime.so",
+          "**/libonnxruntime4j_jni.so",
+          "**/libsherpa-onnx-c-api.so",
+          "**/libsherpa-onnx-cxx-api.so",
+          "**/libsherpa-onnx-jni.so",
+          "**/libsurface_util_jni.so",
+          "**/libtensorflowlite_jni_gms_client.so",
+          "**/libvosk.so",
+        )
     }
+  }
+}
+
+val aboutLibrariesRefreshRequested =
+  gradle.startParameter.taskNames.any { taskName ->
+    taskName == "refreshAboutLibraries" ||
+      taskName == "exportLibraryDefinitions" ||
+      taskName.endsWith(":refreshAboutLibraries") ||
+      taskName.endsWith(":exportLibraryDefinitions")
+  }
+
+if (aboutLibrariesRefreshRequested) {
+  pluginManager.apply("com.mikepenz.aboutlibraries.plugin")
+  extensions.configure<AboutLibrariesExtension>("aboutLibraries") {
+    collect {
+      filterVariants.add("release")
+      fetchRemoteFunding.set(false)
+      fetchRemoteLicense.set(false)
+    }
+    export {
+      outputFile.set(layout.projectDirectory.file("src/main/res/raw/aboutlibraries.json"))
+      variant.set("release")
+    }
+  }
+  tasks.register("refreshAboutLibraries") {
+    group = "verification"
+    description = "Regenerate the third-party license metadata resource."
+    dependsOn("exportLibraryDefinitions")
   }
 }
 
@@ -117,7 +211,7 @@ dependencies {
   implementation(libs.androidx.work.runtime)
   implementation(libs.androidx.datastore)
   implementation(libs.androidx.lifecycle.process)
-  implementation(libs.androidx.security.crypto) // legacy: read-only fallback for pre-Tink blobs
+  implementation(libs.androidx.security.crypto) // read-only migration reader for earlier Tink blobs
   implementation(libs.tink.android)
   implementation(libs.androidx.webkit)
   implementation(libs.litertlm)
@@ -164,9 +258,6 @@ dependencies {
   // ONNX Runtime (Microsoft) — runs the OpenVoice converter + ref_enc ONNX graphs at EXACT
   // utterance length (dynamic time dim), which litert-torch cannot export. Validated 99 dB vs
   // PyTorch; exact length keeps the dilated WaveNet output crisp (fixed-length TFLite smeared it).
-  // Pinned to 1.24.3: sherpa's JNI imports the ELF-versioned symbol OrtGetApiBase@VERS_1.24.3, and
-  // 1.24.3 is the exact (byte-identical) ORT build sherpa-onnx 1.13.2 bundles — so the packaging
-  // pickFirst on libonnxruntime.so (see android{}) leaves one runtime that satisfies both.
   implementation(libs.onnxruntime.android)
   // Vosk (Kaldi): the ONLY on-device engine with TRUE streaming partials for the app's non-CJK
   // languages (Spanish/French/German/Russian/Hindi/...), which sherpa-onnx has no streaming model
@@ -273,7 +364,7 @@ tasks.register<Exec>("smokeE2e") {
     logger.lifecycle(out)
     val failureMarkers =
       listOf("FAILURES!!!", "Process crashed", "INSTRUMENTATION_STATUS_CODE: -1", "shortMsg=", "Test run failed")
-    val hasFailure = failureMarkers.any { out.contains(it) }
+    val hasFailure = failureMarkers.firstOrNull { out.contains(it) } != null
     val sawSuccess = Regex("OK \\(\\d+ test").containsMatchIn(out)
     if (hasFailure || !sawSuccess) {
       throw GradleException(
@@ -286,7 +377,7 @@ tasks.register<Exec>("smokeE2e") {
 protobuf {
   // protoc must match the protobuf-javalite runtime — both read the same catalog version.
   protoc { artifact = "com.google.protobuf:protoc:${libs.versions.protobufJavaLite.get()}" }
-  generateProtoTasks { all().forEach { it.plugins { create("java") { option("lite") } } } }
+  generateProtoTasks { all().configureEach { builtins { create("java") { option("lite") } } } }
 }
 
 

@@ -57,6 +57,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.R
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.customColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -120,13 +121,13 @@ private fun SheetContent(
   Column {
     Box(contentAlignment = Alignment.CenterEnd) {
       Text(
-        "Text input history",
+        stringResource(R.string.text_input_history),
         style = MaterialTheme.typography.titleLarge,
-        modifier = Modifier.fillMaxWidth().padding(8.dp),
+        modifier = Modifier.fillMaxWidth().padding(Dimensions.Spacing.small),
         textAlign = TextAlign.Center,
       )
       IconButton(
-        modifier = Modifier.padding(end = 12.dp),
+        modifier = Modifier.padding(end = Dimensions.Spacing.md),
         onClick = { showConfirmDeleteDialog = true },
       ) {
         Icon(
@@ -140,22 +141,22 @@ private fun SheetContent(
         Row(
           modifier =
             Modifier.fillMaxWidth()
-              .padding(horizontal = 8.dp, vertical = 2.dp)
-              .clip(RoundedCornerShape(24.dp))
+              .padding(horizontal = Dimensions.Spacing.small, vertical = Dimensions.Spacing.xxs)
+              .clip(RoundedCornerShape(Dimensions.Component.cardCornerRadius))
               .background(MaterialTheme.customColors.agentBubbleBgColor)
               .clickable { onHistoryItemClicked(item) },
           verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(8.dp),
+          horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
         ) {
           Text(
             item,
             style = MaterialTheme.typography.bodyMedium,
             maxLines = 3,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(vertical = 16.dp).padding(start = 16.dp).weight(1f),
+            modifier = Modifier.padding(vertical = Dimensions.Spacing.medium).padding(start = Dimensions.Spacing.medium).weight(1f),
           )
           IconButton(
-            modifier = Modifier.padding(end = 8.dp),
+            modifier = Modifier.padding(end = Dimensions.Spacing.small),
             onClick = {
               scope.launch {
                 delay(400)

@@ -54,6 +54,7 @@ import com.google.ai.edge.gallery.ui.common.chat.MessageBodyText
 import com.google.ai.edge.gallery.ui.common.chat.MessageBodyWarning
 import com.google.ai.edge.gallery.ui.common.chat.MessageBubbleShape
 import com.google.ai.edge.gallery.ui.common.chat.MessageSender
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.customColors
 
 /** A panel to show the conversation history. */
@@ -85,7 +86,7 @@ fun ConversationHistoryPanel(
       modifier =
         Modifier.background(color = MaterialTheme.colorScheme.surfaceContainerHighest)
           .fillMaxWidth()
-          .padding(start = 12.dp),
+          .padding(start = Dimensions.Spacing.md),
       horizontalArrangement = Arrangement.SpaceBetween,
       verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -103,7 +104,7 @@ fun ConversationHistoryPanel(
 
     // Message list.
     Column(
-      modifier = Modifier.weight(1f).padding(horizontal = 16.dp).verticalScroll(state = listState)
+      modifier = Modifier.weight(1f).padding(horizontal = Dimensions.Spacing.medium).verticalScroll(state = listState)
     ) {
       for (message in uiState.messages) {
         var hAlign: Alignment.Horizontal = Alignment.End
@@ -118,15 +119,15 @@ fun ConversationHistoryPanel(
           extraPaddingStart = 0.dp
           extraPaddingEnd = 48.dp
         } else if (message.side == ChatSide.SYSTEM) {
-          extraPaddingStart = 24.dp
-          extraPaddingEnd = 24.dp
+          extraPaddingStart = Dimensions.Spacing.large
+          extraPaddingEnd = Dimensions.Spacing.large
         }
         val bubbleBorderRadius = dimensionResource(R.dimen.chat_bubble_corner_radius)
 
         Column(
           modifier =
             Modifier.fillMaxWidth()
-              .padding(start = extraPaddingStart, end = extraPaddingEnd, top = 6.dp, bottom = 6.dp),
+              .padding(start = extraPaddingStart, end = extraPaddingEnd, top = Dimensions.Spacing.sm, bottom = Dimensions.Spacing.sm),
           horizontalAlignment = hAlign,
         ) messageColumn@{
           // Sender row.
@@ -150,7 +151,7 @@ fun ConversationHistoryPanel(
                 is ChatMessageText -> {
                   Row(
                     verticalAlignment = Alignment.Top,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
                   ) {
                     Box(
                       modifier =

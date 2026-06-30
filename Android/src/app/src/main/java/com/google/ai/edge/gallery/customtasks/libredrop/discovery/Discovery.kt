@@ -253,7 +253,7 @@ public class Discovery internal constructor(
                                 Log.i(
                                     TAG,
                                     "browse: serviceResolved name=${event.instanceName} " +
-                                        "addrs=${event.addresses.joinToString { it.hostAddress }} " +
+                                        "addrs=${event.addresses.joinToString { it.hostAddress.orEmpty() }} " +
                                         "port=${event.port} " +
                                         "txt=${formatTxtRecord(event.attributes)}",
                                 )
@@ -336,7 +336,7 @@ public class Discovery internal constructor(
             Log.i(
                 TAG,
                 "browse: dropping self-interface record ${event.instanceName} " +
-                    "addrs=${addresses.joinToString { it.hostAddress }}",
+                    "addrs=${addresses.joinToString { it.hostAddress.orEmpty() }}",
             )
             return null
         }
@@ -641,7 +641,7 @@ internal class NsdAdvertiseHandle(
     override val port: Int
         get() = request.port
     private val active = AtomicBoolean(true)
-    private val lifecycle = Object()
+    private val lifecycle = Any()
 
     @Volatile
     private var current: NsdRegistrationHandle? = null

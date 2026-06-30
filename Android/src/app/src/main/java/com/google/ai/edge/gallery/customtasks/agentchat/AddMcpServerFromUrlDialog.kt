@@ -67,6 +67,7 @@ import com.google.ai.edge.gallery.GalleryEvent
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.firebaseAnalytics
 import com.google.ai.edge.gallery.proto.McpAuth
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import java.net.URI
 
 private const val TAG = "AGAddMcpServerDialog"
@@ -123,20 +124,20 @@ fun AddMcpServerFromUrlDialog(
         ) {
           focusManager.clearFocus()
         },
-      shape = RoundedCornerShape(16.dp),
+      shape = RoundedCornerShape(Dimensions.Spacing.medium),
     ) {
       Column(
-        modifier = Modifier.padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.padding(Dimensions.Spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.medium),
       ) {
         // Dialog Title
         Text(
           stringResource(R.string.add_mcp_server_from_url_dialog_title),
           style = MaterialTheme.typography.titleMedium,
-          modifier = Modifier.padding(bottom = 8.dp),
+          modifier = Modifier.padding(bottom = Dimensions.Spacing.small),
         )
         // Container for input label and text field
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs)) {
           Text(
             stringResource(R.string.enter_mcp_server_url),
             style = MaterialTheme.typography.labelMedium,
@@ -180,7 +181,7 @@ fun AddMcpServerFromUrlDialog(
         }
 
         // Authorization section
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs)) {
           // Authorization selector.
           Text(
             stringResource(R.string.mcp_server_authorization),
@@ -242,7 +243,7 @@ fun AddMcpServerFromUrlDialog(
 
         // Conditional fields for Request Header
         if (authType == McpAuth.AuthMethodCase.REQUEST_HEADER) {
-          Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+          Column(verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs)) {
             Text(
               stringResource(R.string.mcp_server_header_name),
               style = MaterialTheme.typography.labelMedium,
@@ -260,7 +261,7 @@ fun AddMcpServerFromUrlDialog(
               },
             )
           }
-          Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+          Column(verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs)) {
             Text(
               stringResource(R.string.mcp_server_header_value),
               style = MaterialTheme.typography.labelMedium,
@@ -283,19 +284,19 @@ fun AddMcpServerFromUrlDialog(
         if (loading && isAdding) {
           Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
             CircularProgressIndicator(
-              modifier = Modifier.size(20.dp),
-              strokeWidth = 2.dp,
+              modifier = Modifier.size(Dimensions.Component.iconMedium),
+              strokeWidth = Dimensions.Component.strokeWidth,
               color = MaterialTheme.colorScheme.primary,
             )
           }
         } else {
           // Button row.
           Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = Dimensions.Spacing.small),
             horizontalArrangement = Arrangement.End,
           ) {
             OutlinedButton(onClick = safeDismiss) { Text(stringResource(R.string.cancel)) }
-            Spacer(modifier = Modifier.width(4.dp))
+            Spacer(modifier = Modifier.width(Dimensions.Spacing.xs))
             Button(
               enabled = textFieldValue.text.trim().isNotEmpty(),
               onClick = {

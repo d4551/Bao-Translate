@@ -80,7 +80,7 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
   val captureCoordinator = CaptureCoordinator(appContext)
 
   fun reset() {
-    val unused = setFlashlight(context = appContext, isEnabled = false)
+    setFlashlight(context = appContext, isEnabled = false)
     setShowWelcomeMessage(showWelcomeMessage = true)
     setUserPrompt(prompt = "'")
     setModelResponse(response = "")
@@ -90,43 +90,39 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
   }
 
   fun cleanUp() {
-    val unused = setFlashlight(context = appContext, isEnabled = false)
+    setFlashlight(context = appContext, isEnabled = false)
   }
 
   fun setShowWelcomeMessage(showWelcomeMessage: Boolean) {
-    _uiState.update { _uiState.value.copy(showWelcomeMessage = showWelcomeMessage) }
+    _uiState.update { it.copy(showWelcomeMessage = showWelcomeMessage) }
   }
 
   fun setProcessing(processing: Boolean) {
-    _uiState.update { _uiState.value.copy(processing = processing) }
+    _uiState.update { it.copy(processing = processing) }
   }
 
   fun setUserPrompt(prompt: String) {
-    _uiState.update { _uiState.value.copy(userPrompt = prompt) }
+    _uiState.update { it.copy(userPrompt = prompt) }
   }
 
   fun setModelResponse(response: String) {
-    _uiState.update { _uiState.value.copy(modelResponse = response) }
+    _uiState.update { it.copy(modelResponse = response) }
   }
 
   fun appendModelResponse(partialResponse: String) {
-    _uiState.update {
-      _uiState.value.copy(modelResponse = _uiState.value.modelResponse + partialResponse)
-    }
+    _uiState.update { it.copy(modelResponse = it.modelResponse + partialResponse) }
   }
 
   fun addFunctionCallDetails(details: String) {
-    val newDetails = _uiState.value.functionCallDetails.toMutableList()
-    newDetails.add(details)
-    _uiState.update { _uiState.value.copy(functionCallDetails = newDetails) }
+    _uiState.update { it.copy(functionCallDetails = it.functionCallDetails + details) }
   }
 
   fun clearFunctionCallDetails() {
-    _uiState.update { _uiState.value.copy(functionCallDetails = listOf()) }
+    _uiState.update { it.copy(functionCallDetails = listOf()) }
   }
 
   fun setNoFunctionRecognized(value: Boolean) {
-    _uiState.update { _uiState.value.copy(noFunctionRecognized = value) }
+    _uiState.update { it.copy(noFunctionRecognized = value) }
   }
 
   fun processUserPrompt(
@@ -152,13 +148,16 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
 
       setUserPrompt(prompt = userPrompt)
 
-      BaoLog.d(TAG, "Waiting for any ongoing conversation reset to be done...")
+      BaoLog.d(TAG, "Waiting for active conversation reset to be done...")
       isResettingConversation.first { !it }
       BaoLog.d(TAG, "Done waiting. Start inference.")
 
       val instance = model.instance as? LlmModelInstance
       if (instance == null) {
         BaoLog.w(TAG, "No LlmModelInstance available; aborting inference.")
+        setProcessing(processing = false)
+        onError(appContext.getString(R.string.unknown_error))
+        onProcessDone()
         return@launch
       }
       val conversation = instance.conversation
@@ -171,7 +170,7 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
         .sendMessageAsync(Contents.of(contents))
         .catch {
           BaoLog.e(TAG, "Failed to run inference", it)
-          onError(it.message ?: "Unknown error")
+          onError(it.message ?: appContext.getString(R.string.unknown_error))
         }
         .onCompletion {
           setProcessing(processing = false)
@@ -330,56 +329,31 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
           )
         }
 
-    if (intent.resolveActivity(context.packageManager) == null) {
-      BaoLog.e(TAG, "No activity to handle contact creation")
-      return context.getString(R.string.mobile_actions_error_no_activity)
-    }
-    context.startActivity(intent)
-
-    return ""
+    return launchIntentOrError(context, intent, "handle contact creation")
   }
 
   private fun sendEmail(context: Context, to: String, subject: String, body: String): String {
     val intent =
       Intent(Intent.ACTION_SEND).apply {
-        data = "mailto:".toUri()
-        type = "text/plain"
+        setDataAndType("mailto:".toUri(), "text/plain")
         putExtra(Intent.EXTRA_EMAIL, arrayOf(to))
         putExtra(Intent.EXTRA_SUBJECT, subject)
         putExtra(Intent.EXTRA_TEXT, body)
       }
 
-    if (intent.resolveActivity(context.packageManager) == null) {
-      BaoLog.e(TAG, "No activity to handle email sending")
-      return context.getString(R.string.mobile_actions_error_no_activity)
-    }
-    context.startActivity(intent)
-
-    return ""
+    return launchIntentOrError(context, intent, "handle email sending")
   }
 
   private fun showLocationOnMap(context: Context, location: String): String {
     val encodedLocation = URLEncoder.encode(location, StandardCharsets.UTF_8.toString())
     val intent = Intent(Intent.ACTION_VIEW).apply { data = "geo:0,0?q=$encodedLocation".toUri() }
 
-    if (intent.resolveActivity(context.packageManager) == null) {
-      BaoLog.e(TAG, "No activity to handle map display")
-      return context.getString(R.string.mobile_actions_error_no_activity)
-    }
-    context.startActivity(intent)
-
-    return ""
+    return launchIntentOrError(context, intent, "handle map display")
   }
 
   private fun openWifiSettings(context: Context): String {
     val intent = Intent(Settings.ACTION_WIFI_SETTINGS)
-    if (intent.resolveActivity(context.packageManager) == null) {
-      BaoLog.e(TAG, "No activity to open wifi settings")
-      return context.getString(R.string.mobile_actions_error_no_activity)
-    }
-    context.startActivity(intent)
-
-    return ""
+    return launchIntentOrError(context, intent, "open wifi settings")
   }
 
   private fun createCalendarEvent(context: Context, datetime: String, title: String): String {
@@ -395,41 +369,61 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
         putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, ms)
         putExtra(CalendarContract.EXTRA_EVENT_END_TIME, ms + DEFAULT_EVENT_DURATION_MS)
       }
-    if (intent.resolveActivity(context.packageManager) == null) {
-      BaoLog.e(TAG, "No activity to create calendar event")
-      return context.getString(R.string.mobile_actions_error_no_activity)
-    }
-    context.startActivity(intent)
-
-    return ""
-  }
-
-  private fun parseDateTime(datetime: String): LocalDateTime? {
-    if (!ISO_DATETIME_PATTERN.matches(datetime)) {
-      BaoLog.w(TAG, "Invalid date time format: '$datetime'")
-      return null
-    }
-    val parts = datetime.split("T")
-    val dateParts = parts[0].split("-")
-    val month = dateParts[1].toIntOrNull()
-    val day = dateParts[2].toIntOrNull()
-    if (month == null || month !in 1..12 || day == null || day !in 1..31) {
-      BaoLog.w(TAG, "Date component out of range: '$datetime'")
-      return null
-    }
-    val timeParts = parts[1].split(":")
-    val hour = timeParts[0].toIntOrNull()
-    val minute = timeParts[1].toIntOrNull()
-    val second = if (timeParts.size > 2) timeParts[2].toIntOrNull() else 0
-    if (hour !in 0..23 || minute !in 0..59 || second !in 0..59) {
-      BaoLog.w(TAG, "Time component out of range: '$datetime'")
-      return null
-    }
-    return LocalDateTime.parse(datetime, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+    return launchIntentOrError(context, intent, "create calendar event")
   }
 
   companion object {
-    private val ISO_DATETIME_PATTERN = Regex("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2})?")
-    private const val DEFAULT_EVENT_DURATION_MS = 3_600_000L
+    internal const val DEFAULT_EVENT_DURATION_MS = 3_600_000L
   }
+}
+
+internal fun launchIntentOrError(context: Context, intent: Intent, actionName: String): String {
+  return launchIntentOrError(
+    isResolvable = intent.resolveActivity(context.packageManager) != null,
+    startActivity = { context.startActivity(intent) },
+    noActivityMessage = { context.getString(R.string.mobile_actions_error_no_activity) },
+    actionName = actionName,
+  )
+}
+
+internal fun launchIntentOrError(
+  isResolvable: Boolean,
+  startActivity: () -> Unit,
+  noActivityMessage: () -> String,
+  actionName: String,
+): String {
+  if (!isResolvable) {
+    BaoLog.e(TAG, "No activity to $actionName")
+    return noActivityMessage()
+  }
+  startActivity()
+  return ""
+}
+
+private val ISO_DATETIME_PATTERN = Regex("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2})?")
+
+internal fun parseDateTime(datetime: String): LocalDateTime? {
+  if (!ISO_DATETIME_PATTERN.matches(datetime)) {
+    BaoLog.w(TAG, "Invalid date time format: '$datetime'")
+    return null
+  }
+  val parts = datetime.split("T")
+  val dateParts = parts[0].split("-")
+  val month = dateParts[1].toIntOrNull()
+  val day = dateParts[2].toIntOrNull()
+  if (month == null || month !in 1..12 || day == null || day !in 1..31) {
+    BaoLog.w(TAG, "Date component out of range: '$datetime'")
+    return null
+  }
+  val timeParts = parts[1].split(":")
+  val hour = timeParts[0].toIntOrNull()
+  val minute = timeParts[1].toIntOrNull()
+  val second = if (timeParts.size > 2) timeParts[2].toIntOrNull() else 0
+  if (hour !in 0..23 || minute !in 0..59 || second !in 0..59) {
+    BaoLog.w(TAG, "Time component out of range: '$datetime'")
+    return null
+  }
+  return runCatching { LocalDateTime.parse(datetime, DateTimeFormatter.ISO_LOCAL_DATE_TIME) }
+    .onFailure { BaoLog.w(TAG, "Invalid calendar date: '$datetime'") }
+    .getOrNull()
 }

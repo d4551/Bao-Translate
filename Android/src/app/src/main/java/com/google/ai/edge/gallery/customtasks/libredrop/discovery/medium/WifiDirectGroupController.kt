@@ -18,10 +18,8 @@ import android.net.wifi.p2p.WifiP2pConfig
 import android.net.wifi.p2p.WifiP2pGroup
 import android.net.wifi.p2p.WifiP2pInfo
 import android.net.wifi.p2p.WifiP2pManager
-import android.os.Build
 import android.os.Looper
 import android.util.Log
-import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat
 import com.google.ai.edge.gallery.customtasks.libredrop.protocol.medium.UpgradePathCredentials
@@ -35,6 +33,7 @@ import java.io.IOException
 import java.net.InetAddress
 import java.net.Socket
 import java.security.SecureRandom
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -131,11 +130,7 @@ internal class WifiDirectGroupController(
         removeExistingGroupBeforeServerCreate(channel)
         val createOk =
             awaitActionListener("createGroup") { listener ->
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    manager.createGroup(channel, requested.toConfig(), listener)
-                } else {
-                    manager.createGroup(channel, listener)
-                }
+                manager.createGroup(channel, requested.toConfig(), listener)
             }
         if (!createOk) {
             Log.w(TAG, "WifiP2pManager.createGroup failed — falling back")
@@ -254,20 +249,15 @@ internal class WifiDirectGroupController(
         return ServerCredentialStrings(ssid, passphrase)
     }
 
-    private fun selectServerFrequency(group: WifiP2pGroup): Int {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            return UpgradePathCredentials.WifiDirect.FREQUENCY_NOT_SET
-        }
-        return group.frequency
+    private fun selectServerFrequency(group: WifiP2pGroup): Int =
+        group.frequency
             .takeIf { it > 0 }
             ?: UpgradePathCredentials.WifiDirect.FREQUENCY_NOT_SET
-    }
 
     private data class RequestedWifiDirectCredentials(
         val networkName: String = WifiDirectCredentialShape.generateNetworkName(),
         val passphrase: String = WifiDirectCredentialShape.generatePassphrase(),
     ) {
-        @RequiresApi(Build.VERSION_CODES.Q)
         fun toConfig(): WifiP2pConfig =
             WifiP2pConfig
                 .Builder()
@@ -319,12 +309,6 @@ internal class WifiDirectGroupController(
             teardown.close()
             return null
         }
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            Log.w(TAG, "Wi-Fi Direct network-name join requires API 29+; declining upgrade")
-            teardown.close()
-            return null
-        }
-
         val config =
             WifiP2pConfig
                 .Builder()
@@ -565,7 +549,7 @@ internal class WifiDirectGroupController(
      */
     private class ConnectionChangedReceiver : BroadcastReceiver() {
         var context: Context? = null
-        private val unregistered = AtomicReference(false)
+        private val unregistered = AtomicBoolean(false)
         private val ownerInfo = CompletableDeferred<WifiP2pInfo>()
         private val clientInfo = CompletableDeferred<WifiP2pInfo>()
 
@@ -622,7 +606,7 @@ internal class WifiDirectGroupController(
 
     private class StateChangedReceiver : BroadcastReceiver() {
         var context: Context? = null
-        private val unregistered = AtomicReference(false)
+        private val unregistered = AtomicBoolean(false)
         private val enabled = CompletableDeferred<Unit>()
 
         override fun onReceive(
@@ -665,7 +649,7 @@ internal class WifiDirectGroupController(
     }
 
     private fun closeable(action: () -> Unit): Closeable {
-        val closed = AtomicReference(false)
+        val closed = AtomicBoolean(false)
         return Closeable {
             if (closed.compareAndSet(false, true)) {
                 try {

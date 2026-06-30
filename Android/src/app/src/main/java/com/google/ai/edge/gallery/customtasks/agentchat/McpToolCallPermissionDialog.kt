@@ -33,10 +33,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.common.PermissionResult
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import org.json.JSONObject
 
 /** A dialog that prompts the user for permission to execute a MCP tool call. */
@@ -60,9 +60,9 @@ fun McpToolCallPermissionDialog(
     text = {
       Column(
         modifier = Modifier.verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
       ) {
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xxs)) {
           Text(
             text = stringResource(R.string.mcp_tool_name_label),
             style = MaterialTheme.typography.labelMedium,
@@ -70,7 +70,7 @@ fun McpToolCallPermissionDialog(
           )
           Text(text = toolName, style = MaterialTheme.typography.bodySmall)
         }
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xxs)) {
           Text(
             text = stringResource(R.string.mcp_tool_input_label),
             style = MaterialTheme.typography.labelMedium,
@@ -93,7 +93,7 @@ fun McpToolCallPermissionDialog(
       }
     },
     confirmButton = {
-      Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+      Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs)) {
         Button(
           onClick = { onResult(PermissionResult.ALWAYS_ALLOW) },
           modifier = Modifier.fillMaxWidth(),

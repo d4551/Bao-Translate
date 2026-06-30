@@ -189,7 +189,6 @@ constructor(@ApplicationContext private val appContext: Context) : ViewModel() {
     }
 
     override fun onCleared() {
-        super.onCleared()
         stopDiscovery()
     }
 

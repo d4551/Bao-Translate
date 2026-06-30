@@ -39,6 +39,7 @@ import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -108,7 +109,7 @@ internal fun LanguageSelectionBar(
         val swapEnabled = sourceLanguage != SupportedLanguages.AUTO.key
         val swapDesc = stringResource(R.string.cd_bao_translate_swap)
         val reduceMotion = isReducedMotion
-        var swapRotation by remember { mutableStateOf(0f) }
+        var swapRotation by remember { mutableFloatStateOf(0f) }
         // Snap instantly under reduced motion instead of spinning the swap icon.
         val animatedRotation by animateFloatAsState(
           targetValue = swapRotation,

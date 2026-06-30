@@ -35,13 +35,11 @@
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
         android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
-        android:usesPermissionFlags="neverForLocation"
-        tools:targetApi="s" />
+        android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
-    <!-- Nearby Connections transport: Wi-Fi mediums for high-bandwidth payloads, nearby-device
-         discovery on API 33+, and the FINE_LOCATION fallback the API requires for discovery on
-         API 29-31. -->
+    <!-- Nearby Connections transport: Wi-Fi mediums for high-bandwidth payloads and nearby-device
+         discovery on API 33+. -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"
@@ -52,15 +50,9 @@
         android:usesPermissionFlags="neverForLocation"
         tools:targetApi="tiramisu" />
 
-    <!-- Additional permission required for push notification handling -->
-    <!-- Required for resurfacing notifications after boot -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <!-- Required for GCM message handling -->
     <uses-permission android:name="com.google.android.c2dm.permission.RECEIVE" />
-    <!-- Required for registering with Chime properly -->
     <uses-permission android:name="com.google.android.providers.gsf.permission.READ_GSERVICES" />
-    <!-- Required before JellyBean MR1, optional for newer versions of Android. -->
-    <uses-permission android:name="android.permission.GET_ACCOUNTS" />
 
     <uses-feature
         android:name="android.hardware.camera"
@@ -77,9 +69,7 @@
         android:label="@string/app_name"
         android:roundIcon="${appRoundIcon}"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Gallery"
-        android:enableOnBackInvokedCallback="true"
-        tools:targetApi="31">
+        android:theme="@style/Theme.Gallery">
         <!--
           android:configChanges="uiMode" tells the system don't destroy and
           recreate the activity when UI mode changes (e.g. setting dark mode).
@@ -87,7 +77,6 @@
          -->
         <activity
             android:name="com.google.ai.edge.gallery.MainActivity"
-            android:label="@string/app_name"
             android:exported="true"
             android:theme="@style/Theme.Gallery.SplashScreen"
             android:screenOrientation="portrait"
@@ -128,19 +117,10 @@
             tools:node="merge">
         </service>
 
-        <!-- For Firebase Analytics. -->
-        <receiver
-            android:name="com.google.android.gms.measurement.AppMeasurementReceiver"
-            android:enabled="true"
-            android:exported="false" />
-        <service android:name="com.google.android.gms.measurement.AppMeasurementService"
-            android:enabled="true"
-            android:exported="false" />
-        <service
-            android:name="com.google.android.gms.measurement.AppMeasurementJobService"
-            android:enabled="true"
-            android:exported="false"
-            android:permission="android.permission.BIND_JOB_SERVICE" />
+        <provider
+            android:name="com.google.firebase.provider.FirebaseInitProvider"
+            android:authorities="${applicationId}.firebaseinitprovider"
+            tools:node="remove" />
 
         <service
             android:name=".GalleryFcmMessagingService"

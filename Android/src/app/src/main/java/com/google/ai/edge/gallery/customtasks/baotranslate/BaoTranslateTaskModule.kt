@@ -10,7 +10,6 @@ import com.google.ai.edge.gallery.data.Category
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.litertlm.Contents
-import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -19,21 +18,19 @@ import dagger.multibindings.IntoSet
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 
-class BaoTranslateTask @Inject constructor(
-  @param:ApplicationContext private val appContext: Context,
-) : CustomTask {
+class BaoTranslateTask @Inject constructor() : CustomTask {
   override val task: Task =
     Task(
       id = BuiltInTaskId.BAO_TRANSLATE,
-      label = appContext.getString(R.string.bao_translate),
+      label = "",
+      labelRes = R.string.bao_translate,
       category = Category.LLM,
       iconVectorResourceId = R.drawable.ic_bao_translate,
-      description = appContext.getString(R.string.bao_translate_task_description),
-      shortDescription = appContext.getString(R.string.bao_translate_task_short_description),
+      description = "",
+      descriptionRes = R.string.bao_translate_task_description,
+      shortDescription = "",
+      shortDescriptionRes = R.string.bao_translate_task_short_description,
       models = mutableListOf(),
-      // Bao Translate provisions its own model set (BaoTranslateModelManager.ALL_MODELS) rather than
-      // registering Model objects, so the home card derives its count from that SSOT — otherwise the
-      // empty [models] list would render "0 models".
       modelCountOverride = BaoTranslateModelManager.ALL_MODELS.size,
     )
 
@@ -67,7 +64,7 @@ class BaoTranslateTask @Inject constructor(
 internal object BaoTranslateTaskModule {
   @Provides
   @IntoSet
-  fun provideTask(@ApplicationContext context: Context): CustomTask {
-    return BaoTranslateTask(context)
+  fun provideTask(): CustomTask {
+    return BaoTranslateTask()
   }
 }

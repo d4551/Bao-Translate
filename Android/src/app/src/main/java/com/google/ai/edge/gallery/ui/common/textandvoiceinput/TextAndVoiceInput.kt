@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.ui.common.getTaskIconColor
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.bodyLargeNarrow
 
 @Composable
@@ -72,7 +73,7 @@ fun TextAndVoiceInput(
   Row(
     modifier = modifier,
     verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(8.dp),
+    horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
   ) {
     var textInputMode by remember { mutableStateOf(defaultTextInputMode) }
     var curTextInput by remember { mutableStateOf("") }
@@ -96,11 +97,11 @@ fun TextAndVoiceInput(
           .graphicsLayer { alpha = if (!processing) 1f else 0.5f }
           .background(MaterialTheme.colorScheme.surfaceContainerLow)
           .border(
-            width = 1.dp,
+            width = Dimensions.Stroke.hairline,
             color = MaterialTheme.colorScheme.outlineVariant,
             shape = CircleShape,
           )
-          .size(48.dp),
+          .size(Dimensions.Icon.xl),
       contentAlignment = Alignment.Center,
     ) {
       Icon(
@@ -109,7 +110,7 @@ fun TextAndVoiceInput(
           stringResource(
             if (textInputMode) R.string.cd_switch_to_voice else R.string.cd_switch_to_keyboard
           ),
-        modifier = Modifier.size(24.dp),
+        modifier = Modifier.size(Dimensions.Icon.medium),
       )
     }
 
@@ -123,11 +124,11 @@ fun TextAndVoiceInput(
               .clip(MaterialTheme.shapes.extraLarge)
               .background(MaterialTheme.colorScheme.surface)
               .border(
-                width = 1.dp,
+                width = Dimensions.Stroke.hairline,
                 color = MaterialTheme.colorScheme.outlineVariant,
                 shape = MaterialTheme.shapes.extraLarge,
               )
-              .heightIn(min = 48.dp),
+              .heightIn(min = Dimensions.Icon.xl),
           verticalAlignment = Alignment.CenterVertically,
         ) {
           BasicTextField(
@@ -137,7 +138,7 @@ fun TextAndVoiceInput(
             textStyle = bodyLargeNarrow.copy(color = MaterialTheme.colorScheme.onSurface),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             modifier =
-              Modifier.padding(start = 16.dp, end = 8.dp).padding(vertical = 2.dp).semantics {
+              Modifier.padding(start = Dimensions.Spacing.medium, end = Dimensions.Spacing.small).padding(vertical = Dimensions.Spacing.xxs).semantics {
                 contentDescription = cdPromptInput
               },
             minLines = 1,
@@ -145,9 +146,9 @@ fun TextAndVoiceInput(
             decorationBox = { innerTextField ->
               Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs),
               ) {
-                Box(Modifier.weight(1f).padding(vertical = 8.dp)) {
+                Box(Modifier.weight(1f).padding(vertical = Dimensions.Spacing.small)) {
                   if (curTextInput.isEmpty()) {
                     Text(
                       text = stringResource(R.string.text_input_placeholder_llm_chat),
@@ -170,14 +171,14 @@ fun TextAndVoiceInput(
                       )
                       .graphicsLayer { alpha = if (!processing) 1f else 0.5f }
                       .background(getTaskIconColor(task = task))
-                      .size(36.dp),
+                      .size(Dimensions.Component.shutterIconSize),
                   contentAlignment = Alignment.Center,
                 ) {
                   Icon(
                     Icons.AutoMirrored.Rounded.Send,
                     contentDescription = stringResource(R.string.cd_send_prompt_icon),
-                    modifier = Modifier.offset(x = 2.dp),
-                    tint = Color.White,
+                    modifier = Modifier.offset(x = Dimensions.Spacing.xxs),
+                    tint = MaterialTheme.colorScheme.onPrimary,
                   )
                 }
               }

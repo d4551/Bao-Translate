@@ -10,8 +10,6 @@ package com.google.ai.edge.gallery.customtasks.libredrop.discovery.bootstrap
 
 import android.content.Context
 import android.os.Build
-import androidx.annotation.ChecksSdkIntAtLeast
-import androidx.annotation.RequiresApi
 import com.google.location.nearby.mediums.proto.BleFramesProto
 import com.google.location.nearby.mediums.proto.MultiplexFramesProto
 import com.google.ai.edge.gallery.customtasks.libredrop.discovery.diagnostics.DiagnosticLog
@@ -86,15 +84,12 @@ public class BleL2capInitialControlClient internal constructor(
         activeTransport.getAndSet(null)?.close()
     }
 
-    @ChecksSdkIntAtLeast(api = Build.VERSION_CODES.Q)
     private fun isAvailable(): Boolean =
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
-            io.apiLevel >= Build.VERSION_CODES.Q &&
+        io.apiLevel >= Build.VERSION_CODES.Q &&
             io.hasBleHardware() &&
             io.hasConnectPermission() &&
             io.isBluetoothEnabled()
 
-    @RequiresApi(Build.VERSION_CODES.Q)
     private fun connectOnQ(
         macAddress: String,
         psm: Int,

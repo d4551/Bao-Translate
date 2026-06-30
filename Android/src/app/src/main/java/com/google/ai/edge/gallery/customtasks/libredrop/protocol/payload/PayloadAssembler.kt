@@ -595,7 +595,7 @@ public class PayloadAssembler(
                 resumeEndpointId.isNotEmpty()
         val record =
             if (resumeAvailable) {
-                resumeStateStore!!.loadCoverage(resumeEndpointId, payloadId)
+                resumeStateStore.loadCoverage(resumeEndpointId, payloadId)
             } else {
                 null
             }

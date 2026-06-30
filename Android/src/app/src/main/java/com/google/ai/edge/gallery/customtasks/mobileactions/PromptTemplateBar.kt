@@ -26,6 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 
 @Composable
 fun PromptTemplateBar(processing: Boolean, onSend: (String) -> Unit) {
@@ -34,9 +35,9 @@ fun PromptTemplateBar(processing: Boolean, onSend: (String) -> Unit) {
       Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).graphicsLayer {
         alpha = if (processing) 0.5f else 1f
       },
-    horizontalArrangement = Arrangement.spacedBy(4.dp),
+    horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs),
   ) {
-    Spacer(modifier = Modifier.width(12.dp))
+    Spacer(modifier = Modifier.width(Dimensions.Spacing.md))
     for (item in PROMPT_TEMPLATES) {
       val promptText = stringResource(item.promptResId)
       Text(
@@ -44,18 +45,18 @@ fun PromptTemplateBar(processing: Boolean, onSend: (String) -> Unit) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.labelLarge,
         modifier =
-          Modifier.clip(RoundedCornerShape(12.dp))
+          Modifier.clip(RoundedCornerShape(Dimensions.Spacing.md))
             .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
             .clickable(enabled = !processing) { onSend(promptText) }
             .background(color = MaterialTheme.colorScheme.surfaceContainerLow)
             .border(
               width = 1.dp,
               color = MaterialTheme.colorScheme.outlineVariant,
-              shape = RoundedCornerShape(12.dp),
+              shape = RoundedCornerShape(Dimensions.Spacing.md),
             )
-            .padding(all = 12.dp),
+            .padding(all = Dimensions.Spacing.md),
       )
     }
-    Spacer(modifier = Modifier.width(12.dp))
+    Spacer(modifier = Modifier.width(Dimensions.Spacing.md))
   }
 }

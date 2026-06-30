@@ -21,7 +21,6 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import com.google.ai.edge.gallery.common.BaoLog
 import androidx.core.app.NotificationCompat
 import androidx.core.net.toUri
@@ -68,11 +67,9 @@ class NotificationReceiver : BroadcastReceiver() {
       val notificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        val channel =
-          NotificationChannel(channelId, channelName, NotificationManager.IMPORTANCE_HIGH)
-        notificationManager.createNotificationChannel(channel)
-      }
+      val channel =
+        NotificationChannel(channelId, channelName, NotificationManager.IMPORTANCE_HIGH)
+      notificationManager.createNotificationChannel(channel)
 
       val notificationBuilder =
         NotificationCompat.Builder(context, channelId)

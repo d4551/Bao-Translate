@@ -67,13 +67,7 @@ const val SAMPLE_RATE = 16000
 const val TMP_FILE_EXT = "gallerytmp"
 
 // Current device's SOC in lowercase.
-val SOC =
-  (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-      Build.SOC_MODEL
-    } else {
-      ""
-    })
-    .lowercase()
+val SOC = Build.SOC_MODEL.orEmpty().lowercase()
 
 // URLs for Agent Skills.
 object AgentSkillsURLs {

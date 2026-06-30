@@ -346,6 +346,7 @@ class ChatMessageWebView(
   val url: String,
   val iframe: Boolean,
   val aspectRatio: Float,
+  val trustedLocalContent: Boolean = false,
   override val side: ChatSide = ChatSide.AGENT,
   override val hideSenderLabel: Boolean = false,
 ) :
@@ -360,6 +361,7 @@ class ChatMessageWebView(
       url = url,
       iframe = iframe,
       aspectRatio = aspectRatio,
+      trustedLocalContent = trustedLocalContent,
       side = side,
       hideSenderLabel = hideSenderLabel,
     )

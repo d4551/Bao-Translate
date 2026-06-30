@@ -21,8 +21,6 @@ package com.google.ai.edge.gallery.ui.modelmanager
 // import com.google.ai.edge.gallery.ui.preview.TASK_TEST1
 // import com.google.ai.edge.gallery.ui.theme.GalleryTheme
 
-import androidx.compose.ui.platform.LocalContext
-
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -55,6 +53,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -73,6 +72,7 @@ import com.google.ai.edge.gallery.ui.common.getTaskBgGradientColors
 import com.google.ai.edge.gallery.ui.common.modelitem.ModelItem
 import com.google.ai.edge.gallery.ui.common.rememberDelayedAnimationProgress
 import com.google.ai.edge.gallery.ui.common.taskLabelText
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.bodyLargeNarrow
 import com.google.ai.edge.gallery.ui.theme.headlineLargeMedium
 
@@ -187,18 +187,18 @@ fun ModelList(
     modifier = Modifier.background(color = getTaskBgColor(task = task)),
   ) {
     LazyColumn(
-      modifier = modifier.padding(horizontal = 16.dp),
+      modifier = modifier.padding(horizontal = Dimensions.Spacing.medium),
       contentPadding = contentPadding,
-      verticalArrangement = Arrangement.spacedBy(8.dp),
+      verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
       state = listState,
     ) {
       // Task header area.
       item(key = "taskHeader") {
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(Dimensions.Spacing.xl))
         Column(
-          verticalArrangement = Arrangement.spacedBy(8.dp),
+          verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
           horizontalAlignment = Alignment.CenterHorizontally,
-          modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+          modifier = Modifier.fillMaxWidth().padding(bottom = Dimensions.Spacing.large),
         ) {
           // Task icon.
           TaskIcon(task = task, width = 64.dp, animationProgress = taskIconProgress)
@@ -242,7 +242,7 @@ fun ModelList(
                 Text(
                   text = stringResource(R.string.model_list_experimental_label),
                   style = bodyLargeNarrow.copy(fontWeight = FontWeight.Bold),
-                  modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                  modifier = Modifier.padding(horizontal = Dimensions.Spacing.md, vertical = Dimensions.Spacing.xs),
                 )
               }
             }
@@ -264,14 +264,14 @@ fun ModelList(
           if (task.docUrl.isNotEmpty() || task.sourceCodeUrl.isNotEmpty()) {
             Box(
               modifier =
-                Modifier.padding(vertical = 8.dp).graphicsLayer {
+                Modifier.padding(vertical = Dimensions.Spacing.small).graphicsLayer {
                   alpha = descriptionProgress
                   translationY = (CONTENT_ANIMATION_OFFSET * (1 - descriptionProgress)).toPx()
                 }
             ) {
               Column(
                 horizontalAlignment = Alignment.Start,
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs),
               ) {
                 if (task.docUrl.isNotEmpty()) {
                   ClickableLink(
@@ -292,7 +292,7 @@ fun ModelList(
           }
 
           // Models available.
-          val resources = LocalContext.current.resources
+          val resources = LocalResources.current
           Text(
             resources.getQuantityString(
               R.plurals.model_list_number_of_models_available,
@@ -318,7 +318,7 @@ fun ModelList(
             color = MaterialTheme.colorScheme.onSurface,
             style = MaterialTheme.typography.labelLarge,
             modifier =
-              Modifier.padding(horizontal = 16.dp, vertical = 8.dp).graphicsLayer {
+              Modifier.padding(horizontal = Dimensions.Spacing.medium, vertical = Dimensions.Spacing.small).graphicsLayer {
                 alpha = modelListProgress
                 translationY = (CONTENT_ANIMATION_OFFSET * (1 - modelListProgress)).toPx()
               },
@@ -357,8 +357,8 @@ fun ModelList(
             color = MaterialTheme.colorScheme.onSurface,
             style = MaterialTheme.typography.labelLarge,
             modifier =
-              Modifier.padding(horizontal = 16.dp)
-                .padding(top = 32.dp, bottom = 8.dp)
+              Modifier.padding(horizontal = Dimensions.Spacing.medium)
+                .padding(top = Dimensions.Spacing.xl, bottom = Dimensions.Spacing.small)
                 .graphicsLayer {
                   alpha = modelListProgress
                   translationY = (CONTENT_ANIMATION_OFFSET * (1 - modelListProgress)).toPx()

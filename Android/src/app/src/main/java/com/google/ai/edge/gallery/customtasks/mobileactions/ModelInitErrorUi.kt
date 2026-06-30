@@ -22,12 +22,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.ui.modelmanager.ModelInitializationStatus
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 
 @Composable
 internal fun ModelInitErrorUi(
@@ -40,7 +40,7 @@ internal fun ModelInitErrorUi(
   Column(
     modifier = Modifier
       .fillMaxSize()
-      .padding(32.dp)
+      .padding(Dimensions.Spacing.xl)
       .semantics { liveRegion = LiveRegionMode.Assertive },
     verticalArrangement = Arrangement.Center,
     horizontalAlignment = Alignment.CenterHorizontally,
@@ -50,13 +50,13 @@ internal fun ModelInitErrorUi(
       style = MaterialTheme.typography.titleLarge,
       color = MaterialTheme.colorScheme.error,
     )
-    Spacer(modifier = Modifier.size(8.dp))
+    Spacer(modifier = Modifier.size(Dimensions.Spacing.small))
     Text(
       text = initStatus.error,
       style = MaterialTheme.typography.bodyMedium,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    Spacer(modifier = Modifier.size(24.dp))
+    Spacer(modifier = Modifier.size(Dimensions.Spacing.large))
     Button(
       onClick = {
         modelManagerViewModel.initializeModel(

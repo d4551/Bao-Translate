@@ -10,7 +10,6 @@ import com.google.ai.edge.gallery.data.Category
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.litertlm.Contents
-import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -19,17 +18,18 @@ import dagger.multibindings.IntoSet
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 
-class LibreDropTask @Inject constructor(
-  @param:ApplicationContext private val appContext: Context,
-) : CustomTask {
+class LibreDropTask @Inject constructor() : CustomTask {
   override val task: Task =
     Task(
       id = BuiltInTaskId.LIBRE_DROP,
-      label = appContext.getString(R.string.libre_drop),
+      label = "",
+      labelRes = R.string.libre_drop,
       category = Category.LLM,
       iconVectorResourceId = R.drawable.ic_libre_drop,
-      description = appContext.getString(R.string.libre_drop_task_description),
-      shortDescription = appContext.getString(R.string.libre_drop_task_short_description),
+      description = "",
+      descriptionRes = R.string.libre_drop_task_description,
+      shortDescription = "",
+      shortDescriptionRes = R.string.libre_drop_task_short_description,
       models = mutableListOf(),
       modelCountOverride = 2,
     )
@@ -64,7 +64,7 @@ class LibreDropTask @Inject constructor(
 internal object LibreDropTaskModule {
   @Provides
   @IntoSet
-  fun provideTask(@ApplicationContext context: Context): CustomTask {
-    return LibreDropTask(context)
+  fun provideTask(): CustomTask {
+    return LibreDropTask()
   }
 }

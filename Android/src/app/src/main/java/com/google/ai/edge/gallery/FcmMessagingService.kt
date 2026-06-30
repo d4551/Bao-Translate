@@ -21,20 +21,28 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.media.RingtoneManager
-import android.os.Build
-import com.google.ai.edge.gallery.common.BaoLog
 import androidx.core.app.NotificationCompat
 import androidx.core.net.toUri
+import com.google.ai.edge.gallery.common.BaoLog
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import java.net.URI
 
+/** Handles Firebase Cloud Messaging payloads when Firebase is configured for the build. */
 class GalleryFcmMessagingService : FirebaseMessagingService() {
+  /** Records token refresh metadata without exposing the token in release logs. */
+  @Deprecated("Required by FirebaseMessagingService token refresh dispatch.")
+  override fun onNewToken(token: String) {
+    BaoLog.d(TAG, "FCM registration token refreshed")
+  }
+
+  /** Converts supported FCM payloads into local notifications. */
   override fun onMessageReceived(remoteMessage: RemoteMessage) {
     // Do not log the full RemoteMessage or payload values — they reach release logcat. Metadata only.
     BaoLog.d(TAG, "Message received from: ${remoteMessage.from}, dataKeys=${remoteMessage.data.keys}")
 
-    // Combine data and notification payloads
     val data = remoteMessage.data
     val notification = remoteMessage.notification
 
@@ -42,7 +50,6 @@ class GalleryFcmMessagingService : FirebaseMessagingService() {
     val imageUrlStr = data["image_url"]
     val imageUrl = imageUrlStr?.let { it.toUri() }
 
-    // Prefer data title/body, fallback to notification
     val title = data["title"] ?: notification?.title
     val body = data["body"] ?: notification?.body
 
@@ -56,16 +63,14 @@ class GalleryFcmMessagingService : FirebaseMessagingService() {
     } else if (data.isNotEmpty()) {
       handleNow()
     }
-
-    // Also if you intend on generating your own notificatisons as a result of a received FCM
-    // message, here is where that should be initiated. See sendNotification method below.
-
   }
 
+  /** Records receipt of a data-only message without exposing payload values. */
   private fun handleNow() {
     BaoLog.d(TAG, "Short lived task is done.")
   }
 
+  /** Shows a high-priority notification for a validated FCM payload. */
   private fun sendNotification(
     title: String?,
     messageBody: String,
@@ -101,42 +106,34 @@ class GalleryFcmMessagingService : FirebaseMessagingService() {
 
     if (imageUrl != null) {
       runCatching {
-
-        val url = java.net.URL(imageUrl.toString())
+        val url = URI(imageUrl.toString()).toURL()
         val connection = com.google.ai.edge.gallery.common.network.HttpClient.openConnection(
           url = url,
           connectTimeout = 5000,
           readTimeout = 5000,
         )
-        val bitmap = android.graphics.BitmapFactory.decodeStream(connection.getInputStream())
+        val bitmap = connection.getInputStream().use { inputStream -> BitmapFactory.decodeStream(inputStream) }
         if (bitmap != null) {
           notificationBuilder.setLargeIcon(bitmap)
           notificationBuilder.setStyle(
             NotificationCompat.BigPictureStyle()
-              .bigPicture(bitmap)
-              .bigLargeIcon(null as android.graphics.Bitmap?)
+              .bigPicture(bitmap),
           )
         }
-      
-}.onFailure { e ->
-
-        BaoLog.w(TAG, "Failed to download image", e)
-      
-}
+      }.onFailure { error ->
+        BaoLog.w(TAG, "Failed to download image", error)
+      }
     }
 
     val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-    // Since android Oreo notification channel is needed.
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      val channel =
-        NotificationChannel(
-          channelId,
-          getString(R.string.gallery_news_notification_title),
-          NotificationManager.IMPORTANCE_HIGH,
-        )
-      notificationManager.createNotificationChannel(channel)
-    }
+    val channel =
+      NotificationChannel(
+        channelId,
+        getString(R.string.gallery_news_notification_title),
+        NotificationManager.IMPORTANCE_HIGH,
+      )
+    notificationManager.createNotificationChannel(channel)
 
     val notificationId = 0
     notificationManager.notify(notificationId, notificationBuilder.build())

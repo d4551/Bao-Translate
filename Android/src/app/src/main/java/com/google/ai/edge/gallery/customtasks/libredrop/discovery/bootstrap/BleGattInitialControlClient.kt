@@ -26,10 +26,8 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import com.google.location.nearby.mediums.proto.BleFramesProto
 import com.google.ai.edge.gallery.customtasks.libredrop.discovery.diagnostics.DiagnosticLog
@@ -120,11 +118,10 @@ public class BleGattInitialControlClient internal constructor(
         val adapter = manager.adapter ?: return false
         if (!adapter.isEnabled) return false
         if (!appContext.packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) return false
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !checkSPermission()) return false
+        if (!checkSPermission()) return false
         return true
     }
 
-    @RequiresApi(Build.VERSION_CODES.S)
     private fun checkSPermission(): Boolean =
         ContextCompat.checkSelfPermission(
             appContext,
@@ -195,25 +192,16 @@ private class BleGattClientTransport(
         }
 
     fun start(): Boolean {
+        val phyMask = BluetoothDevice.PHY_LE_2M_MASK or BluetoothDevice.PHY_LE_1M_MASK
         val opened =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val phyMask = BluetoothDevice.PHY_LE_2M_MASK or BluetoothDevice.PHY_LE_1M_MASK
-                device.connectGatt(
-                    context,
-                    false,
-                    this,
-                    BluetoothDevice.TRANSPORT_LE,
-                    phyMask,
-                    mainHandler,
-                )
-            } else {
-                device.connectGatt(
-                    context,
-                    false,
-                    this,
-                    BluetoothDevice.TRANSPORT_LE,
-                )
-            }
+            device.connectGatt(
+                context,
+                false,
+                this,
+                BluetoothDevice.TRANSPORT_LE,
+                phyMask,
+                mainHandler,
+            )
         gatt = opened
         // Force a GATT cache refresh as soon as the connection is
         // available. Android's BLE stack caches discovered services

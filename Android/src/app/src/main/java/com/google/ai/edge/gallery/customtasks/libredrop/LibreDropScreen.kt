@@ -52,6 +52,7 @@ import androidx.compose.ui.semantics.Role
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.customtasks.common.CustomTaskData
 import com.google.ai.edge.gallery.customtasks.libredrop.discovery.DiscoveredService
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 
 data class DiscoveredPeer(
   val name: String,
@@ -108,8 +109,8 @@ fun LibreDropScreen(data: CustomTaskData) {
       modifier = Modifier
         .fillMaxSize()
         .padding(padding)
-        .padding(16.dp),
-      verticalArrangement = Arrangement.spacedBy(16.dp),
+        .padding(Dimensions.Spacing.medium),
+      verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.medium),
     ) {
       Text(
         text = stringResource(R.string.libre_drop),
@@ -167,13 +168,13 @@ fun LibreDropScreen(data: CustomTaskData) {
       ) {
         if (isSending) {
           CircularProgressIndicator(
-            modifier = Modifier.size(20.dp),
-            strokeWidth = 2.dp,
+            modifier = Modifier.size(Dimensions.Icon.medium),
+            strokeWidth = Dimensions.Stroke.thin,
           )
-          Spacer(modifier = Modifier.width(8.dp))
+          Spacer(modifier = Modifier.width(Dimensions.Spacing.small))
         }
         Icon(Icons.AutoMirrored.Filled.Send, contentDescription = stringResource(R.string.libre_drop_send))
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(Dimensions.Spacing.small))
         Text(
           if (canSend) stringResource(R.string.libre_drop_send_to, selectedPeer?.toDisplayPeer()?.name ?: "")
           else sendDisabledReason ?: stringResource(R.string.libre_drop_send_disabled_both)
@@ -205,12 +206,12 @@ private fun FilePickerSection(
       containerColor = MaterialTheme.colorScheme.surfaceVariant,
     ),
   ) {
-    Column(modifier = Modifier.padding(16.dp)) {
+    Column(modifier = Modifier.padding(Dimensions.Spacing.medium)) {
       Text(
         text = stringResource(R.string.libre_drop_files_to_share),
         style = MaterialTheme.typography.titleSmall,
       )
-      Spacer(modifier = Modifier.height(8.dp))
+      Spacer(modifier = Modifier.height(Dimensions.Spacing.small))
       if (selectedFiles.isEmpty()) {
         Text(
           text = stringResource(R.string.libre_drop_no_files_selected),
@@ -222,7 +223,7 @@ private fun FilePickerSection(
           Row(
             modifier = Modifier
               .fillMaxWidth()
-              .padding(vertical = 4.dp),
+              .padding(vertical = Dimensions.Spacing.xs),
             horizontalArrangement = Arrangement.SpaceBetween,
           ) {
             Text(
@@ -259,7 +260,7 @@ private fun PeerDiscoverySection(
       containerColor = MaterialTheme.colorScheme.surfaceVariant,
     ),
   ) {
-    Column(modifier = Modifier.padding(16.dp)) {
+    Column(modifier = Modifier.padding(Dimensions.Spacing.medium)) {
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -276,52 +277,52 @@ private fun PeerDiscoverySection(
         ) {
           if (isDiscovering) {
             CircularProgressIndicator(
-              modifier = Modifier.size(16.dp),
-              strokeWidth = 2.dp,
+              modifier = Modifier.size(Dimensions.Icon.small),
+              strokeWidth = Dimensions.Stroke.thin,
             )
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(Dimensions.Spacing.small))
             Text(stringResource(R.string.libre_drop_scanning))
           } else {
             Icon(Icons.Filled.Devices, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(Dimensions.Spacing.small))
             Text(stringResource(R.string.libre_drop_scan))
           }
         }
       }
-      Spacer(modifier = Modifier.height(8.dp))
+      Spacer(modifier = Modifier.height(Dimensions.Spacing.small))
       if (peers.isEmpty() && isDiscovering) {
         Text(
           text = stringResource(R.string.libre_drop_searching),
           style = MaterialTheme.typography.bodySmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(Dimensions.Spacing.small))
         repeat(3) {
           Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = Dimensions.Spacing.small),
             verticalAlignment = Alignment.CenterVertically,
           ) {
             Box(
               modifier = Modifier
-                .size(24.dp)
-                .clip(RoundedCornerShape(4.dp))
+                .size(Dimensions.Icon.medium)
+                .clip(RoundedCornerShape(Dimensions.Spacing.xs))
                 .background(MaterialTheme.colorScheme.surfaceContainerHighest),
             )
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(Dimensions.Spacing.md))
             Column(modifier = Modifier.weight(1f)) {
               Box(
                 modifier = Modifier
                   .fillMaxWidth(0.6f)
                   .height(14.dp)
-                  .clip(RoundedCornerShape(4.dp))
+                  .clip(RoundedCornerShape(Dimensions.Spacing.xs))
                   .background(MaterialTheme.colorScheme.surfaceContainerHighest),
               )
-              Spacer(modifier = Modifier.height(4.dp))
+              Spacer(modifier = Modifier.height(Dimensions.Spacing.xs))
               Box(
                 modifier = Modifier
                   .fillMaxWidth(0.4f)
                   .height(10.dp)
-                  .clip(RoundedCornerShape(4.dp))
+                  .clip(RoundedCornerShape(Dimensions.Spacing.xs))
                   .background(MaterialTheme.colorScheme.surfaceContainerHighest),
               )
             }
@@ -357,7 +358,7 @@ private fun PeerListItem(
   Row(
     modifier = Modifier
       .fillMaxWidth()
-      .padding(vertical = 8.dp)
+      .padding(vertical = Dimensions.Spacing.small)
       .semantics {
         selected = isSelected
         role = Role.Button
@@ -368,10 +369,10 @@ private fun PeerListItem(
     Icon(
       Icons.Filled.Devices,
       contentDescription = null,
-      modifier = Modifier.size(24.dp),
+      modifier = Modifier.size(Dimensions.Icon.medium),
       tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    Spacer(modifier = Modifier.width(12.dp))
+    Spacer(modifier = Modifier.width(Dimensions.Spacing.md))
     Column(modifier = Modifier.weight(1f)) {
       Text(
         text = peer.name,
@@ -388,7 +389,7 @@ private fun PeerListItem(
       Icon(
         Icons.Filled.CheckCircle,
         contentDescription = stringResource(R.string.libre_drop_selected_peer),
-        modifier = Modifier.size(16.dp),
+        modifier = Modifier.size(Dimensions.Icon.small),
         tint = MaterialTheme.colorScheme.primary,
       )
     }

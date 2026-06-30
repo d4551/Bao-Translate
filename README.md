@@ -138,7 +138,7 @@ Steps:
 3. Optional: enroll your voice in settings.
 4. Choose source and target languages, pick audio devices if needed, and start translating.
 
-Source builds that need in-app model downloads also need the Hugging Face OAuth client and redirect scheme described in [DEVELOPMENT.md](DEVELOPMENT.md).
+Source builds that need gated in-app model downloads also need the Hugging Face OAuth Gradle properties or environment variables described in [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Build From Source
 
@@ -157,10 +157,10 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 Build notes:
 
-- `applicationId = com.bao.translate`.
+- `applicationId = com.google.ai.edge.gallery`.
 - `versionName = 1.0.15`; `versionCode = 33`.
-- `compileSdk = 37`; `minSdk = 31`; `targetSdk = 35`.
-- The wrapper uses Gradle 9.5.1 with AGP 9.2.1 and Kotlin 2.4.0.
+- `compileSdk = 37`; `minSdk = 31`; `targetSdk = 37`.
+- The wrapper uses Gradle 9.6.1 with AGP 9.4.0-alpha02 and Kotlin 2.4.20-Beta1.
 - Gradle toolchains use JDK 26 for compilation and emit Java 17 bytecode.
 - The vendored `sherpa-onnx` AAR lives under `Android/src/app/libs/`.
 - `sherpa-onnx` and `onnxruntime-android` both ship `libonnxruntime.so`; packaging keeps one shared object with `jniLibs.pickFirsts`.

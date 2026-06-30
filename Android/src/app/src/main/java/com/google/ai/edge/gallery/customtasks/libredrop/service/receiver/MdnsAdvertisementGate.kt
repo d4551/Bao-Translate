@@ -217,7 +217,7 @@ public class MdnsAdvertisementGate(
     private fun apply(
         decision: Decision,
         scope: CoroutineScope,
-    ) = synchronized(applyLock) {
+    ): Unit = synchronized(applyLock) {
         // An active outbound send unconditionally vetoes publishing,
         // regardless of any other "should publish" signal — and tears
         // down immediately, bypassing the 30-second debounce window.

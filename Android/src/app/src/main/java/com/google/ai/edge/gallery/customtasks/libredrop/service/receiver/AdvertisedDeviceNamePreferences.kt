@@ -7,6 +7,7 @@ package com.google.ai.edge.gallery.customtasks.libredrop.service.receiver
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.core.content.edit
 
 /**
  * Persistent store for the receiver's user-configured advertised device name.
@@ -33,21 +34,19 @@ public class AdvertisedDeviceNamePreferences internal constructor(
      */
     public fun setCustomName(rawName: String?): String? {
         val sanitized = AdvertisedDeviceNameSanitizer.sanitize(rawName)
-        prefs
-            .edit()
-            .apply {
-                if (sanitized == null) {
-                    remove(KEY_CUSTOM_NAME)
-                } else {
-                    putString(KEY_CUSTOM_NAME, sanitized)
-                }
-            }.apply()
+        prefs.edit {
+            if (sanitized == null) {
+                remove(KEY_CUSTOM_NAME)
+            } else {
+                putString(KEY_CUSTOM_NAME, sanitized)
+            }
+        }
         return sanitized
     }
 
     /** Clear the custom-name override so default resolution is used again. */
     public fun clearCustomName() {
-        prefs.edit().remove(KEY_CUSTOM_NAME).apply()
+        prefs.edit { remove(KEY_CUSTOM_NAME) }
     }
 
     public companion object {

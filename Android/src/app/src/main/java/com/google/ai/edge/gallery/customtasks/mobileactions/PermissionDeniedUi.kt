@@ -23,11 +23,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.R
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 
 @Composable
 internal fun PermissionDeniedUi(onRetry: () -> Unit) {
   Column(
-    modifier = Modifier.fillMaxSize().padding(32.dp),
+    modifier = Modifier.fillMaxSize().padding(Dimensions.Spacing.xl),
     verticalArrangement = Arrangement.Center,
     horizontalAlignment = Alignment.CenterHorizontally,
   ) {
@@ -37,19 +38,19 @@ internal fun PermissionDeniedUi(onRetry: () -> Unit) {
       modifier = Modifier.size(64.dp),
       tint = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    Spacer(modifier = Modifier.size(16.dp))
+    Spacer(modifier = Modifier.size(Dimensions.Spacing.medium))
     Text(
       text = stringResource(R.string.mobile_actions_permission_denied_title),
       style = MaterialTheme.typography.titleLarge,
       color = MaterialTheme.colorScheme.onSurface,
     )
-    Spacer(modifier = Modifier.size(8.dp))
+    Spacer(modifier = Modifier.size(Dimensions.Spacing.small))
     Text(
       text = stringResource(R.string.mobile_actions_permission_denied_description),
       style = MaterialTheme.typography.bodyMedium,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    Spacer(modifier = Modifier.size(24.dp))
+    Spacer(modifier = Modifier.size(Dimensions.Spacing.large))
     Button(onClick = onRetry) {
       Text(stringResource(R.string.mobile_actions_retry_permission))
     }

@@ -25,6 +25,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.ui.common.getTaskIconColor
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 
 @Composable
 fun ColumnScope.WelcomeSection(task: Task) {
@@ -48,7 +49,7 @@ fun ColumnScope.WelcomeSection(task: Task) {
           stringResource(com.google.ai.edge.gallery.R.string.mobile_actions_supported_actions),
           style = MaterialTheme.typography.labelLarge,
           modifier =
-            Modifier.padding(top = 64.dp, bottom = 8.dp).graphicsLayer { alpha = 0.7f },
+            Modifier.padding(top = 64.dp, bottom = Dimensions.Spacing.small).graphicsLayer { alpha = 0.7f },
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         for (item in SAMPLE_ACTION_ITEMS) {
@@ -56,7 +57,7 @@ fun ColumnScope.WelcomeSection(task: Task) {
             Icon(
               item.icon,
               contentDescription = null,
-              modifier = Modifier.size(24.dp).padding(end = 8.dp),
+              modifier = Modifier.size(Dimensions.Icon.medium).padding(end = Dimensions.Spacing.small),
               tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(

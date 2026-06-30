@@ -65,6 +65,7 @@ import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.proto.McpTool
 import com.google.ai.edge.gallery.ui.common.SmallFilledTonalButton
 import com.google.ai.edge.gallery.ui.common.SmallOutlinedButton
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -94,10 +95,10 @@ fun McpToolManagerBottomSheet(
     sheetState = sheetState,
     containerColor = MaterialTheme.colorScheme.surfaceContainer,
   ) {
-    Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp).fillMaxSize()) {
+    Column(modifier = Modifier.padding(horizontal = Dimensions.Spacing.medium).padding(bottom = Dimensions.Spacing.medium).fillMaxSize()) {
       // Title Row
       Row(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(bottom = Dimensions.Spacing.xs),
         verticalAlignment = Alignment.CenterVertically,
       ) {
         Text(
@@ -106,7 +107,7 @@ fun McpToolManagerBottomSheet(
           modifier = Modifier.weight(1f),
         )
         IconButton(
-          modifier = Modifier.padding(end = 3.dp),
+          modifier = Modifier.padding(end = Dimensions.Spacing.xs),
           onClick = {
             scope.launch {
               sheetState.hide()
@@ -124,14 +125,14 @@ fun McpToolManagerBottomSheet(
         text = stringResource(R.string.mcp_server_label, serverName),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(bottom = 8.dp),
+        modifier = Modifier.padding(bottom = Dimensions.Spacing.small),
       )
 
       // Tool Count and Action Row
       Row(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(bottom = Dimensions.Spacing.small),
       ) {
         val toolsCount = server.toolsList.size
         Text(
@@ -152,15 +153,15 @@ fun McpToolManagerBottomSheet(
       // List of tools
       LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.md),
       ) {
         items(server.toolsList, key = { it.name }) { tool ->
           Row(
             modifier =
               Modifier.fillMaxWidth()
-                .clip(shape = RoundedCornerShape(20.dp))
+                .clip(shape = RoundedCornerShape(Dimensions.Component.chipCornerRadius))
                 .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = Dimensions.Spacing.medium, vertical = Dimensions.Spacing.md),
             verticalAlignment = Alignment.CenterVertically,
           ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -171,8 +172,8 @@ fun McpToolManagerBottomSheet(
                 modifier = Modifier.fillMaxWidth(),
               ) {
                 Column(
-                  modifier = Modifier.weight(1f).padding(end = 8.dp),
-                  verticalArrangement = Arrangement.spacedBy(4.dp),
+                  modifier = Modifier.weight(1f).padding(end = Dimensions.Spacing.small),
+                  verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs),
                 ) {
                   Text(
                     text = tool.name,
@@ -193,7 +194,7 @@ fun McpToolManagerBottomSheet(
                   onCheckedChange = { enabled ->
                     mcpManagerViewModel.setMcpToolEnabled(server.url, tool.name, enabled)
                   },
-                  modifier = Modifier.offset(y = (-4).dp),
+                  modifier = Modifier.offset(y = -Dimensions.Spacing.xs),
                 )
               }
 
@@ -201,7 +202,7 @@ fun McpToolManagerBottomSheet(
               Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Start,
-                modifier = Modifier.padding(top = 8.dp),
+                modifier = Modifier.padding(top = Dimensions.Spacing.small),
               ) {
                 SmallFilledTonalButton(
                   onClick = { toolToView = tool },
@@ -209,7 +210,7 @@ fun McpToolManagerBottomSheet(
                   imageVector = Icons.Outlined.RemoveRedEye,
                 )
                 if (tool.alwaysAllow) {
-                  Spacer(modifier = Modifier.width(8.dp))
+                  Spacer(modifier = Modifier.width(Dimensions.Spacing.small))
                   SmallOutlinedButton(
                     onClick = { toolToRevoke = tool },
                     labelResId = R.string.mcp_tool_revoke_permission,
@@ -230,7 +231,7 @@ fun McpToolManagerBottomSheet(
       text = {
         Column(
           modifier = Modifier.verticalScroll(rememberScrollState()),
-          verticalArrangement = Arrangement.spacedBy(8.dp),
+          verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
         ) {
           if (tool.description.isNotEmpty()) {
             Column {

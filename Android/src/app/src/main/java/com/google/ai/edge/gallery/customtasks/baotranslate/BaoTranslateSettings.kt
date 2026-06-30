@@ -378,12 +378,12 @@ private fun ModelDownloadSection(
   onDownloadModel: (String) -> Unit,
   onDeleteModel: (String) -> Unit,
 ) {
-	  val allModels = BaoTranslateModelManager.ALL_MODELS
-	  val requiredModels = BaoTranslateModelManager.REQUIRED_MODEL_IDS.mapNotNull { id ->
-	    allModels.firstOrNull { it.id == id }
-	  }
-	  val optionalModels = allModels.filter { it.id !in BaoTranslateModelManager.REQUIRED_MODEL_IDS }
-	  val anyBusy = modelStatuses.values.any { it is ModelStatus.Downloading || it is ModelStatus.Extracting }
+  val allModels = BaoTranslateModelManager.ALL_MODELS
+  val requiredModels = BaoTranslateModelManager.REQUIRED_MODEL_IDS.mapNotNull { id ->
+    allModels.firstOrNull { it.id == id }
+  }
+  val optionalModels = allModels.filter { it.id !in BaoTranslateModelManager.REQUIRED_MODEL_IDS }
+  val anyBusy = modelStatuses.values.any { it is ModelStatus.Downloading || it is ModelStatus.Extracting }
 
   Card(
     modifier = Modifier.fillMaxWidth(),
@@ -406,14 +406,14 @@ private fun ModelDownloadSection(
         val usedBytes = storageBreakdown[model.id] ?: 0L
         val usedMb = usedBytes.toFloat() / (1024f * 1024f)
 
-	        ModelDownloadCard(
-	          modelInfo = model,
-	          status = status,
-	          usedMb = usedMb,
-	          onDownload = { onDownloadModel(model.id) },
-	          onDelete = { onDeleteModel(model.id) },
-	          downloadDisabled = anyBusy,
-	        )
+        ModelDownloadCard(
+          modelInfo = model,
+          status = status,
+          usedMb = usedMb,
+          onDownload = { onDownloadModel(model.id) },
+          onDelete = { onDeleteModel(model.id) },
+          downloadDisabled = anyBusy,
+        )
       }
 
       if (optionalModels.isNotEmpty()) {
@@ -431,14 +431,14 @@ private fun ModelDownloadSection(
         val usedBytes = storageBreakdown[model.id] ?: 0L
         val usedMb = usedBytes.toFloat() / (1024f * 1024f)
 
-	        ModelDownloadCard(
-	          modelInfo = model,
-	          status = status,
-	          usedMb = usedMb,
-	          onDownload = { onDownloadModel(model.id) },
-	          onDelete = { onDeleteModel(model.id) },
-	          downloadDisabled = anyBusy,
-	        )
+        ModelDownloadCard(
+          modelInfo = model,
+          status = status,
+          usedMb = usedMb,
+          onDownload = { onDownloadModel(model.id) },
+          onDelete = { onDeleteModel(model.id) },
+          downloadDisabled = anyBusy,
+        )
       }
     }
   }
@@ -448,11 +448,11 @@ private fun ModelDownloadSection(
 private fun ModelDownloadCard(
   modelInfo: ModelInfo,
   status: ModelStatus,
-	  usedMb: Float,
-	  onDownload: () -> Unit,
-	  onDelete: () -> Unit,
-	  downloadDisabled: Boolean,
-	) {
+  usedMb: Float,
+  onDownload: () -> Unit,
+  onDelete: () -> Unit,
+  downloadDisabled: Boolean,
+) {
   Row(
     modifier = Modifier.fillMaxWidth(),
     verticalAlignment = Alignment.CenterVertically,
@@ -529,19 +529,19 @@ private fun ModelDownloadCard(
     }
 
     when (status) {
-	      is ModelStatus.Ready -> TextButton(onClick = onDelete) {
-	        Text(stringResource(R.string.bao_translate_delete))
-	      }
-	      is ModelStatus.NotDownloaded -> {
-	        TextButton(onClick = onDownload, enabled = !downloadDisabled) {
-	          Text(stringResource(R.string.bao_translate_download))
-	        }
-	      }
-	      is ModelStatus.Error -> {
-	        TextButton(onClick = onDownload, enabled = !downloadDisabled) {
-	          Text(stringResource(R.string.bao_translate_retry))
-	        }
-	      }
+      is ModelStatus.Ready -> TextButton(onClick = onDelete) {
+        Text(stringResource(R.string.bao_translate_delete))
+      }
+      is ModelStatus.NotDownloaded -> {
+        TextButton(onClick = onDownload, enabled = !downloadDisabled) {
+          Text(stringResource(R.string.bao_translate_download))
+        }
+      }
+      is ModelStatus.Error -> {
+        TextButton(onClick = onDownload, enabled = !downloadDisabled) {
+          Text(stringResource(R.string.bao_translate_retry))
+        }
+      }
       is ModelStatus.Downloading, is ModelStatus.Extracting -> {
         CircularProgressIndicator(
           modifier = Modifier.size(Dimensions.Icon.medium),

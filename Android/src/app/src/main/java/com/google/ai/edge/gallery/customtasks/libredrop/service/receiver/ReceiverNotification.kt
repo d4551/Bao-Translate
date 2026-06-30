@@ -11,7 +11,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.google.ai.edge.gallery.R
 
@@ -27,8 +26,8 @@ import com.google.ai.edge.gallery.R
  * the same pattern Google's Files / Quick Share uses for its long-running
  * background presence.
  *
- * The channel is created idempotently — the system tolerates re-creation
- * with the same id, but we still gate on API 26+ where channels exist.
+     * The channel is created idempotently; the system tolerates
+     * re-creation with the same id.
  */
 internal object ReceiverNotification {
     /**
@@ -46,14 +45,9 @@ internal object ReceiverNotification {
     internal const val NOTIFICATION_ID: Int = 0x4C_42_44_52 and 0x7F_FF_FF_FF // "LBDR"
 
     /**
-     * Idempotently install the notification channel on API 26+. Pre-API-26
-     * devices ignore notification channels entirely; we still post the
-     * notification using `NotificationCompat`, which silently degrades
-     * the channel-related fields on older platforms.
+     * Idempotently install the notification channel.
      */
     fun ensureChannel(context: Context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         // Re-creating a channel with the same id is a no-op on the system
         // side, so we don't need to check for an existing channel first.
@@ -148,9 +142,6 @@ internal object ReceiverNotification {
             Intent(context, target).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             }
-        // FLAG_IMMUTABLE was introduced in API 23. The :service-android
-        // module's minSdk is 24 (see libs.versions.toml), so the flag is
-        // always available — no SDK_INT branch needed.
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         return PendingIntent.getActivity(context, OPEN_APP_REQUEST_CODE, intent, flags)
     }

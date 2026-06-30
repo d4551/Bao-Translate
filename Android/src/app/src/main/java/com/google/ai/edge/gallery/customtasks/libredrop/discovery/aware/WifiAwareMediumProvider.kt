@@ -44,7 +44,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
-import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat
 import com.google.ai.edge.gallery.customtasks.libredrop.protocol.medium.Medium
@@ -66,8 +65,8 @@ import java.security.SecureRandom
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * Wi-Fi Aware (NAN) [MediumProvider] for Android 8.0+ devices whose
- * chipset advertises `PackageManager.FEATURE_WIFI_AWARE`. Hardware
+     * Wi-Fi Aware (NAN) [MediumProvider] for supported devices whose
+     * chipset advertises `PackageManager.FEATURE_WIFI_AWARE`. Hardware
  * coverage is patchy (most flagships from 2020+, very few mid-range
  * chipsets) — the provider is best-effort and falls back to other
  * mediums via [isSupported] returning `false` when the platform path is
@@ -90,15 +89,14 @@ import java.util.concurrent.atomic.AtomicReference
  * ### Hardware/SDK gating
  *
  * [isSupported] returns true iff:
- *   - `Build.VERSION.SDK_INT >= 26` (Wi-Fi Aware APIs landed in O).
- *   - `PackageManager.hasSystemFeature(FEATURE_WIFI_AWARE)` is true
+     *   - `PackageManager.hasSystemFeature(FEATURE_WIFI_AWARE)` is true
  *     (chipset declares aware capability).
  *   - `WifiAwareManager.isAvailable()` is true (Wi-Fi is on and the
  *     framework hasn't temporarily disabled aware).
  *   - The runtime location/nearby permission is granted (see
- *     [hasDiscoveryPermission]). On API 33+ we accept either
- *     `NEARBY_WIFI_DEVICES` or `ACCESS_FINE_LOCATION`; on older
- *     releases only the legacy `ACCESS_FINE_LOCATION` is checked.
+     *     [hasDiscoveryPermission]). On API 33+ we accept either
+     *     `NEARBY_WIFI_DEVICES` or `ACCESS_FINE_LOCATION`; on API 31-32
+     *     `ACCESS_FINE_LOCATION` is required.
  *
  * Any of these failing returns `false` and the framework selects the
  * next-best ladder rung. The check is O(1), as the [MediumRegistry]
@@ -325,10 +323,9 @@ public interface WifiAwareSupport {
 }
 
 /**
- * Production [WifiAwareSupport] backed by the Android Wi-Fi Aware
- * stack. Gated to API 26+ at runtime via [Build.VERSION.SDK_INT]
- * checks; older devices return `false` from [isAvailable] without ever
- * touching the API surface.
+     * Production [WifiAwareSupport] backed by the Android Wi-Fi Aware
+     * stack. Availability is gated by hardware, manager state, and runtime
+     * discovery permission.
  *
  * The actual session lifecycle is verbose (attach, publish, match,
  * network request, accept/connect). It lives here, behind the
@@ -345,7 +342,6 @@ public class AndroidWifiAwareSupport(
     private val pendingServer: AtomicReference<PendingAwareServer?> = AtomicReference(null)
 
     override fun isAvailable(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
         val pm = context.packageManager
         if (!pm.hasSystemFeature(PackageManager.FEATURE_WIFI_AWARE)) return false
         val mgr =
@@ -378,7 +374,6 @@ public class AndroidWifiAwareSupport(
         return false
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     @RequiresPermission(
         anyOf = [
             Manifest.permission.ACCESS_FINE_LOCATION,
@@ -387,11 +382,6 @@ public class AndroidWifiAwareSupport(
     )
     @Suppress("LongMethod") // Wi-Fi Aware lifecycle is inherently long; splitting hides intent.
     override suspend fun prepareUpgrade(passphrase: String): UpgradePathCredentials.WifiAware? {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-            Log.w(TAG, "prepareUpgrade: responder-side peerless data path requires API 31+")
-            return null
-        }
         val mgr =
             context.getSystemService(Context.WIFI_AWARE_SERVICE) as? WifiAwareManager
                 ?: return null
@@ -470,7 +460,6 @@ public class AndroidWifiAwareSupport(
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     @RequiresPermission(
         anyOf = [
             Manifest.permission.ACCESS_FINE_LOCATION,
@@ -479,7 +468,6 @@ public class AndroidWifiAwareSupport(
     )
     @Suppress("LongMethod")
     override suspend fun adoptUpgrade(credentials: UpgradePathCredentials.WifiAware): WifiAwareSocketHandle? {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null
         val mgr =
             context.getSystemService(Context.WIFI_AWARE_SERVICE) as? WifiAwareManager
                 ?: return null
@@ -544,7 +532,7 @@ public class AndroidWifiAwareSupport(
                     .createSocket(target, credentials.port)
             completed = true
             return WifiAwareSocketHandle(socket) {
-                networkCallback?.let { runCatching { cm.unregisterNetworkCallback(it) } }
+                runCatching { cm.unregisterNetworkCallback(networkCallback) }
                 subscribeHandle.session.close()
                 attached.close()
             }
@@ -584,7 +572,6 @@ public class AndroidWifiAwareSupport(
         pendingServer.getAndSet(null)?.teardown()
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     private suspend fun attachSession(mgr: WifiAwareManager): WifiAwareSession? {
         val deferred = CompletableDeferred<WifiAwareSession?>()
         val cb =
@@ -608,7 +595,6 @@ public class AndroidWifiAwareSupport(
         return withTimeoutOrNullCompat(WifiAwareMediumProvider.PREPARE_TIMEOUT_MS) { deferred.await() }
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     private suspend fun publish(
         session: WifiAwareSession,
         serviceName: String,
@@ -629,7 +615,6 @@ public class AndroidWifiAwareSupport(
         return withTimeoutOrNullCompat(WifiAwareMediumProvider.PREPARE_TIMEOUT_MS) { deferred.await() }
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     private suspend fun subscribe(
         session: WifiAwareSession,
         serviceName: String,
@@ -678,55 +663,33 @@ public class AndroidWifiAwareSupport(
 
     /**
      * Build a [WifiAwareNetworkSpecifier] for the given role + peer +
-     * passphrase. Uses the API 29+ [WifiAwareNetworkSpecifier.Builder]
-     * when available (lets us pin a server-side port for the publisher
-     * role), falling back to the deprecated
-     * [DiscoverySession.createNetworkSpecifierPassphrase] on older
-     * releases.
+     * passphrase.
      *
      * @param port Server-side TCP port the publisher bound to. Only
      *   meaningful for the publisher role; ignored for subscribers.
      */
-    @RequiresApi(Build.VERSION_CODES.O)
     private fun buildPeerAwareNetworkSpecifier(
         discoverySession: DiscoverySession,
         peerHandle: PeerHandle,
         passphrase: String,
         port: Int?,
     ): android.net.NetworkSpecifier? {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val builder = WifiAwareNetworkSpecifier.Builder(discoverySession, peerHandle)
-            builder.setPskPassphrase(passphrase)
-            if (port != null && port in 1..0xFFFF) {
-                builder.setPort(port)
-            }
-            return builder.build()
+        val builder = WifiAwareNetworkSpecifier.Builder(discoverySession, peerHandle)
+        builder.setPskPassphrase(passphrase)
+        if (port != null && port in 1..0xFFFF) {
+            builder.setPort(port)
         }
-        // API 26..28 fallback: createNetworkSpecifierPassphrase on
-        // DiscoverySession takes only (peerHandle, passphrase). The
-        // role (publisher / subscriber) is inferred from the session
-        // type (publish session => responder, subscribe session =>
-        // initiator). The pre-API-29 path cannot pin a publisher port,
-        // so the publisher's caller will need to pick an ephemeral port
-        // and read it back from the bound ServerSocket — which is what
-        // the prepareUpgrade body above already does.
-        @Suppress("DEPRECATION")
-        return discoverySession.createNetworkSpecifierPassphrase(peerHandle, passphrase)
+        return builder.build()
     }
 
     /**
-     * Build the responder-side peerless network specifier. Android only
-     * exposes this shape from API 31 onward; older devices fall back to
-     * the next medium because the server cannot prepare a usable Aware
-     * data path before the subscriber has received credentials.
+     * Build the responder-side peerless network specifier.
      */
-    @RequiresApi(Build.VERSION_CODES.O)
     private fun buildPublisherAwareNetworkSpecifier(
         publishSession: PublishDiscoverySession,
         passphrase: String,
         port: Int,
     ): android.net.NetworkSpecifier? {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
         val builder = WifiAwareNetworkSpecifier.Builder(publishSession)
         builder.setPskPassphrase(passphrase)
         builder.setPort(port)
@@ -761,12 +724,10 @@ public class AndroidWifiAwareSupport(
                     network: Network,
                     nc: NetworkCapabilities,
                 ) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        val info = nc.transportInfo as? WifiAwareNetworkInfo
-                        val ipv6 = info?.peerIpv6Addr?.address
-                        if (ipv6 != null && !deferred.isCompleted) {
-                            deferred.complete(NetworkResult(network, ipv6))
-                        }
+                    val info = nc.transportInfo as? WifiAwareNetworkInfo
+                    val ipv6 = info?.peerIpv6Addr?.address
+                    if (ipv6 != null && !deferred.isCompleted) {
+                        deferred.complete(NetworkResult(network, ipv6))
                     }
                 }
 

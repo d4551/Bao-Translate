@@ -82,6 +82,7 @@ import com.google.ai.edge.gallery.proto.LlmConfig
 import com.google.ai.edge.gallery.ui.common.ConfigEditorsPanel
 import com.google.ai.edge.gallery.ui.common.ensureValidFileName
 import com.google.ai.edge.gallery.ui.common.humanReadableSize
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import java.io.File
 import java.io.FileOutputStream
 import java.net.URLDecoder
@@ -189,19 +190,19 @@ fun ModelImportDialog(
       shape = MaterialTheme.shapes.large,
     ) {
       Column(
-        modifier = Modifier.padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.padding(Dimensions.Spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.medium),
       ) {
         // Title.
         Text(
-          "Import Model",
+          stringResource(R.string.import_model),
           style = MaterialTheme.typography.titleLarge,
-          modifier = Modifier.padding(bottom = 8.dp),
+          modifier = Modifier.padding(bottom = Dimensions.Spacing.small),
         )
 
         Column(
           modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false),
-          verticalArrangement = Arrangement.spacedBy(16.dp),
+          verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.medium),
         ) {
           // Default configs for users to set.
           ConfigEditorsPanel(configs = IMPORT_CONFIGS_LLM, values = values)
@@ -209,7 +210,7 @@ fun ModelImportDialog(
 
         // Button row.
         Row(
-          modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+          modifier = Modifier.fillMaxWidth().padding(top = Dimensions.Spacing.small),
           horizontalArrangement = Arrangement.End,
         ) {
           // Cancel button.
@@ -371,20 +372,20 @@ fun ModelImportingDialog(
   ) {
     Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
       Column(
-        modifier = Modifier.padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.padding(Dimensions.Spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.medium),
       ) {
         // Title.
         Text(
-          "Import Model",
+          stringResource(R.string.import_model),
           style = MaterialTheme.typography.titleLarge,
-          modifier = Modifier.padding(bottom = 8.dp),
+          modifier = Modifier.padding(bottom = Dimensions.Spacing.small),
         )
 
         // No error.
         if (error.isEmpty()) {
           // Progress bar.
-          Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+          Column(verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs)) {
             Text(
               "${info.fileName} (${info.fileSize.humanReadableSize()})",
               style = MaterialTheme.typography.labelSmall,
@@ -392,7 +393,7 @@ fun ModelImportingDialog(
             val animatedProgress = remember { Animatable(0f) }
             LinearProgressIndicator(
               progress = { animatedProgress.value },
-              modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+              modifier = Modifier.fillMaxWidth().padding(bottom = Dimensions.Spacing.small),
             )
             LaunchedEffect(progress) {
               animatedProgress.animateTo(progress, animationSpec = tween(150))
@@ -403,7 +404,7 @@ fun ModelImportingDialog(
         else {
           Row(
             verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.sm),
           ) {
             Icon(
               Icons.Rounded.Error,
@@ -414,7 +415,7 @@ fun ModelImportingDialog(
               error,
               style = MaterialTheme.typography.labelSmall,
               color = MaterialTheme.colorScheme.error,
-              modifier = Modifier.padding(top = 4.dp),
+              modifier = Modifier.padding(top = Dimensions.Spacing.xs),
             )
           }
           Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {

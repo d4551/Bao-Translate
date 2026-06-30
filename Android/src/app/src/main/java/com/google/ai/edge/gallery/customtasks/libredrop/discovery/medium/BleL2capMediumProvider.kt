@@ -122,7 +122,6 @@ public class BleL2capMediumProvider(
                 }
             }
 
-            @RequiresApi(Build.VERSION_CODES.Q)
             private fun listenOnQ(): BluetoothL2capIo.Listener? = io.listen()
 
             override suspend fun adoptUpgrade(credentials: UpgradePathCredentials): UpgradedTransport? {
@@ -151,7 +150,6 @@ public class BleL2capMediumProvider(
                 pendingListener.getAndSet(null)?.close()
             }
 
-            @RequiresApi(Build.VERSION_CODES.Q)
             private fun connectOnQ(
                 macAddress: String,
                 psm: Int,

@@ -114,6 +114,7 @@ import com.google.ai.edge.gallery.ui.common.RotationalLoader
 import com.google.ai.edge.gallery.ui.common.ScrollToBottomButton
 import com.google.ai.edge.gallery.ui.modelmanager.ModelInitializationStatusType
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.customColors
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.delay
@@ -367,7 +368,7 @@ fun ChatPanel(
             var hAlign: Alignment.Horizontal = Alignment.End
             var backgroundColor: Color = MaterialTheme.customColors.userBubbleBgColor
             var hardCornerAtLeftOrRight = false
-            var extraPaddingStart = 48.dp
+            var extraPaddingStart = Dimensions.Spacing.xxl
             var extraPaddingEnd = 0.dp
             if (message.side == ChatSide.AGENT) {
               hAlign = Alignment.Start
@@ -379,18 +380,18 @@ fun ChatPanel(
                   message.type !== ChatMessageType.WEBVIEW &&
                   message.type !== ChatMessageType.COLLAPSABLE_PROGRESS_PANEL
               ) {
-                extraPaddingEnd = 48.dp
+                extraPaddingEnd = Dimensions.Spacing.xxl
               }
               if (message.type == ChatMessageType.TEXT) {
                 extraPaddingStart = 0.dp
                 extraPaddingEnd = 0.dp
               }
             } else if (message.side == ChatSide.SYSTEM) {
-              extraPaddingStart = 24.dp
-              extraPaddingEnd = 24.dp
+              extraPaddingStart = Dimensions.Spacing.large
+              extraPaddingEnd = Dimensions.Spacing.large
               if (message.type == ChatMessageType.PROMPT_TEMPLATES) {
-                extraPaddingStart = 12.dp
-                extraPaddingEnd = 12.dp
+                extraPaddingStart = Dimensions.Spacing.md
+                extraPaddingEnd = Dimensions.Spacing.md
               }
             }
             if (message.type == ChatMessageType.IMAGE) {
@@ -411,10 +412,10 @@ fun ChatPanel(
                     }
                   }
                   .padding(
-                    start = 16.dp + extraPaddingStart,
-                    end = 12.dp + extraPaddingEnd,
-                    top = 6.dp,
-                    bottom = 6.dp,
+                    start = Dimensions.Spacing.medium + extraPaddingStart,
+                    end = Dimensions.Spacing.md + extraPaddingEnd,
+                    top = Dimensions.Spacing.sm,
+                    bottom = Dimensions.Spacing.sm,
                   ),
               horizontalAlignment = hAlign,
             ) messageColumn@{
@@ -471,7 +472,7 @@ fun ChatPanel(
                   if (!message.disableBubbleShape && !isAgentResponseText) {
                     // Use a rounded rectangle clip for multi-image image message.
                     if (message is ChatMessageImage && message.bitmaps.size > 1) {
-                      messageBubbleModifier = messageBubbleModifier.clip(RoundedCornerShape(6.dp))
+                      messageBubbleModifier = messageBubbleModifier.clip(RoundedCornerShape(Dimensions.Spacing.sm))
                     }
                     // For other messages, use a bubble shape to clip.
                     else {
@@ -496,7 +497,7 @@ fun ChatPanel(
                             if (isAgentResponseText) {
                               0.dp
                             } else {
-                              12.dp
+                              Dimensions.Spacing.md
                             },
                           onCopyClicked = copyToClipboard,
                         )
@@ -541,7 +542,7 @@ fun ChatPanel(
                   if (message.side == ChatSide.AGENT) {
                     Row(
                       verticalAlignment = Alignment.CenterVertically,
-                      horizontalArrangement = Arrangement.spacedBy(8.dp),
+                      horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
                     ) {
                       LatencyText(message = message)
                       if (message is ChatMessageText && !uiState.inProgress) {
@@ -553,7 +554,7 @@ fun ChatPanel(
                             imageVector = Icons.Rounded.ContentCopy,
                             contentDescription = stringResource(R.string.copy),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(Dimensions.Component.iconSmall),
                           )
                         }
                       }
@@ -561,7 +562,7 @@ fun ChatPanel(
                   } else if (message.side == ChatSide.USER) {
                     Row(
                       verticalAlignment = Alignment.CenterVertically,
-                      horizontalArrangement = Arrangement.spacedBy(4.dp),
+                      horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs),
                     ) {
                       // Run again button.
                       if (selectedModel.showRunAgainButton) {
@@ -599,7 +600,7 @@ fun ChatPanel(
           Spacer(modifier = Modifier.height(dynamicBottomPadding).fillMaxWidth())
         }
 
-        SnackbarHost(hostState = snackbarHostState, modifier = Modifier.padding(vertical = 4.dp))
+        SnackbarHost(hostState = snackbarHostState, modifier = Modifier.padding(vertical = Dimensions.Spacing.xs))
 
         // Show empty state.
         if (messages.isEmpty() && pickedImagesCount == 0 && pickedAudioClipsCount == 0) {
@@ -622,9 +623,9 @@ fun ChatPanel(
               Column(
                 modifier = Modifier.align(Alignment.Center),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
               ) {
-                RotationalLoader(size = 32.dp)
+                RotationalLoader(size = Dimensions.Icon.large)
                 Text(
                   stringResource(R.string.aichat_initializing_title),
                   style =
@@ -648,7 +649,7 @@ fun ChatPanel(
           visible = showImageLimitBanner,
           text = stringResource(R.string.aicore_image_limit_message),
           modifier =
-            Modifier.align(Alignment.TopCenter).padding(horizontal = 16.dp, vertical = 8.dp),
+            Modifier.align(Alignment.TopCenter).padding(horizontal = Dimensions.Spacing.medium, vertical = Dimensions.Spacing.small),
         )
 
         // "Scroll to bottom" button, only shown when the list is not at the bottom.
@@ -656,7 +657,7 @@ fun ChatPanel(
           modifier =
             Modifier.align(alignment = Alignment.BottomCenter)
               .fillMaxWidth()
-              .padding(bottom = 4.dp),
+              .padding(bottom = Dimensions.Spacing.xs),
           horizontalAlignment = Alignment.CenterHorizontally,
         ) {
           ScrollToBottomButton(

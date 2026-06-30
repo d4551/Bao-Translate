@@ -29,6 +29,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.R
+import com.google.ai.edge.gallery.ui.theme.Dimensions
+import java.text.NumberFormat
+
+private val percentFormatter: NumberFormat by lazy {
+  NumberFormat.getPercentInstance().apply { maximumFractionDigits = 0 }
+}
 
 @Composable
 internal fun TransferStatusSection(transfers: List<TransferStatus>) {
@@ -40,14 +46,14 @@ internal fun TransferStatusSection(transfers: List<TransferStatus>) {
   ) {
     Column(
       modifier = Modifier
-        .padding(16.dp)
+        .padding(Dimensions.Spacing.medium)
         .semantics { liveRegion = LiveRegionMode.Polite },
     ) {
       Text(
         text = stringResource(R.string.libre_drop_transfers),
         style = MaterialTheme.typography.titleSmall,
       )
-      Spacer(modifier = Modifier.height(8.dp))
+      Spacer(modifier = Modifier.height(Dimensions.Spacing.small))
       if (transfers.isEmpty()) {
         Text(
           text = stringResource(R.string.libre_drop_no_transfers),
@@ -59,7 +65,7 @@ internal fun TransferStatusSection(transfers: List<TransferStatus>) {
         Row(
           modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = Dimensions.Spacing.xs),
           horizontalArrangement = Arrangement.SpaceBetween,
           verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -84,13 +90,13 @@ internal fun TransferStatusSection(transfers: List<TransferStatus>) {
             )
             TransferState.TRANSFERRING -> Row(verticalAlignment = Alignment.CenterVertically) {
               CircularProgressIndicator(
-                modifier = Modifier.size(16.dp),
-                strokeWidth = 2.dp,
+                modifier = Modifier.size(Dimensions.Icon.small),
+                strokeWidth = Dimensions.Stroke.thin,
                 progress = { transfer.progress },
               )
-              Spacer(modifier = Modifier.width(8.dp))
+              Spacer(modifier = Modifier.width(Dimensions.Spacing.small))
               Text(
-                text = "${(transfer.progress * 100).toInt()}%",
+                text = percentFormatter.format(transfer.progress),
                 style = MaterialTheme.typography.bodySmall,
               )
             }

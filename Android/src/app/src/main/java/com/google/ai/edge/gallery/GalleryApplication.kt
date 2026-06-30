@@ -24,21 +24,21 @@ import com.google.firebase.FirebaseApp
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
+/** Owns process-level initialization before the Compose UI starts. */
 @HiltAndroidApp
 class GalleryApplication : Application() {
 
   @Inject lateinit var dataStoreRepository: DataStoreRepository
   @Inject lateinit var notificationScheduleManager: NotificationScheduleManager
 
+  /** Loads persisted app settings and services configured for this build. */
   override fun onCreate() {
     super.onCreate()
-    // Initialize the notification schedule manager to load the scheduled notifications from the
-    // disk.
     notificationScheduleManager.initialize()
-
-    // Load saved theme.
     ThemeSettings.themeOverride.value = dataStoreRepository.readTheme()
 
-    FirebaseApp.initializeApp(this)
+    if (BuildConfig.FIREBASE_CONFIGURED) {
+      FirebaseApp.initializeApp(this)
+    }
   }
 }

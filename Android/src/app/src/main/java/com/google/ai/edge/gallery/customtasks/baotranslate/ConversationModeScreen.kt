@@ -38,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -167,7 +168,11 @@ fun ConversationModeScreen(
       Spacer(modifier = Modifier.width(Dimensions.Spacing.small))
       Text(
         text = if (connectedCount > 0) {
-          stringResource(R.string.bao_translate_group_conversation_format, connectedCount)
+          pluralStringResource(
+            R.plurals.bao_translate_group_conversation_format,
+            connectedCount,
+            connectedCount,
+          )
         } else {
           stringResource(R.string.bao_translate_connect_devices_first)
         }
@@ -303,9 +308,9 @@ private fun DiscoveredPeerCard(
 private fun ParticipantCard(
   participant: Participant,
   isLocal: Boolean,
+  modifier: Modifier = Modifier,
   audioDevice: AudioDevice? = null,
   onDisconnect: (() -> Unit)? = null,
-  modifier: Modifier = Modifier,
 ) {
   Card(
     modifier = modifier.fillMaxWidth(),
@@ -522,7 +527,11 @@ private fun ScanSection(
           if (discoveredCount > 0) {
             Spacer(modifier = Modifier.width(Dimensions.Spacing.small))
             Text(
-              text = stringResource(R.string.bao_translate_devices_found_format, discoveredCount),
+              text = pluralStringResource(
+                R.plurals.bao_translate_devices_found_format,
+                discoveredCount,
+                discoveredCount,
+              ),
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.primary,
             )
@@ -544,7 +553,11 @@ private fun ScanSection(
           Spacer(modifier = Modifier.width(Dimensions.Spacing.small))
           Text(
             text = if (discoveredCount > 0) {
-              stringResource(R.string.bao_translate_device_count_format, discoveredCount, if (discoveredCount == 1) "" else "s")
+              pluralStringResource(
+                R.plurals.bao_translate_device_count_format,
+                discoveredCount,
+                discoveredCount,
+              )
             } else {
               stringResource(R.string.bao_translate_find_devices)
             },

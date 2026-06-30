@@ -16,7 +16,6 @@
 
 package com.google.ai.edge.gallery.ui.modelmanager
 
-import android.app.Activity
 import androidx.activity.result.ActivityResult
 import androidx.core.net.toUri
 import com.google.ai.edge.gallery.common.BaoLog
@@ -26,7 +25,6 @@ import net.openid.appauth.AuthorizationException
 import net.openid.appauth.AuthorizationRequest
 import net.openid.appauth.AuthorizationResponse
 import net.openid.appauth.AuthorizationService
-import net.openid.appauth.AuthorizationServiceConfiguration
 import net.openid.appauth.ResponseTypeValues
 
 private const val TAG = "AGModelManagerToken"
@@ -38,7 +36,10 @@ enum class TokenRequestResultType { FAILED, SUCCEEDED, USER_CANCELLED }
 
 data class TokenStatusAndData(val status: TokenStatus, val data: AccessTokenData?)
 
-data class TokenRequestResult(val status: TokenRequestResultType, val errorMessage: String? = null)
+data class TokenRequestResult(
+  val status: TokenRequestResultType,
+  val errorMessage: String? = null,
+)
 
 /**
  * Returns the current OAuth access-token status. The token is considered expired once the
@@ -61,16 +62,15 @@ suspend fun ModelManagerViewModel.getTokenStatusAndData(): TokenStatusAndData {
       curAccessToken = tokenData.accessToken
     }
   } else {
-    BaoLog.d(TAG, "Token doesn't exists.")
+    BaoLog.d(TAG, "Token does not exist.")
   }
   return TokenStatusAndData(status = tokenStatus, data = tokenData)
 }
 
-/** Builds a fresh OAuth authorization request against the project config. */
-fun buildAuthorizationRequest(
-  serviceConfig: AuthorizationServiceConfiguration = ProjectConfig.authServiceConfig,
-): AuthorizationRequest =
-  AuthorizationRequest.Builder(
+/** Builds a fresh OAuth authorization request for this model manager. */
+fun ModelManagerViewModel.getAuthorizationRequest(): AuthorizationRequest? {
+  val serviceConfig = ProjectConfig.authServiceConfig ?: return null
+  return AuthorizationRequest.Builder(
       serviceConfig,
       ProjectConfig.clientId,
       ResponseTypeValues.CODE,
@@ -78,14 +78,11 @@ fun buildAuthorizationRequest(
     )
     .setScope("read-repos")
     .build()
-
-/** Convenience extension so call sites can keep using the [ModelManagerViewModel] façade. */
-fun ModelManagerViewModel.getAuthorizationRequest(): AuthorizationRequest = buildAuthorizationRequest()
+}
 
 /**
- * Handles the result returned by the OAuth flow. Persists a successful exchange, or reports
- * failure / user cancellation to [onTokenRequested]. Errors are returned as values — no
- * swallowed exceptions.
+ * Handles the result returned by the OAuth flow. Persists a successful exchange or reports a
+ * failure or user cancellation to [onTokenRequested].
  */
 fun ModelManagerViewModel.handleAuthResult(
   result: ActivityResult,
@@ -93,22 +90,33 @@ fun ModelManagerViewModel.handleAuthResult(
 ) {
   val dataIntent = result.data
   if (dataIntent == null) {
-    onTokenRequested(TokenRequestResult(status = TokenRequestResultType.FAILED, errorMessage = "Empty auth result"))
+    onTokenRequested(
+      TokenRequestResult(
+        status = TokenRequestResultType.FAILED,
+        errorMessage = "Empty auth result",
+      )
+    )
     return
   }
   val response = AuthorizationResponse.fromIntent(dataIntent)
   val exception = AuthorizationException.fromIntent(dataIntent)
   when {
-    response?.authorizationCode != null -> exchangeCode(this, authService, response, onTokenRequested)
+    response?.authorizationCode != null ->
+      exchangeCode(this, authService, response, onTokenRequested)
     exception != null ->
       onTokenRequested(
         TokenRequestResult(
-          status = if (exception.message == "User cancelled flow") TokenRequestResultType.USER_CANCELLED
-          else TokenRequestResultType.FAILED,
+          status =
+            if (exception.message == "User cancelled flow") {
+              TokenRequestResultType.USER_CANCELLED
+            } else {
+              TokenRequestResultType.FAILED
+            },
           errorMessage = exception.message,
         ),
       )
-    else -> onTokenRequested(TokenRequestResult(status = TokenRequestResultType.USER_CANCELLED))
+    else ->
+      onTokenRequested(TokenRequestResult(status = TokenRequestResultType.USER_CANCELLED))
   }
 }
 
@@ -132,7 +140,11 @@ private fun exchangeCode(
         val expiresAt = tokenResponse.accessTokenExpirationTime
         if (accessToken != null && refreshToken != null && expiresAt != null) {
           BaoLog.d(TAG, "Token exchange successful. Storing tokens...")
-          vm.saveAccessToken(accessToken = accessToken, refreshToken = refreshToken, expiresAt = expiresAt)
+          vm.saveAccessToken(
+            accessToken = accessToken,
+            refreshToken = refreshToken,
+            expiresAt = expiresAt,
+          )
           vm.curAccessToken = accessToken
           BaoLog.d(TAG, "Token successfully saved.")
         } else {
@@ -141,12 +153,11 @@ private fun exchangeCode(
       }
     }
     onTokenRequested(
-      if (errorMessage == null) TokenRequestResult(status = TokenRequestResultType.SUCCEEDED)
-      else TokenRequestResult(status = TokenRequestResultType.FAILED, errorMessage = errorMessage),
+      if (errorMessage == null) {
+        TokenRequestResult(status = TokenRequestResultType.SUCCEEDED)
+      } else {
+        TokenRequestResult(status = TokenRequestResultType.FAILED, errorMessage = errorMessage)
+      },
     )
   }
 }
-
-/** Tag kept here so callers that import the [TAG] from the original location still resolve. */
-@Suppress("unused")
-private val LEGACY_TAG = "AGModelManagerViewModel"

@@ -17,9 +17,7 @@ import android.bluetooth.le.AdvertiseSettings
 import android.bluetooth.le.BluetoothLeAdvertiser
 import android.content.Context
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.ParcelUuid
-import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat
 import com.google.ai.edge.gallery.customtasks.libredrop.discovery.diagnostics.DiagnosticLog
@@ -184,15 +182,8 @@ public class BleAdvertiser internal constructor(
     private class DefaultAdvertiserProvider(
         private val context: Context,
     ) : AdvertiserProvider {
-        override fun hasAdvertisePermission(): Boolean {
-            // Pre-API-31 devices use the legacy install-time BLUETOOTH /
-            // BLUETOOTH_ADMIN permissions; they are always granted when
-            // declared, so we short-circuit the runtime check.
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
-            return checkSPermission()
-        }
+        override fun hasAdvertisePermission(): Boolean = checkSPermission()
 
-        @RequiresApi(Build.VERSION_CODES.S)
         private fun checkSPermission(): Boolean =
             ContextCompat.checkSelfPermission(
                 context,

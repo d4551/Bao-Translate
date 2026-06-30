@@ -84,6 +84,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.ui.common.CursorTrackingTextField
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.customColors
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -169,7 +170,7 @@ fun AddOrEditSkillBottomSheet(
 
   ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, dragHandle = null) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-      Column(modifier = Modifier.padding(top = 16.dp).fillMaxSize().imePadding()) {
+      Column(modifier = Modifier.padding(top = Dimensions.Spacing.medium).fillMaxSize().imePadding()) {
         // Title
         Text(
           // Viewing mode.
@@ -185,10 +186,10 @@ fun AddOrEditSkillBottomSheet(
             stringResource(R.string.add_skill_manual_input_sheet_title)
           },
           style = MaterialTheme.typography.titleLarge,
-          modifier = Modifier.padding(horizontal = 16.dp),
+          modifier = Modifier.padding(horizontal = Dimensions.Spacing.medium),
         )
 
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(Dimensions.Spacing.xs))
 
         // Tab Bar
         var selectedTabIndex by remember { mutableIntStateOf(0) }
@@ -196,7 +197,7 @@ fun AddOrEditSkillBottomSheet(
           PrimaryTabRow(
             selectedTabIndex = selectedTabIndex,
             containerColor = Color.Transparent,
-            modifier = Modifier.padding(horizontal = 16.dp),
+            modifier = Modifier.padding(horizontal = Dimensions.Spacing.medium),
           ) {
             for (index in TABS.indices) {
               val title = TABS[index]
@@ -208,7 +209,7 @@ fun AddOrEditSkillBottomSheet(
             }
           }
         } else {
-          Spacer(modifier = Modifier.height(8.dp))
+          Spacer(modifier = Modifier.height(Dimensions.Spacing.small))
         }
 
         // Tab Content
@@ -217,12 +218,12 @@ fun AddOrEditSkillBottomSheet(
         CompositionLocalProvider(LocalOverscrollFactory provides null) {
           Column(
             modifier =
-              Modifier.weight(1f).padding(horizontal = 16.dp).verticalScroll(rememberScrollState())
+              Modifier.weight(1f).padding(horizontal = Dimensions.Spacing.medium).verticalScroll(rememberScrollState())
           ) {
             when (selectedTabIndex) {
               // Info tab.
               0 -> {
-                Column(modifier = Modifier.fillMaxHeight().padding(top = 16.dp)) {
+                Column(modifier = Modifier.fillMaxHeight().padding(top = Dimensions.Spacing.medium)) {
                   // Name.
                   CursorTrackingTextField(
                     initialValue = name,
@@ -294,14 +295,14 @@ fun AddOrEditSkillBottomSheet(
                     },
                   )
 
-                  Spacer(modifier = Modifier.height(16.dp))
+                  Spacer(modifier = Modifier.height(Dimensions.Spacing.medium))
                 }
               }
               // Script tab.
               1 -> {
                 if (scriptsLoading) {
                   Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    CircularProgressIndicator(modifier = Modifier.size(Dimensions.Icon.medium), strokeWidth = Dimensions.Stroke.thin)
                   }
                 } else {
                   ScriptsTabContent(
@@ -359,7 +360,7 @@ fun AddOrEditSkillBottomSheet(
           modifier =
             Modifier.background(MaterialTheme.colorScheme.surfaceContainer)
               .fillMaxWidth()
-              .padding(vertical = 8.dp, horizontal = 16.dp),
+              .padding(vertical = Dimensions.Spacing.small, horizontal = Dimensions.Spacing.medium),
           horizontalArrangement = Arrangement.End,
           verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -393,7 +394,7 @@ fun AddOrEditSkillBottomSheet(
             }
           }
           if (!viewingMode) {
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(Dimensions.Spacing.small))
             Button(
               onClick = {
                 skillManagerViewModel.saveSkillEdit(
@@ -452,7 +453,7 @@ fun AddOrEditSkillBottomSheet(
           colors =
             ButtonDefaults.buttonColors(
               containerColor = MaterialTheme.customColors.errorTextColor,
-              contentColor = Color.White,
+              contentColor = MaterialTheme.colorScheme.onError,
             ),
         ) {
           Text(stringResource(R.string.discard))
@@ -513,7 +514,7 @@ private fun ScriptsTabContent(
   }
   // Show scripts tab content when there is at least one script.
   else {
-    Column(modifier = Modifier.padding(vertical = 16.dp)) {
+    Column(modifier = Modifier.padding(vertical = Dimensions.Spacing.medium)) {
       // Dropdown and Buttons
       Row(
         modifier = Modifier.fillMaxWidth(),
@@ -549,7 +550,7 @@ private fun ScriptsTabContent(
           }
         }
 
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(Dimensions.Spacing.small))
 
         // Add Button
         IconButton(onClick = { showAddScriptDialog = true }) {
@@ -562,29 +563,29 @@ private fun ScriptsTabContent(
         }
       }
 
-      Spacer(modifier = Modifier.height(24.dp))
+      Spacer(modifier = Modifier.height(Dimensions.Spacing.large))
 
       Row(verticalAlignment = Alignment.CenterVertically) {
         // Button to help generate prompt for LLM.
         FilledTonalButton(
           onClick = { showGenerateLlmPromptBottomSheet = true },
-          modifier = Modifier.height(32.dp),
+          modifier = Modifier.height(Dimensions.Component.chipHeight),
           contentPadding = BUTTON_CONTENT_PADDING,
         ) {
           Icon(
             Icons.Outlined.AutoAwesome,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(18.dp),
+            modifier = Modifier.size(Dimensions.Component.iconSmall),
           )
           Text(
             stringResource(R.string.generate_llm_prompt_button_label),
             style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(start = 4.dp),
+            modifier = Modifier.padding(start = Dimensions.Spacing.xs),
           )
         }
 
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(Dimensions.Spacing.small))
 
         // Button to paste from clipboard.
         FilledTonalButton(
@@ -600,24 +601,24 @@ private fun ScriptsTabContent(
               }
             }
           },
-          modifier = Modifier.height(32.dp),
+          modifier = Modifier.height(Dimensions.Component.chipHeight),
           contentPadding = BUTTON_CONTENT_PADDING,
         ) {
           Icon(
             Icons.Outlined.ContentPaste,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(18.dp),
+            modifier = Modifier.size(Dimensions.Component.iconSmall),
           )
           Text(
             stringResource(R.string.paste_from_clipboard),
             style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(start = 4.dp),
+            modifier = Modifier.padding(start = Dimensions.Spacing.xs),
           )
         }
       }
 
-      Spacer(modifier = Modifier.height(8.dp))
+      Spacer(modifier = Modifier.height(Dimensions.Spacing.small))
 
       // Content Editor
       CursorTrackingTextField(
@@ -692,7 +693,7 @@ private fun ScriptsTabContent(
           colors =
             ButtonDefaults.buttonColors(
               containerColor = MaterialTheme.customColors.errorTextColor,
-              contentColor = Color.White,
+              contentColor = MaterialTheme.colorScheme.onError,
             ),
         ) {
           Text(stringResource(R.string.delete))

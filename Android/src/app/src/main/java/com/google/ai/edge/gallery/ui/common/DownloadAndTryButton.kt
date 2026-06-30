@@ -17,7 +17,6 @@
 package com.google.ai.edge.gallery.ui.common
 
 import android.content.Intent
-import com.google.ai.edge.gallery.common.BaoLog
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -57,6 +56,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -75,6 +75,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.google.ai.edge.gallery.R
+import com.google.ai.edge.gallery.common.BaoLog
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.ModelDownloadStatusType
 import com.google.ai.edge.gallery.data.RuntimeType
@@ -89,6 +90,7 @@ import com.google.ai.edge.gallery.ui.modelmanager.TokenStatusAndData
 import com.google.ai.edge.gallery.ui.modelmanager.getAuthorizationRequest
 import com.google.ai.edge.gallery.ui.modelmanager.getTokenStatusAndData
 import com.google.ai.edge.gallery.ui.modelmanager.handleAuthResult
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import java.net.HttpURLConnection
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -148,6 +150,8 @@ fun DownloadAndTryButton(
   var checkingToken by remember { mutableStateOf(false) }
   var showAgreementAckSheet by remember { mutableStateOf(false) }
   var showErrorDialog by remember { mutableStateOf(false) }
+  var errorDialogTitleResId by remember { mutableIntStateOf(R.string.unknown_network_error) }
+  var errorDialogContentResId by remember { mutableIntStateOf(R.string.please_check_internet) }
   var showMemoryWarning by remember { mutableStateOf(false) }
   var showGemmaTermsOfUseDialog by remember { mutableStateOf(false) }
   var downloadStarted by remember { mutableStateOf(false) }
@@ -248,18 +252,22 @@ fun DownloadAndTryButton(
       )
     }
 
-  // Function to kick off the authentication and token exchange flow.
   val startTokenExchange = {
     val authRequest = modelManagerViewModel.getAuthorizationRequest()
-    val authIntent = modelManagerViewModel.authService.getAuthorizationRequestIntent(authRequest)
-    authResultLauncher.launch(authIntent)
+    if (authRequest == null) {
+      BaoLog.e(TAG, "Hugging Face OAuth is not configured")
+      checkingToken = false
+      downloadStarted = false
+      errorDialogTitleResId = R.string.error
+      errorDialogContentResId = R.string.hugging_face_oauth_not_configured
+      showErrorDialog = true
+    } else {
+      val authIntent =
+        modelManagerViewModel.authService.getAuthorizationRequestIntent(authRequest)
+      authResultLauncher.launch(authIntent)
+    }
   }
 
-  // Launches a coroutine to handle the initial check and potential authentication flow
-  // before downloading the model. It checks if the model needs to be downloaded first,
-  // handles HuggingFace URLs by verifying the need for authentication, and initiates
-  // the token exchange process if required or proceeds with the download if no auth is needed
-  // or a valid token is available.
   val handleClickButton = {
     scope.launch(Dispatchers.IO) {
       if (needToDownloadFirst) {
@@ -282,6 +290,8 @@ fun DownloadAndTryButton(
             checkingToken = false
             downloadStarted = false
             BaoLog.e(TAG, "Unknown network error")
+            errorDialogTitleResId = R.string.unknown_network_error
+            errorDialogContentResId = R.string.please_check_internet
             showErrorDialog = true
             return@launch
           }
@@ -353,7 +363,7 @@ fun DownloadAndTryButton(
   }
 
   if (!showDownloadProgress) {
-    var buttonModifier: Modifier = modifier.height(42.dp)
+    var buttonModifier: Modifier = modifier.height(Dimensions.Component.rowHeight + Dimensions.Stroke.thin)
     if (!compact) {
       buttonModifier = buttonModifier.then(modifierWhenExpanded)
     }
@@ -373,7 +383,7 @@ fun DownloadAndTryButton(
               MaterialTheme.colorScheme.primary
             }
         ),
-      contentPadding = PaddingValues(horizontal = 12.dp),
+      contentPadding = PaddingValues(horizontal = Dimensions.Spacing.md),
       onClick = {
         if (!enabled || checkingToken) {
           return@Button
@@ -564,8 +574,8 @@ fun DownloadAndTryButton(
           tint = MaterialTheme.colorScheme.error,
         )
       },
-      title = { Text(stringResource(R.string.unknown_network_error)) },
-      text = { Text(stringResource(R.string.please_check_internet)) },
+      title = { Text(stringResource(errorDialogTitleResId)) },
+      text = { Text(stringResource(errorDialogContentResId)) },
       onDismissRequest = { showErrorDialog = false },
       confirmButton = {
         TextButton(onClick = { showErrorDialog = false }) { Text(stringResource(R.string.close)) }

@@ -17,9 +17,7 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.content.pm.PackageManager
-import android.os.Build
 import android.util.Log
-import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import com.google.ai.edge.gallery.customtasks.libredrop.discovery.bootstrap.BleGattInitialControlServer
 import com.google.ai.edge.gallery.customtasks.libredrop.protocol.endpoint.BleAdvertisement
@@ -99,13 +97,12 @@ internal class BleGattAdvertisementReader(
     private fun isAvailable(): Boolean {
         val appContext = context.applicationContext
         if (!appContext.packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) return false
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !hasConnectPermission(appContext)) return false
+        if (!hasConnectPermission(appContext)) return false
         val manager = appContext.getSystemService(BluetoothManager::class.java) ?: return false
         val adapter = manager.adapter ?: return false
         return adapter.isEnabled
     }
 
-    @RequiresApi(Build.VERSION_CODES.S)
     private fun hasConnectPermission(context: Context): Boolean =
         ContextCompat.checkSelfPermission(
             context,

@@ -18,6 +18,7 @@ package com.google.ai.edge.gallery.ui.common
 
 import android.content.Context
 import android.webkit.JavascriptInterface
+import androidx.core.content.edit
 import java.util.Locale
 
 /**
@@ -48,13 +49,13 @@ class SkillStorageBridge(
 
   @JavascriptInterface
   fun setItem(key: String, value: String) {
-    prefs.edit().putString(key, value).apply()
+    prefs.edit { putString(key, value) }
     onChange?.invoke(key, value)
   }
 
   @JavascriptInterface
   fun removeItem(key: String) {
-    prefs.edit().remove(key).apply()
+    prefs.edit { remove(key) }
     onChange?.invoke(key, null)
   }
 

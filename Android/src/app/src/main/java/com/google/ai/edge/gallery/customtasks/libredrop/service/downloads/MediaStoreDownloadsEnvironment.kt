@@ -39,7 +39,6 @@ import java.io.OutputStream
  * are governed by app-private write access to its own Downloads rows,
  * which every app gets for free.
  */
-@RequiresApi(android.os.Build.VERSION_CODES.Q)
 internal class MediaStoreDownloadsEnvironment(
     private val contentResolver: ContentResolver,
 ) : DownloadsEnvironment {

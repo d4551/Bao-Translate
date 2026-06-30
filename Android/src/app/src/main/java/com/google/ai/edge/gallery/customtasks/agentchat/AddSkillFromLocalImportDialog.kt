@@ -55,6 +55,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.google.ai.edge.gallery.R
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 
 private const val TAG = "AGAddSkillFromLocalImportDialog"
 
@@ -79,12 +80,12 @@ fun AddSkillFromLocalImportDialog(
     }
 
   Dialog(onDismissRequest = onDismissRequest) {
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(Dimensions.Spacing.medium)) {
       Column(
-        modifier = Modifier.padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.padding(Dimensions.Spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.medium),
       ) {
-        Column(modifier = Modifier.padding(bottom = 8.dp)) {
+        Column(modifier = Modifier.padding(bottom = Dimensions.Spacing.small)) {
           // Title.
           Text(
             text = stringResource(R.string.add_skill_dialog_title_from_local_import),
@@ -96,12 +97,12 @@ fun AddSkillFromLocalImportDialog(
             text = stringResource(R.string.add_skill_dialog_subtitle_from_local_import),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            modifier = Modifier.padding(top = 2.dp),
+            modifier = Modifier.padding(top = Dimensions.Spacing.xxs),
           )
         }
 
         // Row: Directory Picker
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xxs)) {
           Text(
             text = stringResource(R.string.pick_skill_dir),
             style = MaterialTheme.typography.labelMedium,
@@ -109,14 +110,14 @@ fun AddSkillFromLocalImportDialog(
           Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
           ) {
             Box(
               modifier =
                 Modifier.weight(1f)
-                  .clip(RoundedCornerShape(4.dp))
+                  .clip(RoundedCornerShape(Dimensions.Spacing.xs))
                   .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                  .padding(horizontal = 12.dp, vertical = 8.dp)
+                  .padding(horizontal = Dimensions.Spacing.md, vertical = Dimensions.Spacing.small)
             ) {
               Text(
                 text =
@@ -153,19 +154,19 @@ fun AddSkillFromLocalImportDialog(
         if (validating) {
           Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
             CircularProgressIndicator(
-              modifier = Modifier.size(20.dp),
-              strokeWidth = 2.dp,
+              modifier = Modifier.size(Dimensions.Component.iconMedium),
+              strokeWidth = Dimensions.Component.strokeWidth,
               color = MaterialTheme.colorScheme.primary,
             )
           }
         } else {
           // Button row
           Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = Dimensions.Spacing.small),
             horizontalArrangement = Arrangement.End,
           ) {
             OutlinedButton(onClick = onDismissRequest) { Text(stringResource(R.string.cancel)) }
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(Dimensions.Spacing.small))
             Button(
               enabled = directoryUri != null,
               onClick = {

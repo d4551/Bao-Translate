@@ -18,13 +18,15 @@ package com.google.ai.edge.gallery.ui.common
 
 import android.Manifest
 import android.content.Context
-import com.google.ai.edge.gallery.common.BaoLog
+import android.net.Uri
+import android.view.MotionEvent
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -37,14 +39,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.net.toUri
+import androidx.core.text.htmlEncode
 import androidx.webkit.WebViewAssetLoader
 import com.google.ai.edge.gallery.BuildConfig
 import com.google.ai.edge.gallery.R
+import com.google.ai.edge.gallery.common.BaoLog
 import com.google.ai.edge.gallery.common.LOCAL_URL_BASE
 import java.io.File
 import org.json.JSONObject
 
 private const val TAG = "AGGalleryWebView"
+private val trustedLocalOrigin = LOCAL_URL_BASE.toUri().webViewOrigin() ?: LOCAL_URL_BASE
 private val iframeWrapper =
   """
   <html>
@@ -62,16 +68,63 @@ private val iframeWrapper =
   """
     .trimIndent()
 
+/** JavaScript execution policy for [GalleryWebView]. */
+enum class GalleryWebViewJavaScriptMode {
+  Disabled,
+  TrustedLocalContent,
+}
+
+/** Returns true when [url] is served from the app-owned WebView asset origin. */
+fun isTrustedLocalWebViewUrl(url: String): Boolean {
+  return url.toUri().webViewOrigin() == trustedLocalOrigin
+}
+
+/** Stable origin string used for WebView main-frame navigation allowlists. */
+private fun Uri.webViewOrigin(): String? {
+  val scheme = scheme?.lowercase() ?: return null
+  val host = host?.lowercase() ?: return null
+  if (scheme != "http" && scheme != "https") return null
+  val portSuffix = if (port >= 0) ":$port" else ""
+  return "$scheme://$host$portSuffix"
+}
+
+/** Main-frame origins allowed by default for one WebView instance. */
+private fun allowedOriginsFor(initialUrl: String?): Set<String> {
+  val initialOrigin = initialUrl?.let { it.toUri().webViewOrigin() }
+  return listOfNotNull(trustedLocalOrigin, initialOrigin).toSet()
+}
+
+/** Builds the generated iframe host document without allowing attribute injection. */
+private fun iframeHtml(url: String, title: String): String {
+  return iframeWrapper
+    .replace("___", url.htmlEncode())
+    .replace("%%TITLE%%", title.htmlEncode())
+}
+
 /**
  * A base [WebViewClient] for [GalleryWebView] that handles local asset loading and logs page
  * finishing.
  */
-open class BaseGalleryWebViewClient(private val context: Context) : WebViewClient() {
+open class BaseGalleryWebViewClient(
+  private val context: Context,
+  private val allowedMainFrameOrigins: Set<String> = setOf(trustedLocalOrigin),
+) : WebViewClient() {
   private val localFileAssetsLoader =
     WebViewAssetLoader.Builder()
       .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context))
       .addPathHandler("/", WebViewAssetLoader.InternalStoragePathHandler(context, context.filesDir))
       .build()
+
+  override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+    val requestUrl = request?.url ?: return true
+    if (!request.isForMainFrame) return false
+    val origin = requestUrl.webViewOrigin()
+    val allowed = origin != null && origin in allowedMainFrameOrigins
+    if (!allowed) {
+      BaoLog.w(TAG, "Blocked WebView navigation to origin=${origin ?: requestUrl.scheme}")
+    }
+    return !allowed
+  }
 
   override fun shouldInterceptRequest(
     view: WebView?,
@@ -130,6 +183,7 @@ fun GalleryWebView(
   modifier: Modifier = Modifier,
   initialUrl: String? = null,
   useIframeWrapper: Boolean = false,
+  javaScriptMode: GalleryWebViewJavaScriptMode = GalleryWebViewJavaScriptMode.Disabled,
   preventParentScrolling: Boolean = false,
   allowRequestPermission: Boolean = false,
   onWebViewCreated: ((WebView) -> Unit)? = null,
@@ -139,9 +193,14 @@ fun GalleryWebView(
 ) {
   val context = LocalContext.current
 
-  val curWebViewClient = remember {
-    customWebViewClient ?: BaseGalleryWebViewClient(context = context)
+  val allowedMainFrameOrigins = remember(initialUrl) { allowedOriginsFor(initialUrl) }
+  val curWebViewClient = remember(customWebViewClient, context, allowedMainFrameOrigins) {
+    customWebViewClient ?: BaseGalleryWebViewClient(
+      context = context,
+      allowedMainFrameOrigins = allowedMainFrameOrigins,
+    )
   }
+  val trustedLocalJavaScript = javaScriptMode == GalleryWebViewJavaScriptMode.TrustedLocalContent
   var pendingCameraPermissionRequest by remember { mutableStateOf<PermissionRequest?>(null) }
   var pendingAudioPermissionRequest by remember { mutableStateOf<PermissionRequest?>(null) }
 
@@ -188,34 +247,40 @@ fun GalleryWebView(
           )
 
         settings.apply {
-          javaScriptEnabled = true
-          domStorageEnabled = true
+          javaScriptEnabled = trustedLocalJavaScript
+          domStorageEnabled = trustedLocalJavaScript
           allowFileAccess = false
+          allowContentAccess = false
+          mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+          safeBrowsingEnabled = true
           mediaPlaybackRequiresUserGesture = false
         }
 
-        // Expose durable, host-visible storage + locale to skill content as `window.AndroidBridge`.
-        // A mutation broadcasts a `skill-storage-change` event back into this WebView so visual
-        // surfaces (e.g. dashboards) can re-render live instead of only on load.
-        val bridgeWebView = this
-        addJavascriptInterface(
-          SkillStorageBridge(ctx) { key, value ->
-            bridgeWebView.post {
-              val k = JSONObject.quote(key)
-              val v = if (value == null) "null" else JSONObject.quote(value)
-              bridgeWebView.evaluateJavascript(
-                "window.dispatchEvent(new CustomEvent('skill-storage-change'," +
-                  "{detail:{key:$k,value:$v}}));",
-                null,
-              )
-            }
-          },
-          SkillStorageBridge.INTERFACE_NAME,
-        )
+        if (trustedLocalJavaScript) {
+          // Expose durable, host-visible storage + locale to app-owned skill content only.
+          val bridgeWebView = this
+          addJavascriptInterface(
+            SkillStorageBridge(ctx) { key, value ->
+              bridgeWebView.post {
+                val k = JSONObject.quote(key)
+                val v = if (value == null) "null" else JSONObject.quote(value)
+                bridgeWebView.evaluateJavascript(
+                  "window.dispatchEvent(new CustomEvent('skill-storage-change'," +
+                    "{detail:{key:$k,value:$v}}));",
+                  null,
+                )
+              }
+            },
+            SkillStorageBridge.INTERFACE_NAME,
+          )
+        }
 
         if (preventParentScrolling) {
           setOnTouchListener { v, event ->
             v.parent.requestDisallowInterceptTouchEvent(true)
+            if (event.action == MotionEvent.ACTION_UP) {
+              v.performClick()
+            }
             false
           }
         }
@@ -232,7 +297,7 @@ fun GalleryWebView(
             }
 
             override fun onPermissionRequest(request: PermissionRequest?) {
-              if (!allowRequestPermission) {
+              if (!allowRequestPermission || !trustedLocalJavaScript) {
                 request?.deny()
                 return
               }
@@ -258,15 +323,8 @@ fun GalleryWebView(
                     audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                   }
 
-                  val otherResources =
-                    resources
-                      .filter {
-                        it != PermissionRequest.RESOURCE_VIDEO_CAPTURE &&
-                          it != PermissionRequest.RESOURCE_AUDIO_CAPTURE
-                      }
-                      .toTypedArray()
-                  if (otherResources.isNotEmpty()) {
-                    request.grant(otherResources)
+                  if (!isCameraRequest && !isAudioRequest) {
+                    request.deny()
                   }
                 }
             }
@@ -275,12 +333,13 @@ fun GalleryWebView(
         webViewClient = curWebViewClient
 
         initialUrl?.let { url ->
+          if (trustedLocalJavaScript && !isTrustedLocalWebViewUrl(url)) {
+            BaoLog.w(TAG, "Blocked JavaScript-enabled WebView load outside local assets")
+            return@let
+          }
           if (useIframeWrapper) {
-            val framedHtml =
-              iframeWrapper
-                .replace("___", url)
-                .replace("%%TITLE%%", ctx.getString(R.string.skill_embedded_content))
-            loadDataWithBaseURL(null, framedHtml, "text/html", "UTF-8", null)
+            val framedHtml = iframeHtml(url, ctx.getString(R.string.skill_embedded_content))
+            loadDataWithBaseURL(LOCAL_URL_BASE, framedHtml, "text/html", "UTF-8", null)
           } else {
             loadUrl(url)
           }

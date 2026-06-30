@@ -23,11 +23,9 @@ import com.google.ai.edge.gallery.customtasks.libredrop.protocol.medium.MediumRe
  * val registry = MediumRegistry(listOf(WifiLanDefaultProvider, hotspotProvider))
  * ```
  *
- * The factory hides the API-level branching so callers don't have to
- * juggle `Build.VERSION.SDK_INT` checks. On unsupported devices it
- * still returns a [WifiHotspotMediumProvider] but with both controller
- * and client null'd out — the provider then reports `isSupported() ==
- * false` and the framework treats it as a no-op rung in the ladder.
+     * On devices without Wi-Fi hardware it still returns a
+     * [WifiHotspotMediumProvider] that reports `isSupported() == false`,
+     * and the framework treats it as an unavailable rung in the ladder.
  *
  * The Phase 4 #54 orchestrator ("upgrade hook") is the planned single
  * entry point for installing the resulting registry into
@@ -38,10 +36,7 @@ import com.google.ai.edge.gallery.customtasks.libredrop.protocol.medium.MediumRe
  */
 public object WifiHotspotMediumProviderFactory {
     /**
-     * Build a [WifiHotspotMediumProvider] tuned for [context]'s API
-     * level. Returns a provider with no controller / client (i.e.
-     * `isSupported() == false`) when the device lacks Wi-Fi or runs
-     * a pre-API-26 system image.
+     * Build a [WifiHotspotMediumProvider] for [context].
      */
     public fun create(context: Context): WifiHotspotMediumProvider {
         val appContext = context.applicationContext
@@ -49,22 +44,12 @@ public object WifiHotspotMediumProviderFactory {
         if (!pm.hasSystemFeature(PackageManager.FEATURE_WIFI)) {
             return WifiHotspotMediumProvider()
         }
-        val controller =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                AndroidLocalOnlyHotspotController(appContext)
-            } else {
-                null
-            }
-        val client =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                AndroidWifiNetworkSpecifierClient(appContext)
-            } else {
-                null
-            }
+        val controller = AndroidLocalOnlyHotspotController(appContext)
+        val client = AndroidWifiNetworkSpecifierClient(appContext)
         return WifiHotspotMediumProvider(
             controller = controller,
             client = client,
-            available = { hasRequiredPermissions(appContext) && (controller != null || client != null) },
+            available = { hasRequiredPermissions(appContext) },
         )
     }
 

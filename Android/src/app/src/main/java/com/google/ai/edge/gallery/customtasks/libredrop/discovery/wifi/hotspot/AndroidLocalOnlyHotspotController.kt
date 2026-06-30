@@ -56,7 +56,6 @@ import kotlin.coroutines.resume
  *   [HotspotReservation.credentials] so the peer knows where to
  *   connect.
  */
-@RequiresApi(Build.VERSION_CODES.O)
 public class AndroidLocalOnlyHotspotController(
     private val context: Context,
     private val port: Int = 0,
@@ -159,7 +158,6 @@ public class AndroidLocalOnlyHotspotController(
         )
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     private suspend fun awaitReservation(wifi: WifiManager): WifiManager.LocalOnlyHotspotReservation? =
         suspendCancellableCoroutine { cont ->
             val resumed = AtomicBoolean(false)
@@ -224,20 +222,14 @@ public class AndroidLocalOnlyHotspotController(
         "ReturnCount", // Each early return is a distinct API-level / null-field path.
     )
     private fun readApInfo(reservation: WifiManager.LocalOnlyHotspotReservation): ApInfo? {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val cfg = reservation.softApConfiguration
-            val ssid = cfg.ssid?.removeSurrounding("\"") ?: return null
-            val passphrase = cfg.passphrase ?: return null
-            // SoftApConfiguration does not expose the actual operating
-            // frequency on any current API level — `getChannels` (API 31+)
-            // returns the configured band/channel hints, not the realised
-            // value. Leave the frequency hint unset; the proto's `-1`
-            // sentinel makes that explicit on the wire.
-            return ApInfo(ssid = ssid, passphrase = passphrase, frequencyMhz = null)
-        }
-        val cfg = reservation.wifiConfiguration ?: return null
-        val ssid = cfg.SSID?.removeSurrounding("\"") ?: return null
-        val passphrase = cfg.preSharedKey?.removeSurrounding("\"") ?: return null
+        val cfg = reservation.softApConfiguration
+        val ssid = cfg.ssid?.removeSurrounding("\"") ?: return null
+        val passphrase = cfg.passphrase ?: return null
+        // SoftApConfiguration does not expose the actual operating
+        // frequency on any current API level — `getChannels` (API 31+)
+        // returns the configured band/channel hints, not the realised
+        // value. Leave the frequency hint unset; the proto's `-1`
+        // sentinel makes that explicit on the wire.
         return ApInfo(ssid = ssid, passphrase = passphrase, frequencyMhz = null)
     }
 

@@ -23,6 +23,7 @@ import android.media.MediaRecorder
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.AndroidComposeTestRule
@@ -235,10 +236,17 @@ private fun MainActivityScreenshotRule.stringResource(@StringRes resId: Int): St
 private fun MainActivityScreenshotRule.stringResource(@StringRes resId: Int, vararg formatArgs: Any): String =
   activity.getString(resId, *formatArgs)
 
+private fun MainActivityScreenshotRule.quantityStringResource(
+  @PluralsRes resId: Int,
+  quantity: Int,
+  vararg formatArgs: Any,
+): String = activity.resources.getQuantityString(resId, quantity, *formatArgs)
+
 private fun MainActivityScreenshotRule.audioChipContentDescriptionPrefix(): String {
   val outputMarker = "__OUTPUT_DEVICE__"
-  return stringResource(
-    R.string.bao_translate_audio_chip_cd_format,
+  return quantityStringResource(
+    R.plurals.bao_translate_audio_chip_cd_format,
+    0,
     outputMarker,
     "__INPUT_DEVICE__",
     0,

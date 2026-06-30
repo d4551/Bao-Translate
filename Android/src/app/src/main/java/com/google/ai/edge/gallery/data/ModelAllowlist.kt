@@ -16,7 +16,6 @@
 
 package com.google.ai.edge.gallery.data
 
-import android.os.Build
 import com.google.ai.edge.gallery.common.BaoLog
 import com.google.ai.edge.gallery.common.isPixel10
 import com.google.ai.edge.gallery.common.isPixelDevice
@@ -84,17 +83,15 @@ data class AllowedModel(
     var sizeInBytes = sizeInBytes
 
     // Handle per-soc model files.
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-      if (socToModelFiles?.isNotEmpty() == true) {
-        socToModelFiles.get(SOC)?.let { info ->
-          BaoLog.d(TAG, "Found soc-specific model files for model $name: $info")
-          version = info.commitHash ?: "-"
-          downloadedFileName = info.modelFile ?: "-"
-          downloadUrl =
-            info.url
-              ?: "https://huggingface.co/$modelId/resolve/${info.commitHash}/${info.modelFile}?download=true"
-          sizeInBytes = info.sizeInBytes ?: -1
-        }
+    if (socToModelFiles?.isNotEmpty() == true) {
+      socToModelFiles.get(SOC)?.let { info ->
+        BaoLog.d(TAG, "Found soc-specific model files for model $name: $info")
+        version = info.commitHash ?: "-"
+        downloadedFileName = info.modelFile ?: "-"
+        downloadUrl =
+          info.url
+            ?: "https://huggingface.co/$modelId/resolve/${info.commitHash}/${info.modelFile}?download=true"
+        sizeInBytes = info.sizeInBytes ?: -1
       }
     }
 

@@ -79,12 +79,12 @@ internal fun FaceToFaceConversationScreen(
   onSetLanguageA: (String) -> Unit,
   onSetLanguageB: (String) -> Unit,
   onToggleRecording: () -> Unit,
+  modifier: Modifier = Modifier,
   onPlayAudio: ((TranslationMessage) -> Unit)? = null,
   replayMessageId: String? = null,
   // Per-speaker output routing: assign the output device a given speaker's translations play on,
   // keyed by their ISO language code.
   onSetSpeakerOutput: (String, com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioDevice) -> Unit = { _, _ -> },
-  modifier: Modifier = Modifier,
   isTablet: Boolean = false,
 ) {
   val langAKey = uiState.sourceLanguage
@@ -147,6 +147,7 @@ private fun SpeakerPanel(
   isRecording: Boolean,
   phase: ConversationPhase,
   onToggleRecording: () -> Unit,
+  modifier: Modifier = Modifier,
   onPlayAudio: ((TranslationMessage) -> Unit)? = null,
   replayMessageId: String? = null,
   liveSourcePreview: String? = null,
@@ -155,7 +156,6 @@ private fun SpeakerPanel(
   onSelectOutput: (com.google.ai.edge.gallery.customtasks.baotranslate.audio.AudioDevice) -> Unit,
   rotated: Boolean,
   isTablet: Boolean,
-  modifier: Modifier = Modifier,
 ) {
   // Rotating the whole panel 180° flips its content for the person sitting opposite. Touch targets
   // rotate with it, so the controls still work for that reader.

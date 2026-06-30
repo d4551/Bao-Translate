@@ -16,27 +16,21 @@
 
 package com.google.ai.edge.gallery
 
-import com.google.ai.edge.gallery.common.BaoLog
 import com.google.firebase.Firebase
-import com.google.firebase.FirebaseApp
 import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.analytics.analytics
 
-private var hasLoggedAnalyticsWarning = false
-
+/** Firebase Analytics instance for builds that include Firebase configuration. */
 val firebaseAnalytics: FirebaseAnalytics?
   get() {
-    return if (FirebaseApp.getApps(android.app.Application()).isNotEmpty()) {
+    return if (BuildConfig.FIREBASE_CONFIGURED) {
       Firebase.analytics
     } else {
-      if (!hasLoggedAnalyticsWarning) {
-        BaoLog.w("AGAnalyticsFirebase", "Firebase Analytics is not available: no FirebaseApp initialized")
-        hasLoggedAnalyticsWarning = true
-      }
       null
     }
   }
 
+/** Analytics event names emitted by app surfaces. */
 enum class GalleryEvent(val id: String) {
   CAPABILITY_SELECT(id = "capability_select"),
   MODEL_DOWNLOAD(id = "model_download"),

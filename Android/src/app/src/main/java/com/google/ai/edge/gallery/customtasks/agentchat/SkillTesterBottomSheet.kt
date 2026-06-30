@@ -54,6 +54,7 @@ import com.google.ai.edge.gallery.common.CallJsAgentAction
 import com.google.ai.edge.gallery.common.CallJsSkillResult
 import com.google.ai.edge.gallery.common.CallJsSkillResultWebview
 import com.google.ai.edge.gallery.proto.Skill
+import com.google.ai.edge.gallery.ui.common.isTrustedLocalWebViewUrl
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageWebView
 import com.google.ai.edge.gallery.ui.common.chat.MessageBodyWebview
 import com.google.ai.edge.gallery.common.StrictJson
@@ -169,6 +170,7 @@ fun SkillTesterBottomSheet(agentTools: AgentTools, skill: Skill, onDismiss: () -
                         url = finalUrl,
                         iframe = webview.iframe == true,
                         aspectRatio = 1.333f,
+                        trustedLocalContent = isTrustedLocalWebViewUrl(finalUrl),
                       )
                   )
                 }

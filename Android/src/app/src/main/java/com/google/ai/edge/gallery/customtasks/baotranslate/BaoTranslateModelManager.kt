@@ -1,6 +1,7 @@
 package com.google.ai.edge.gallery.customtasks.baotranslate
 
 import android.content.Context
+import android.os.storage.StorageManager
 import com.google.ai.edge.gallery.common.BaoLog
 import com.google.ai.edge.gallery.R
 import kotlinx.coroutines.Dispatchers
@@ -647,17 +648,17 @@ object BaoTranslateModelManager {
       BZip2CompressorInputStream(
         BufferedInputStream(archiveFile.inputStream())
       )
-	    ).use { tar ->
-	      var entry = tar.nextEntry
-	      while (entry != null) {
-	        val outFile = File(baseDir, entry.name)
-	        if (!isInsideDir(baseDir, outFile)) {
-	          return@withContext Result.failure(SecurityException("Path traversal in archive: ${entry.name}"))
-	        }
-	
-	        if (entry.isDirectory) {
-	          if (!outFile.mkdirs() && !outFile.exists()) {
-	            return@withContext Result.failure(Exception("Failed to create directory: ${entry.name}"))
+    ).use { tar ->
+      var entry = tar.nextEntry
+      while (entry != null) {
+        val outFile = File(baseDir, entry.name)
+        if (!isInsideDir(baseDir, outFile)) {
+          return@withContext Result.failure(SecurityException("Path traversal in archive: ${entry.name}"))
+        }
+
+        if (entry.isDirectory) {
+          if (!outFile.mkdirs() && !outFile.exists()) {
+            return@withContext Result.failure(Exception("Failed to create directory: ${entry.name}"))
           }
         } else {
           outFile.parentFile?.let { parent ->
@@ -665,9 +666,9 @@ object BaoTranslateModelManager {
               return@withContext Result.failure(Exception("Failed to create parent directory for: ${entry.name}"))
             }
           }
-	          FileOutputStream(outFile).use { output ->
-	            tar.copyTo(output)
-	          }
+          FileOutputStream(outFile).use { output ->
+            tar.copyTo(output)
+          }
         }
 
         entry = tar.nextEntry
@@ -871,12 +872,12 @@ object BaoTranslateModelManager {
         BufferedInputStream(archiveFile.inputStream())
       )
     ).use { tar ->
-	      var entry = tar.nextEntry
-	      while (entry != null) {
-	        val outFile = File(baseDir, entry.name)
-	        if (!isInsideDir(baseDir, outFile)) {
-	          return@withContext Result.failure(SecurityException("Path traversal: ${entry.name}"))
-	        }
+      var entry = tar.nextEntry
+      while (entry != null) {
+        val outFile = File(baseDir, entry.name)
+        if (!isInsideDir(baseDir, outFile)) {
+          return@withContext Result.failure(SecurityException("Path traversal: ${entry.name}"))
+        }
         if (entry.isDirectory) {
           outFile.mkdirs()
         } else {
@@ -928,7 +929,7 @@ object BaoTranslateModelManager {
       val actualSize = targetFile.length()
       targetFile.delete()
       return@withContext Result.failure(
-        Exception(context.getString(R.string.bao_error_incomplete_download, actualSize, spec.sizeBytes))
+        incompleteDownloadException(context, actualSize, spec.sizeBytes)
       )
     }
 
@@ -968,7 +969,7 @@ object BaoTranslateModelManager {
         val actual = target.length()
         target.delete()
         return@withContext Result.failure(
-          Exception(context.getString(R.string.bao_error_incomplete_download, actual, spec.sizeBytes))
+          incompleteDownloadException(context, actual, spec.sizeBytes)
         )
       }
       completedBytes += spec.sizeBytes
@@ -1044,7 +1045,10 @@ object BaoTranslateModelManager {
       BaoLog.i(TAG, "Resuming download from $resumeFrom bytes")
     }
 
-    val usableSpace = parentDir?.usableSpace ?: targetFile.usableSpace
+    val usableSpace =
+      allocatableBytes(context, parentDir ?: targetFile).getOrElse { error ->
+        return@withContext Result.failure(error)
+      }
     val remainingBytes = (expectedSize - resumeFrom.coerceAtMost(expectedSize)).coerceAtLeast(0L)
     val minimumSpace = remainingBytes + reserveExtraBytes
     if (minimumSpace > 0 && usableSpace in 1 until minimumSpace) {
@@ -1118,7 +1122,7 @@ object BaoTranslateModelManager {
       }
 
       if (totalSize > 0 && downloaded < totalSize) {
-        return@withContext Result.failure(Exception(context.getString(R.string.bao_error_incomplete_download, downloaded, totalSize)))
+        return@withContext Result.failure(incompleteDownloadException(context, downloaded, totalSize))
       }
 
       BaoLog.i(TAG, "Downloaded: $downloaded bytes -> ${targetFile.absolutePath}")
@@ -1129,6 +1133,18 @@ object BaoTranslateModelManager {
   private fun updateStatus(modelId: String, status: ModelStatus) {
     _modelStatuses.update { it + (modelId to status) }
   }
+
+  private fun incompleteDownloadException(context: Context, actual: Long, expected: Long): Exception =
+    Exception(
+      context.resources.getQuantityString(
+        R.plurals.bao_error_incomplete_download,
+        quantityFor(actual),
+        actual,
+        expected,
+      ),
+    )
+
+  private fun quantityFor(count: Long): Int = count.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
 
   // Like runCatching, but never swallows CancellationException — rethrowing it preserves structured
   // concurrency so a cancelled (e.g. delete-triggered) download unwinds instead of being captured as
@@ -1151,11 +1167,17 @@ object BaoTranslateModelManager {
     return builtInReady || customTaskReady
   }
 
-	  private fun dirSize(dir: File): Long {
-	    if (!dir.exists()) return 0L
-	    return dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
-	  }
-	
+  private fun dirSize(dir: File): Long {
+    if (!dir.exists()) return 0L
+    return dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+  }
+
+  private fun allocatableBytes(context: Context, path: File): Result<Long> =
+    runCatching {
+      val storageManager = context.getSystemService(StorageManager::class.java)
+      storageManager.getAllocatableBytes(storageManager.getUuidForPath(path))
+    }
+
   private fun isInsideDir(baseDir: File, candidate: File): Boolean {
     val basePath = baseDir.canonicalFile.toPath()
     val candidatePath = candidate.canonicalFile.toPath()
@@ -1166,8 +1188,7 @@ object BaoTranslateModelManager {
     if (!dir.exists()) return false
     return dir.walkTopDown().any { java.nio.file.Files.isSymbolicLink(it.toPath()) }
   }
-	
-	  private fun isWifiConnected(context: Context): Boolean {
+  private fun isWifiConnected(context: Context): Boolean {
     val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
     val network = connectivityManager.activeNetwork ?: return false
     val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false

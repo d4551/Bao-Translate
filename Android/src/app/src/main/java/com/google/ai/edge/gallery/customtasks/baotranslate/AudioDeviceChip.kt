@@ -51,6 +51,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -87,11 +88,13 @@ fun AudioDeviceChip(
   val visibleInputLabel = preferredInput?.let { audioRouteLabel(it) }
     ?: stringResource(R.string.bao_translate_audio_input_default_short)
   val deviceCount = availableOutputs.size
-  val chipDesc = stringResource(
-    R.string.bao_translate_audio_chip_cd_format,
+  val availableOutputCount = deviceCount.coerceAtLeast(1)
+  val chipDesc = pluralStringResource(
+    R.plurals.bao_translate_audio_chip_cd_format,
+    availableOutputCount,
     outputLabel,
     inputLabel,
-    deviceCount.coerceAtLeast(1),
+    availableOutputCount,
   )
   val statusDesc = stringResource(
     R.string.bao_translate_audio_status_format,

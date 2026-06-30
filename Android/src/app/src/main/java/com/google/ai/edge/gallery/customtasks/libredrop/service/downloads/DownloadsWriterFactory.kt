@@ -6,8 +6,6 @@
 package com.google.ai.edge.gallery.customtasks.libredrop.service.downloads
 
 import android.content.Context
-import android.os.Build
-import android.os.Environment
 import androidx.annotation.VisibleForTesting
 import java.io.File
 
@@ -29,15 +27,8 @@ import java.io.File
  *     there via [SafTreeDownloadsEnvironment]. The user-picked tree
  *     trumps the device's default Downloads location regardless of
  *     API level.
- *  2. **API 29+ (Q and above):** falls back to
- *     [MediaStoreDownloadsEnvironment] writing under `Downloads/`.
- *     No `WRITE_EXTERNAL_STORAGE` permission needed.
- *  3. **API 24-28:** falls back to [LegacyDownloadsEnvironment]
- *     writing to
- *     `Environment.getExternalStoragePublicDirectory(DIRECTORY_DOWNLOADS)`.
- *     The caller must already hold `WRITE_EXTERNAL_STORAGE` (declared
- *     in `:service-android/src/main/AndroidManifest.xml` with
- *     `maxSdkVersion="28"`).
+     *  2. **Platform Downloads:** falls back to
+     *     [MediaStoreDownloadsEnvironment] writing under `Downloads/`.
  *
  * The branch is taken once per [create] call. Because the foreground
  * service constructs a fresh factory per accepted connection
@@ -88,14 +79,7 @@ public object DownloadsWriterFactory {
                 treeUri = savedTreeUri,
             )
         }
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            MediaStoreDownloadsEnvironment(app.contentResolver)
-        } else {
-            @Suppress("DEPRECATION")
-            LegacyDownloadsEnvironment(
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            )
-        }
+        return MediaStoreDownloadsEnvironment(app.contentResolver)
     }
 
     /**

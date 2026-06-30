@@ -4,17 +4,29 @@ This guide covers the local setup required to build, install, and verify Bao Tra
 
 ## Prerequisites
 
-- Android Studio with its bundled JBR / JDK 21.
+- JDK 26 at `/Library/Java/JavaVirtualMachines/jdk-26.jdk/Contents/Home`, matching
+  `Android/src/gradle.properties`.
 - Android SDK platform tools on `PATH`.
 - An Android 12 / API 31 or newer test device for end-to-end validation.
 - A Hugging Face developer application for model download authentication.
 
 ## Configure Hugging Face OAuth
 
-Model downloads require a Hugging Face OAuth application. Create one from the [Hugging Face OAuth documentation](https://huggingface.co/docs/hub/oauth#creating-an-oauth-app), then update the Android project:
+Gated model downloads require a Hugging Face OAuth application. Create one from the
+[Hugging Face OAuth documentation](https://huggingface.co/docs/hub/oauth#creating-an-oauth-app),
+then provide these Gradle properties or environment variables before building:
 
-1. In [ProjectConfig.kt](Android/src/app/src/main/java/com/google/ai/edge/gallery/common/ProjectConfig.kt), replace the sample `clientId` and `redirectUri` values with the values from your Hugging Face application.
-2. In [app/build.gradle.kts](Android/src/app/build.gradle.kts), set `manifestPlaceholders["appAuthRedirectScheme"]` to the redirect scheme configured for the same application.
+| Gradle property | Environment variable |
+| --- | --- |
+| `huggingFaceClientId` | `HUGGING_FACE_CLIENT_ID` |
+| `huggingFaceRedirectUri` | `HUGGING_FACE_REDIRECT_URI` |
+| `huggingFaceRedirectScheme` | `HUGGING_FACE_REDIRECT_SCHEME` |
+| `huggingFaceAuthEndpoint` | `HUGGING_FACE_AUTH_ENDPOINT` |
+| `huggingFaceTokenEndpoint` | `HUGGING_FACE_TOKEN_ENDPOINT` |
+
+The app denies the OAuth flow when any required value is missing. Do not edit
+[ProjectConfig.kt](Android/src/app/src/main/java/com/google/ai/edge/gallery/common/ProjectConfig.kt)
+with personal OAuth values.
 
 Keep personal client IDs and secrets out of commits.
 
@@ -23,11 +35,12 @@ Keep personal client IDs and secrets out of commits.
 ```bash
 cd Android/src
 
-export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+export JAVA_HOME="/Library/Java/JavaVirtualMachines/jdk-26.jdk/Contents/Home"
 export PATH="$HOME/Library/Android/sdk/platform-tools:$PATH"
 ```
 
-The Android Studio JBR is recommended because it matches the Gradle and Android Gradle Plugin expectations for this project. If your shell resolves a newer system JDK first, Gradle may fail before compilation starts.
+Gradle toolchain discovery is pinned to JDK 26 in `Android/src/gradle.properties`. If your shell
+resolves another JDK first, Gradle may fail before compilation starts.
 
 ## Common Commands
 

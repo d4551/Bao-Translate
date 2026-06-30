@@ -95,6 +95,7 @@ import com.google.ai.edge.gallery.proto.ImportedModel
 import com.google.ai.edge.gallery.ui.common.TaskIcon
 import com.google.ai.edge.gallery.ui.common.modelitem.ModelItem
 import com.google.ai.edge.gallery.ui.common.taskLabelText
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import kotlin.text.endsWith
 import kotlin.text.lowercase
 import kotlinx.coroutines.delay
@@ -225,11 +226,11 @@ fun GlobalModelManager(
           Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Row(
               verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(12.dp),
+              horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.md),
             ) {
               Icon(
                 Icons.AutoMirrored.Rounded.ListAlt,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(Dimensions.Icon.medium),
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurface,
               )
@@ -273,11 +274,11 @@ fun GlobalModelManager(
         modifier =
           Modifier.background(MaterialTheme.colorScheme.surfaceContainer)
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = Dimensions.Spacing.medium)
             .padding(top = innerPadding.calculateTopPadding()),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
         contentPadding =
-          PaddingValues(top = 16.dp, bottom = innerPadding.calculateBottomPadding() + 80.dp),
+          PaddingValues(top = Dimensions.Spacing.medium, bottom = innerPadding.calculateBottomPadding() + 80.dp),
       ) {
         item(key = "promo") {
           AnimatedVisibility(
@@ -316,7 +317,7 @@ fun GlobalModelManager(
               stringResource(R.string.model_list_imported_models_title),
               color = MaterialTheme.colorScheme.onSurface,
               style = MaterialTheme.typography.labelLarge,
-              modifier = Modifier.padding(horizontal = 16.dp).padding(top = 32.dp, bottom = 8.dp),
+              modifier = Modifier.padding(horizontal = Dimensions.Spacing.medium).padding(top = Dimensions.Spacing.xl, bottom = Dimensions.Spacing.small),
             )
           }
         }
@@ -335,7 +336,7 @@ fun GlobalModelManager(
 
       SnackbarHost(
         hostState = snackbarHostState,
-        modifier = Modifier.align(alignment = Alignment.BottomCenter).padding(bottom = 32.dp),
+        modifier = Modifier.align(alignment = Alignment.BottomCenter).padding(bottom = Dimensions.Spacing.xl),
       )
 
       // Gradient overlay at the bottom.
@@ -359,14 +360,14 @@ fun GlobalModelManager(
       sheetState = sheetState,
     ) {
       Column(
-        modifier = Modifier.padding(bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(bottom = Dimensions.Spacing.medium),
+        verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
       ) {
         Text(
           stringResource(R.string.model_manager_select_task_title),
           color = MaterialTheme.colorScheme.onSurface,
           style = MaterialTheme.typography.titleLarge,
-          modifier = Modifier.padding(bottom = 8.dp).padding(start = 16.dp),
+          modifier = Modifier.padding(bottom = Dimensions.Spacing.small).padding(start = Dimensions.Spacing.medium),
         )
         for (task in taskCandidates) {
           Row(
@@ -384,7 +385,7 @@ fun GlobalModelManager(
                     showTaskSelectorBottomSheet = false
                   }
                 }
-                .padding(horizontal = 16.dp, vertical = 4.dp),
+                .padding(horizontal = Dimensions.Spacing.medium, vertical = Dimensions.Spacing.xs),
           ) {
             Text(
               taskLabelText(task),
@@ -404,7 +405,7 @@ fun GlobalModelManager(
       Text(
         stringResource(R.string.cd_import_model_button),
         style = MaterialTheme.typography.titleLarge,
-        modifier = Modifier.padding(vertical = 4.dp, horizontal = 16.dp),
+        modifier = Modifier.padding(vertical = Dimensions.Spacing.xs, horizontal = Dimensions.Spacing.medium),
       )
       val cbImportFromLocalFile = stringResource(R.string.cd_import_model_from_local_file_button)
       Box(
@@ -433,8 +434,8 @@ fun GlobalModelManager(
       ) {
         Row(
           verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(6.dp),
-          modifier = Modifier.fillMaxWidth().padding(16.dp),
+          horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.sm),
+          modifier = Modifier.fillMaxWidth().padding(Dimensions.Spacing.medium),
         ) {
           Icon(Icons.AutoMirrored.Outlined.NoteAdd, contentDescription = null)
           Text(

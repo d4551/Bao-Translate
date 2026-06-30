@@ -70,6 +70,7 @@ import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.ui.common.MarkdownText
 import com.google.ai.edge.gallery.ui.common.tos.TosViewModel
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.bodyMediumMedium
 import com.google.ai.edge.gallery.ui.theme.customColors
 import kotlin.text.toFloat
@@ -112,7 +113,7 @@ fun ModelItem(
   var boxModifier =
     modifier
       .fillMaxWidth()
-      .clip(RoundedCornerShape(size = 12.dp))
+      .clip(RoundedCornerShape(size = Dimensions.Spacing.md))
       .background(color = MaterialTheme.customColors.taskCardBgColor)
   boxModifier =
     if (canExpand) {
@@ -133,7 +134,7 @@ fun ModelItem(
     }
 
   Box(modifier = boxModifier) {
-    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier = Modifier.padding(Dimensions.Spacing.medium), verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small)) {
       Box(
         modifier = Modifier.semantics { isTraversalGroup = true },
         contentAlignment = Alignment.CenterStart,
@@ -158,7 +159,7 @@ fun ModelItem(
               showDeleteButton =
                 showDeleteButton && model.localFileRelativeDirPathOverride.isEmpty() && !isAicore,
               onBenchmarkClicked = { onBenchmarkClicked(model) },
-              modifier = Modifier.offset(y = (-12).dp),
+              modifier = Modifier.offset(y = (-Dimensions.Spacing.md)),
             )
           }
           if (!model.imported) {
@@ -177,13 +178,13 @@ fun ModelItem(
       AnimatedContent(isExpanded, label = "item_layout_transition") { targetState ->
         // Show description when expanded.
         if (targetState) {
-          Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+          Column(verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.medium)) {
             if (model.info.isNotEmpty()) {
               MarkdownText(
                 model.info,
                 smallFontSize = true,
                 textColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp),
+                modifier = Modifier.padding(top = Dimensions.Spacing.md),
               )
             }
             if (isAicore && isDownloadFailed) {
@@ -204,7 +205,7 @@ fun ModelItem(
               animatedVisibilityScope = this@AnimatedContent,
               sharedTransitionScope = this@SharedTransitionLayout,
               modifier =
-                Modifier.fillMaxWidth().padding(top = if (targetIsExpanded) 12.dp else 0.dp),
+                Modifier.fillMaxWidth().padding(top = if (targetIsExpanded) Dimensions.Spacing.md else 0.dp),
               modelManagerViewModel = modelManagerViewModel,
               isExpanded = targetIsExpanded,
               onTryItClicked = { onModelClicked(model) },
@@ -215,8 +216,8 @@ fun ModelItem(
         // Show a list of variants with their name, status, and download panels.
         else {
           Column(
-            modifier = Modifier.padding(top = if (isExpanded) 12.dp else 0.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(top = if (isExpanded) Dimensions.Spacing.md else 0.dp),
+            verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
           ) {
             for (variantModel in listOf(model) + modelVariants) {
               val variantDownloadStatus by remember {
@@ -300,9 +301,9 @@ fun ModelItem(
                         rememberSharedContentState(key = "variant_container_${variantModel.name}"),
                       animatedVisibilityScope = this,
                     )
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(Dimensions.Spacing.md))
                     .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                    .padding(vertical = 12.dp, horizontal = 16.dp)
+                    .padding(vertical = Dimensions.Spacing.md, horizontal = Dimensions.Spacing.medium)
 
                 if (targetShowColumnLayout) {
                   Column(modifier = containerModifier) {
@@ -310,7 +311,7 @@ fun ModelItem(
                     VariantDownloadPanel(
                       modifier =
                         Modifier.fillMaxWidth()
-                          .padding(top = 8.dp)
+                          .padding(top = Dimensions.Spacing.small)
                           .sharedElement(
                             sharedContentState =
                               rememberSharedContentState(key = "panel_${variantModel.name}"),
@@ -327,7 +328,7 @@ fun ModelItem(
                     VariantHeader(modifier = Modifier.weight(1f))
                     VariantDownloadPanel(
                       modifier =
-                        Modifier.padding(start = 8.dp)
+                        Modifier.padding(start = Dimensions.Spacing.small)
                           .sharedElement(
                             sharedContentState =
                               rememberSharedContentState(key = "panel_${variantModel.name}"),
@@ -369,7 +370,7 @@ fun ModelVariantHeader(
     horizontalArrangement = Arrangement.SpaceBetween,
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    Column(modifier = labelModifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column(modifier = labelModifier, verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xxs)) {
       // Name.
       Text(
         text = variantModel.variantLabel ?: variantModel.name,
@@ -397,7 +398,7 @@ fun ModelVariantHeader(
             variantModel.localFileRelativeDirPathOverride.isEmpty() &&
             variantModel.runtimeType != RuntimeType.AICORE,
         onBenchmarkClicked = { onBenchmarkClicked(variantModel) },
-        modifier = menuModifier.offset(y = (-12).dp),
+        modifier = menuModifier.offset(y = (-Dimensions.Spacing.md)),
       )
     }
   }
@@ -430,7 +431,7 @@ fun ModelItemActionMenu(
           text = {
             Row(
               verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(8.dp),
+              horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
             ) {
               Icon(Icons.Outlined.BarChart, contentDescription = null)
               Text(stringResource(R.string.benchmark))
@@ -447,7 +448,7 @@ fun ModelItemActionMenu(
           text = {
             Row(
               verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(8.dp),
+              horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
             ) {
               Icon(Icons.Outlined.Delete, contentDescription = null)
               Text(stringResource(R.string.delete))

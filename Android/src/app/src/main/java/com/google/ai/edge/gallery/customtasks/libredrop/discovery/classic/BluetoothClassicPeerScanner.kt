@@ -20,7 +20,6 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
-import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import com.google.ai.edge.gallery.customtasks.libredrop.protocol.endpoint.BluetoothDeviceName
 import com.google.ai.edge.gallery.customtasks.libredrop.protocol.endpoint.EndpointInfo
@@ -125,7 +124,6 @@ private class DefaultBluetoothClassicPeerScannerIo(
         if (!pm.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH)) return false
         if (!hasScanPermission()) return false
         if (!hasConnectPermission()) return false
-        if (!hasLegacyLocationPermission()) return false
         val adapter = adapter() ?: return false
         return adapter.isEnabled
     }
@@ -159,30 +157,10 @@ private class DefaultBluetoothClassicPeerScannerIo(
         return manager.adapter
     }
 
-    private fun hasScanPermission(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
-        return checkSPermission(Manifest.permission.BLUETOOTH_SCAN)
-    }
+    private fun hasScanPermission(): Boolean = checkSPermission(Manifest.permission.BLUETOOTH_SCAN)
 
-    private fun hasConnectPermission(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
-        return checkSPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    }
+    private fun hasConnectPermission(): Boolean = checkSPermission(Manifest.permission.BLUETOOTH_CONNECT)
 
-    private fun hasLegacyLocationPermission(): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) return true
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
-        return ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-        ) == PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.ACCESS_COARSE_LOCATION,
-            ) == PackageManager.PERMISSION_GRANTED
-    }
-
-    @RequiresApi(Build.VERSION_CODES.S)
     private fun checkSPermission(permission: String): Boolean =
         ContextCompat.checkSelfPermission(
             context,

@@ -9,6 +9,8 @@ import android.content.ContentResolver
 import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
+import androidx.core.content.edit
+import androidx.core.net.toUri
 
 /**
  * Persistent store for the user's chosen "Save to" tree URI (issue #42).
@@ -64,7 +66,7 @@ public class SaveLocationPreferences internal constructor(
         // "grant revoked between sessions" branch without depending on
         // the not-mocked-on-JVM Uri.parse static.
         if (!permissionGateway.hasPersistedReadWriteGrant(raw)) return null
-        return Uri.parse(raw)
+        return raw.toUri()
     }
 
     /**
@@ -103,7 +105,7 @@ public class SaveLocationPreferences internal constructor(
         // behind their back.
         releasePreviousIfDifferent(canonicalUri)
         permissionGateway.takePersistableReadWritePermission(canonicalUri)
-        prefs.edit().putString(KEY_SAVE_TREE_URI, canonicalUri).apply()
+        prefs.edit { putString(KEY_SAVE_TREE_URI, canonicalUri) }
     }
 
     /**
@@ -123,7 +125,7 @@ public class SaveLocationPreferences internal constructor(
             // stops trying to use the dead URI.
             runCatching { permissionGateway.releasePersistableReadWritePermission(raw) }
         }
-        prefs.edit().remove(KEY_SAVE_TREE_URI).apply()
+        prefs.edit { remove(KEY_SAVE_TREE_URI) }
     }
 
     private fun releasePreviousIfDifferent(newCanonical: String) {
@@ -191,11 +193,11 @@ internal class ContentResolverPermissionGateway(
     private val contentResolver: ContentResolver,
 ) : UriPermissionGateway {
     override fun takePersistableReadWritePermission(canonicalUri: String) {
-        contentResolver.takePersistableUriPermission(Uri.parse(canonicalUri), FLAG_GRANT_READ_WRITE)
+        contentResolver.takePersistableUriPermission(canonicalUri.toUri(), FLAG_GRANT_READ_WRITE)
     }
 
     override fun releasePersistableReadWritePermission(canonicalUri: String) {
-        contentResolver.releasePersistableUriPermission(Uri.parse(canonicalUri), FLAG_GRANT_READ_WRITE)
+        contentResolver.releasePersistableUriPermission(canonicalUri.toUri(), FLAG_GRANT_READ_WRITE)
     }
 
     override fun hasPersistedReadWriteGrant(canonicalUri: String): Boolean =

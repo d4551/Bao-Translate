@@ -14,10 +14,8 @@ import java.nio.LongBuffer
  * (dynamic time dim), so the dilated WaveNet receptive field never reaches padding — the converted
  * audio stays crisp/intelligible. The dynamic ONNX is validated at 96+ dB vs PyTorch.
  *
- * Its `libonnxruntime.so` (v1.24.3) is the single ONNX Runtime in the APK; sherpa-onnx's bundled
- * copy is stripped at packaging time and sherpa's JNI binds to it. The version is pinned to 1.24.3
- * because sherpa's JNI imports the ELF-versioned symbol `OrtGetApiBase@VERS_1.24.3`. See
- * app/build.gradle.kts and libs/README.
+ * The APK packages one `libonnxruntime.so`; `app/build.gradle.kts` resolves the copy shared by
+ * ONNX Runtime Java APIs and sherpa-onnx.
  *
  * ORT sessions are internally thread-safe for [run]; callers still serialize via the pipeline lock.
  */

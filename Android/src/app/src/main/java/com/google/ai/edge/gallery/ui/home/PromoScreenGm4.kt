@@ -93,18 +93,18 @@ fun PromoScreenGm4(onDismiss: () -> Unit) {
       Text(
         stringResource(R.string.promo_gm4_introducing),
         style = MaterialTheme.typography.headlineSmall.copy(fontSize = 20.sp),
-        color = Color.White,
+        color = MaterialTheme.colorScheme.onPrimary,
       )
       Text(
         stringResource(R.string.promo_gm4_title),
         style = MaterialTheme.typography.headlineSmall.copy(fontSize = 38.sp),
-        color = Color.White,
+        color = MaterialTheme.colorScheme.onPrimary,
       )
       Text(
         stringResource(R.string.promo_gm4_description),
         style = MaterialTheme.typography.headlineSmall.copy(fontSize = 16.sp, lineHeight = 21.sp),
         textAlign = TextAlign.Center,
-        color = Color.White,
+        color = MaterialTheme.colorScheme.onPrimary,
       )
 
       // Dismiss button.

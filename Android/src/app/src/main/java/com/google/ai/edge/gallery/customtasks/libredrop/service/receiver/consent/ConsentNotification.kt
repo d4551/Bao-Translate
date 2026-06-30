@@ -11,7 +11,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.google.ai.edge.gallery.R
 
@@ -98,12 +97,7 @@ public object ConsentNotification {
     }
 
     /**
-     * Idempotently install the consent notification channel on API 26+.
-     *
-     * Pre-26 devices ignore notification channels entirely; we still
-     * post the notification using `NotificationCompat`, which silently
-     * degrades the channel-related fields on older platforms (and the
-     * notification is delivered with the platform default behaviour).
+     * Idempotently install the consent notification channel.
      *
      * The channel is created with `IMPORTANCE_HIGH` so the
      * notification peeks. `setSound(null, null)` is **not** applied —
@@ -111,7 +105,6 @@ public object ConsentNotification {
      * should make a sound, the same way an incoming call does.
      */
     public fun ensureChannel(context: Context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         val channel =
             NotificationChannel(

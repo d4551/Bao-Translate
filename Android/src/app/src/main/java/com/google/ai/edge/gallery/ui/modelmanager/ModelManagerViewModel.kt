@@ -17,13 +17,13 @@
 package com.google.ai.edge.gallery.ui.modelmanager
 
 import android.content.Context
-import androidx.activity.result.ActivityResult
-import com.google.ai.edge.gallery.common.BaoLog
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.ai.edge.gallery.AppLifecycleProvider
 import com.google.ai.edge.gallery.R
+import com.google.ai.edge.gallery.common.BaoLog
+import com.google.ai.edge.gallery.common.LenientJson
 import com.google.ai.edge.gallery.common.ProjectConfig
 import com.google.ai.edge.gallery.common.SystemPromptHelper
 import com.google.ai.edge.gallery.common.getJsonResponse
@@ -56,7 +56,6 @@ import com.google.ai.edge.gallery.proto.AccessTokenData
 import com.google.ai.edge.gallery.proto.ImportedModel
 import com.google.ai.edge.gallery.proto.Theme
 import com.google.ai.edge.gallery.runtime.aicore.AICoreModelHelper
-import com.google.ai.edge.gallery.common.LenientJson
 import com.google.ai.edge.litertlm.Contents
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -70,11 +69,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import net.openid.appauth.AuthorizationException
-import net.openid.appauth.AuthorizationRequest
-import net.openid.appauth.AuthorizationResponse
 import net.openid.appauth.AuthorizationService
-import net.openid.appauth.ResponseTypeValues
 
 private const val TAG = "AGModelManagerViewModel"
 private const val TEXT_INPUT_HISTORY_MAX_SIZE = 50
@@ -103,10 +98,6 @@ enum class ModelInitializationStatusType {
   INITIALIZED,
   ERROR,
 }
-
-// TokenStatus, TokenRequestResultType, TokenStatusAndData, TokenRequestResult moved to
-// ModelManagerTokenAuth.kt alongside getTokenStatusAndData(), getAuthorizationRequest(), and
-// handleAuthResult(). Re-imported here for backward compat at use sites.
 
 data class ModelManagerUiState(
   /** A list of tasks available in the application. */
@@ -690,10 +681,6 @@ constructor(
     }
   }
 
-  // getTokenStatusAndData, getAuthorizationRequest, handleAuthResult moved to
-  // ModelManagerTokenAuth.kt as extension functions. The original methods on the
-  // ModelManagerViewModel instance are now extension functions imported via the same package.
-
   fun saveAccessToken(accessToken: String, refreshToken: String, expiresAt: Long) {
     viewModelScope.launch {
       dataStoreRepository.saveAccessTokenData(
@@ -911,21 +898,19 @@ constructor(
             )
         }
 
-        // Process pending downloads.
         processPendingDownloads()
 
-        // Wait for AICore models statuses and update download indicators
         checkAICoreModelStatuses()
-      
-}.onFailure { e ->
-        BaoLog.e(TAG, "Failed to load model allowlist", e)
-        _uiState.update {
-          it.copy(
-            loadingModelAllowlist = false,
-            loadingModelAllowlistError = "Failed to load model list: ${e.message}",
-          )
         }
-}
+        .onFailure { e ->
+          BaoLog.e(TAG, "Failed to load model allowlist", e)
+          _uiState.update {
+            it.copy(
+              loadingModelAllowlist = false,
+              loadingModelAllowlistError = "Failed to load model list: ${e.message}",
+            )
+          }
+        }
     }
   }
 
@@ -953,41 +938,37 @@ constructor(
 
   private fun saveModelAllowlistToDisk(modelAllowlistContent: String) {
     runCatching {
-
-      BaoLog.d(TAG, "Saving model allowlist to disk...")
-      val file = File(externalFilesDir, MODEL_ALLOWLIST_FILENAME)
-      file.writeText(modelAllowlistContent)
-      BaoLog.d(TAG, "Done: saving model allowlist to disk.")
-    
-}.onFailure { e ->
-
-      BaoLog.e(TAG, "failed to write model allowlist to disk", e)
-    
-}
+        BaoLog.d(TAG, "Saving model allowlist to disk...")
+        val file = File(externalFilesDir, MODEL_ALLOWLIST_FILENAME)
+        file.writeText(modelAllowlistContent)
+        BaoLog.d(TAG, "Done: saving model allowlist to disk.")
+      }
+      .onFailure { e -> BaoLog.e(TAG, "failed to write model allowlist to disk", e) }
   }
 
   private fun readModelAllowlistFromDisk(
     fileName: String = MODEL_ALLOWLIST_FILENAME
   ): ModelAllowlist? {
     runCatching {
+        BaoLog.d(TAG, "Reading model allowlist from disk: $fileName")
+        val baseDir =
+          if (fileName == MODEL_ALLOWLIST_TEST_FILENAME) {
+            File("/data/local/tmp")
+          } else {
+            externalFilesDir
+          }
+        val file = File(baseDir, fileName)
+        if (file.exists()) {
+          val content = file.readText()
+          BaoLog.d(TAG, "Model allowlist content from local file: $content")
 
-      BaoLog.d(TAG, "Reading model allowlist from disk: $fileName")
-      val baseDir =
-        if (fileName == MODEL_ALLOWLIST_TEST_FILENAME) File("/data/local/tmp") else externalFilesDir
-      val file = File(baseDir, fileName)
-      if (file.exists()) {
-        val content = file.readText()
-        BaoLog.d(TAG, "Model allowlist content from local file: $content")
-
-        return LenientJson.decodeFromString<ModelAllowlist>(content)
+          return LenientJson.decodeFromString<ModelAllowlist>(content)
+        }
       }
-    
-}.onFailure { e ->
-
-      BaoLog.e(TAG, "failed to read model allowlist from disk", e)
-      return null
-    
-}
+      .onFailure { e ->
+        BaoLog.e(TAG, "failed to read model allowlist from disk", e)
+        return null
+      }
 
     return null
   }

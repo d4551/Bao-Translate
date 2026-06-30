@@ -17,7 +17,6 @@
 package com.google.ai.edge.gallery.ui.llmsingleturn
 
 import android.content.ClipData
-import com.google.ai.edge.gallery.common.safeAs
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -96,6 +95,7 @@ import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.ui.common.chat.MessageBubbleShape
 import com.google.ai.edge.gallery.ui.modelmanager.ModelInitializationStatusType
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.bodyLargeNarrow
 import com.google.ai.edge.gallery.ui.theme.customColors
 import kotlinx.coroutines.delay
@@ -190,11 +190,11 @@ fun PromptTemplatesPanel(
       if (selectedPromptTemplateType.config.inputEditors.isNotEmpty()) {
         Row(
           verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(8.dp),
+          horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
           modifier =
             Modifier.fillMaxWidth()
               .background(MaterialTheme.colorScheme.surfaceContainerLow)
-              .padding(horizontal = 16.dp, vertical = 10.dp),
+              .padding(horizontal = Dimensions.Spacing.medium, vertical = Dimensions.Spacing.smd),
         ) {
           // Input editors.
           for (inputEditor in selectedPromptTemplateType.config.inputEditors) {
@@ -221,17 +221,17 @@ fun PromptTemplatesPanel(
               focusRequester.requestFocus()
             }
         ) {
-          if (inputEditorValues[FULL_PROMPT_SWITCH_KEY].safeAs(false)) {
+          if (inputEditorValues[FULL_PROMPT_SWITCH_KEY] == true) {
             Text(
               fullPrompt,
               style = MaterialTheme.typography.bodyMedium,
               modifier =
                 Modifier.fillMaxWidth()
-                  .padding(16.dp)
+                  .padding(Dimensions.Spacing.medium)
                   .padding(bottom = 40.dp)
                   .clip(MessageBubbleShape(radius = bubbleBorderRadius))
                   .background(MaterialTheme.customColors.agentBubbleBgColor)
-                  .padding(16.dp)
+                  .padding(Dimensions.Spacing.medium)
                   .focusRequester(focusRequester),
             )
           } else {
@@ -261,8 +261,8 @@ fun PromptTemplatesPanel(
         // Text action row.
         Row(
           verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(4.dp),
-          modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp, horizontal = 16.dp),
+          horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs),
+          modifier = Modifier.fillMaxWidth().padding(vertical = Dimensions.Spacing.xs, horizontal = Dimensions.Spacing.medium),
         ) {
           // Full prompt switch.
           if (
@@ -271,17 +271,17 @@ fun PromptTemplatesPanel(
           ) {
             Row(
               verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(4.dp),
+              horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs),
               modifier =
                 Modifier.clip(CircleShape)
                   .background(
-                    if (inputEditorValues[FULL_PROMPT_SWITCH_KEY].safeAs(false))
+                    if (inputEditorValues[FULL_PROMPT_SWITCH_KEY] == true)
                       MaterialTheme.colorScheme.secondaryContainer
                     else MaterialTheme.customColors.agentBubbleBgColor
                   )
                   .clickable {
                     inputEditorValues[FULL_PROMPT_SWITCH_KEY] =
-                      !inputEditorValues[FULL_PROMPT_SWITCH_KEY].safeAs(false)
+                      inputEditorValues[FULL_PROMPT_SWITCH_KEY] != true
                   }
                   .height(40.dp)
                   .border(
@@ -289,9 +289,9 @@ fun PromptTemplatesPanel(
                     color = MaterialTheme.colorScheme.surface,
                     shape = CircleShape,
                   )
-                  .padding(horizontal = 12.dp),
+                  .padding(horizontal = Dimensions.Spacing.md),
             ) {
-              if (inputEditorValues[FULL_PROMPT_SWITCH_KEY].safeAs(false)) {
+              if (inputEditorValues[FULL_PROMPT_SWITCH_KEY] == true) {
                 Icon(
                   imageVector = Icons.Rounded.Visibility,
                   contentDescription = null,
@@ -334,7 +334,7 @@ fun PromptTemplatesPanel(
               Icon(
                 Icons.Outlined.ContentCopy,
                 contentDescription = stringResource(R.string.cd_copy_to_clipboard_icon),
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(Dimensions.Component.iconMedium),
               )
             }
           }
@@ -357,7 +357,7 @@ fun PromptTemplatesPanel(
             Icon(
               Icons.Rounded.Add,
               contentDescription = stringResource(R.string.cd_add_example_prompt_icon),
-              modifier = Modifier.size(20.dp),
+              modifier = Modifier.size(Dimensions.Component.iconMedium),
             )
           }
 
@@ -400,7 +400,7 @@ fun PromptTemplatesPanel(
               Icon(
                 Icons.AutoMirrored.Rounded.Send,
                 contentDescription = stringResource(R.string.cd_send_prompt_icon),
-                modifier = Modifier.size(20.dp).offset(x = 2.dp),
+                modifier = Modifier.size(Dimensions.Component.iconMedium).offset(x = Dimensions.Spacing.xxs),
               )
             }
           }
@@ -415,11 +415,11 @@ fun PromptTemplatesPanel(
       sheetState = sheetState,
       modifier = Modifier.wrapContentHeight(),
     ) {
-      Column(modifier = Modifier.padding(bottom = 16.dp)) {
+      Column(modifier = Modifier.padding(bottom = Dimensions.Spacing.medium)) {
         // Title
         Text(
-          "Select an example",
-          modifier = Modifier.fillMaxWidth().padding(16.dp),
+          stringResource(R.string.select_example_prompt),
+          modifier = Modifier.fillMaxWidth().padding(Dimensions.Spacing.medium),
           style = MaterialTheme.typography.titleLarge,
         )
 
@@ -441,11 +441,11 @@ fun PromptTemplatesPanel(
                     showExamplePromptBottomSheet = false
                   }
                 }
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = Dimensions.Spacing.medium, vertical = Dimensions.Spacing.small)
           ) {
             Row(
               verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(8.dp),
+              horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
             ) {
               Icon(Icons.Outlined.Description, contentDescription = null)
               Text(
@@ -460,41 +460,41 @@ fun PromptTemplatesPanel(
 
             if (hasOverflow && !isExpanded) {
               Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = Dimensions.Spacing.xxs),
                 horizontalArrangement = Arrangement.End,
               ) {
                 Box(
                   modifier =
-                    Modifier.padding(end = 16.dp)
+                    Modifier.padding(end = Dimensions.Spacing.medium)
                       .clip(CircleShape)
                       .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                       .clickable { expandedStates[prompt] = true }
-                      .padding(vertical = 1.dp, horizontal = 6.dp)
+                      .padding(vertical = 1.dp, horizontal = Dimensions.Spacing.sm)
                 ) {
                   Icon(
                     Icons.Outlined.ExpandMore,
                     contentDescription = stringResource(R.string.cd_expand_icon),
-                    modifier = Modifier.size(12.dp),
+                    modifier = Modifier.size(Dimensions.Spacing.md),
                   )
                 }
               }
             } else if (isExpanded) {
               Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = Dimensions.Spacing.xxs),
                 horizontalArrangement = Arrangement.End,
               ) {
                 Box(
                   modifier =
-                    Modifier.padding(end = 16.dp)
+                    Modifier.padding(end = Dimensions.Spacing.medium)
                       .clip(CircleShape)
                       .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                       .clickable { expandedStates[prompt] = false }
-                      .padding(vertical = 1.dp, horizontal = 6.dp)
+                      .padding(vertical = 1.dp, horizontal = Dimensions.Spacing.sm)
                 ) {
                   Icon(
                     Icons.Outlined.ExpandLess,
                     contentDescription = stringResource(R.string.cd_collapse_icon),
-                    modifier = Modifier.size(12.dp),
+                    modifier = Modifier.size(Dimensions.Spacing.md),
                   )
                 }
               }

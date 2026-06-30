@@ -134,6 +134,7 @@ import com.google.ai.edge.gallery.data.SAMPLE_RATE
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.ui.common.getTaskIconColor
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.bodyLargeNarrow
 import java.io.FileInputStream
 import java.util.concurrent.Executors
@@ -315,9 +316,9 @@ fun MessageInputText(
     if (pickedImages.isNotEmpty() || pickedAudioClips.isNotEmpty()) {
       Row(
         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.medium),
       ) {
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(Dimensions.Spacing.medium))
 
         for (image in pickedImages) {
           Box(contentAlignment = Alignment.TopEnd) {
@@ -325,10 +326,10 @@ fun MessageInputText(
               bitmap = image.asImageBitmap(),
               contentDescription = stringResource(R.string.cd_image_thumbnail),
               modifier =
-                Modifier.height(80.dp)
-                  .shadow(2.dp, shape = RoundedCornerShape(8.dp))
-                  .clip(RoundedCornerShape(8.dp))
-                  .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp)),
+                Modifier.height(Dimensions.Component.imagePreviewHeight)
+                  .shadow(Dimensions.Spacing.xxs, shape = RoundedCornerShape(Dimensions.Spacing.small))
+                  .clip(RoundedCornerShape(Dimensions.Spacing.small))
+                  .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(Dimensions.Spacing.small)),
             )
             MediaPanelCloseButton { pickedImages = pickedImages.filter { image != it } }
           }
@@ -338,16 +339,16 @@ fun MessageInputText(
           Box(contentAlignment = Alignment.TopEnd) {
             Box(
               modifier =
-                Modifier.shadow(2.dp, shape = RoundedCornerShape(8.dp))
-                  .clip(RoundedCornerShape(8.dp))
+                Modifier.shadow(Dimensions.Spacing.xxs, shape = RoundedCornerShape(Dimensions.Spacing.small))
+                  .clip(RoundedCornerShape(Dimensions.Spacing.small))
                   .background(MaterialTheme.colorScheme.surface)
-                  .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
+                  .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(Dimensions.Spacing.small))
             ) {
               AudioPlaybackPanel(
                 audioData = audioClip.audioData,
                 sampleRate = audioClip.sampleRate,
                 isRecording = false,
-                modifier = Modifier.padding(end = 16.dp),
+                modifier = Modifier.padding(end = Dimensions.Spacing.medium),
               )
             }
             MediaPanelCloseButton {
@@ -358,20 +359,20 @@ fun MessageInputText(
           }
         }
 
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(Dimensions.Spacing.medium))
       }
     }
 
-    Box(contentAlignment = Alignment.Center, modifier = Modifier.heightIn(min = 76.dp)) {
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.heightIn(min = Dimensions.Component.inputMinHeight)) {
       AnimatedContent(targetState = showAudioRecorder) { curShowAudioRecorder ->
         when (curShowAudioRecorder) {
           // Input
           false ->
             Column(
               modifier =
-                Modifier.padding(horizontal = 12.dp)
-                  .padding(vertical = 8.dp)
-                  .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+                Modifier.padding(horizontal = Dimensions.Spacing.md)
+                  .padding(vertical = Dimensions.Spacing.small)
+                  .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Dimensions.Spacing.medium))
             ) {
               // First row: text field for input.
               Row(
@@ -398,18 +399,18 @@ fun MessageInputText(
                   modifier = Modifier.weight(1f).semantics { contentDescription = cdPromptInput },
                   placeholder = { Text(stringResource(textFieldPlaceHolderRes)) },
                 )
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(Dimensions.Spacing.xs))
               }
 
               // Second row: buttons to add extra content, and the action button.
               Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).offset(y = (-8).dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Dimensions.Spacing.md).offset(y = -Dimensions.Spacing.small),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
               ) {
                 Row(
                   verticalAlignment = Alignment.CenterVertically,
-                  horizontalArrangement = Arrangement.spacedBy(4.dp),
+                  horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs),
                 ) {
                   // A plus button to show a popup menu to add stuff to the chat.
                   Box() {
@@ -436,7 +437,7 @@ fun MessageInputText(
                       Icon(
                         Icons.Outlined.Add,
                         contentDescription = stringResource(R.string.cd_add_content_icon),
-                        modifier = Modifier.size(24.dp),
+                        modifier = Modifier.size(Dimensions.Icon.medium),
                       )
                     }
 
@@ -455,7 +456,7 @@ fun MessageInputText(
                           text = {
                             Row(
                               verticalAlignment = Alignment.CenterVertically,
-                              horizontalArrangement = Arrangement.spacedBy(6.dp),
+                              horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.sm),
                             ) {
                               Icon(Icons.Rounded.PhotoCamera, contentDescription = null)
                               Text(stringResource(R.string.chat_take_picture))
@@ -492,7 +493,7 @@ fun MessageInputText(
                           text = {
                             Row(
                               verticalAlignment = Alignment.CenterVertically,
-                              horizontalArrangement = Arrangement.spacedBy(6.dp),
+                              horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.sm),
                             ) {
                               Icon(Icons.Rounded.Photo, contentDescription = null)
                               Text(stringResource(R.string.chat_pick_from_album))
@@ -524,7 +525,7 @@ fun MessageInputText(
                           text = {
                             Row(
                               verticalAlignment = Alignment.CenterVertically,
-                              horizontalArrangement = Arrangement.spacedBy(6.dp),
+                              horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.sm),
                             ) {
                               Icon(Icons.Rounded.Mic, contentDescription = null)
                               Text(stringResource(R.string.chat_record_audio))
@@ -556,7 +557,7 @@ fun MessageInputText(
                           text = {
                             Row(
                               verticalAlignment = Alignment.CenterVertically,
-                              horizontalArrangement = Arrangement.spacedBy(6.dp),
+                              horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.sm),
                             ) {
                               Icon(Icons.Rounded.AudioFile, contentDescription = null)
                               Text(stringResource(R.string.chat_pick_wav))
@@ -591,7 +592,7 @@ fun MessageInputText(
                         text = {
                           Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.sm),
                           ) {
                             Icon(Icons.Rounded.History, contentDescription = null)
                             Text(stringResource(R.string.chat_input_history))
@@ -610,12 +611,12 @@ fun MessageInputText(
                     OutlinedButton(
                       onClick = onSkillsClicked,
                       enabled = !inProgress && !isResettingSession && !modelInitializing,
-                      contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                      contentPadding = PaddingValues(horizontal = Dimensions.Spacing.md, vertical = Dimensions.Spacing.small),
                     ) {
                       val skillsLabel = stringResource(R.string.skills)
                       Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(skillsLabel)
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(Dimensions.Spacing.xs))
                         Box(
                           contentAlignment = Alignment.Center,
                           modifier =
@@ -623,8 +624,8 @@ fun MessageInputText(
                                 MaterialTheme.colorScheme.surfaceContainer,
                                 shape = CircleShape,
                               )
-                              .height(18.dp)
-                              .widthIn(min = 18.dp),
+                              .height(Dimensions.Component.iconSmall)
+                              .widthIn(min = Dimensions.Component.iconSmall),
                         ) {
                           Text(
                             text = skillCount.toString(),
@@ -640,12 +641,12 @@ fun MessageInputText(
                     OutlinedButton(
                       onClick = onMcpClicked,
                       enabled = !inProgress && !isResettingSession && !modelInitializing,
-                      contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                      contentPadding = PaddingValues(horizontal = Dimensions.Spacing.md, vertical = Dimensions.Spacing.small),
                     ) {
                       val mcpLabel = stringResource(R.string.mcp)
                       Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(mcpLabel)
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(Dimensions.Spacing.xs))
                         Box(
                           contentAlignment = Alignment.Center,
                           modifier =
@@ -653,8 +654,8 @@ fun MessageInputText(
                                 MaterialTheme.colorScheme.surfaceContainer,
                                 shape = CircleShape,
                               )
-                              .height(18.dp)
-                              .widthIn(min = 18.dp),
+                              .height(Dimensions.Component.iconSmall)
+                              .widthIn(min = Dimensions.Component.iconSmall),
                         ) {
                           Text(
                             text = mcpCount.toString(),
@@ -712,7 +713,7 @@ fun MessageInputText(
                     Icon(
                       Icons.AutoMirrored.Rounded.Send,
                       contentDescription = stringResource(R.string.cd_send_prompt_icon),
-                      modifier = Modifier.offset(x = 2.dp),
+                      modifier = Modifier.offset(x = Dimensions.Spacing.xxs),
                       tint = Color.White,
                     )
                   }
@@ -854,7 +855,7 @@ fun MessageInputText(
             IconButtonDefaults.iconButtonColors(
               containerColor = MaterialTheme.colorScheme.surfaceVariant
             ),
-          modifier = Modifier.offset(x = (-8).dp, y = 8.dp).align(Alignment.TopEnd),
+          modifier = Modifier.offset(x = -Dimensions.Spacing.small, y = Dimensions.Spacing.small).align(Alignment.TopEnd),
         ) {
           Icon(
             Icons.Rounded.Close,
@@ -869,9 +870,9 @@ fun MessageInputText(
             IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.primary),
           modifier =
             Modifier.align(Alignment.BottomCenter)
-              .padding(bottom = 32.dp)
-              .size(size = 64.dp)
-              .border(width = 2.dp, color = MaterialTheme.colorScheme.onPrimary, CircleShape),
+              .padding(bottom = Dimensions.Spacing.xl)
+              .size(size = Dimensions.Component.shutterButtonSize)
+              .border(width = Dimensions.Spacing.xxs, color = MaterialTheme.colorScheme.onPrimary, CircleShape),
           onClick = {
             val callback =
               object : ImageCapture.OnImageCapturedCallback() {
@@ -903,7 +904,7 @@ fun MessageInputText(
             Icons.Rounded.PhotoCamera,
             contentDescription = stringResource(R.string.cd_camera_shutter_icon),
             tint = MaterialTheme.colorScheme.onPrimary,
-            modifier = Modifier.size(36.dp),
+            modifier = Modifier.size(Dimensions.Component.shutterIconSize),
           )
         }
 
@@ -915,7 +916,7 @@ fun MessageInputText(
                 containerColor = MaterialTheme.colorScheme.secondaryContainer
               ),
             modifier =
-              Modifier.align(Alignment.BottomEnd).padding(bottom = 40.dp, end = 32.dp).size(48.dp),
+              Modifier.align(Alignment.BottomEnd).padding(bottom = 40.dp, end = Dimensions.Spacing.xl).size(Dimensions.Icon.xl),
             onClick = {
               cameraSide =
                 when (cameraSide) {
@@ -928,7 +929,7 @@ fun MessageInputText(
               Icons.Rounded.FlipCameraAndroid,
               contentDescription = stringResource(R.string.cd_toggle_front_back_camera_icon),
               tint = MaterialTheme.colorScheme.onSecondaryContainer,
-              modifier = Modifier.size(24.dp),
+              modifier = Modifier.size(Dimensions.Icon.medium),
             )
           }
         }
@@ -941,16 +942,16 @@ fun MessageInputText(
 private fun MediaPanelCloseButton(onClicked: () -> Unit) {
   Box(
     modifier =
-      Modifier.offset(x = 10.dp, y = (-10).dp)
+      Modifier.offset(x = Dimensions.Indicator.medium, y = -Dimensions.Indicator.medium)
         .clip(CircleShape)
         .background(MaterialTheme.colorScheme.surface)
-        .border((1.5).dp, MaterialTheme.colorScheme.outline, CircleShape)
+        .border(Dimensions.Component.borderWidth, MaterialTheme.colorScheme.outline, CircleShape)
         .clickable { onClicked() }
   ) {
     Icon(
       Icons.Rounded.Close,
       contentDescription = stringResource(R.string.cd_delete_icon),
-      modifier = Modifier.padding(3.dp).size(16.dp),
+      modifier = Modifier.padding(3.dp).size(Dimensions.Icon.small),
     )
   }
 }

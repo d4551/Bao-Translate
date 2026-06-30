@@ -41,6 +41,7 @@ object Dimensions {
     val bubbleMaxWidthTablet = 720.dp
     val chipHeight = 32.dp
     val chipMaxWidth = 200.dp
+    val thumbnailWidth = 200.dp
     val chipCornerRadius = 20.dp
     val buttonHeight = 48.dp
     val borderWidth = 1.5.dp
@@ -54,6 +55,23 @@ object Dimensions {
     val pulseIconSizeTablet = 60.dp
     val waveformHeight = 60.dp
     val waveformHeightTablet = 80.dp
+    val imagePreviewHeight = 80.dp
+    val inputMinHeight = 76.dp
+    val shutterButtonSize = 64.dp
+    val shutterIconSize = 36.dp
+    val rowHeight = 40.dp
+    val cardCornerRadius = 24.dp
+    val badgeHeight = 26.dp
+  }
+
+  object Home {
+    val heroHorizontalPadding = 40.dp
+    val heroVerticalPadding = 48.dp
+    val entranceOffset = 16.dp
+    val backgroundStarBlur = 35.dp
+    val categoryTabHeight = 40.dp
+    val featuredHeaderTopPadding = 22.dp
+    val taskCardIconWidth = 40.dp
   }
 
   object Waveform {
@@ -68,6 +86,7 @@ object Dimensions {
   }
 
   object Stroke {
+    val hairline = 1.dp
     val thin = 2.dp
     val medium = 3.dp
   }

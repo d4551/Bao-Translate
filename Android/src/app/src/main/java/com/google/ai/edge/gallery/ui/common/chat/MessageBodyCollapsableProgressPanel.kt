@@ -61,6 +61,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.R
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 
 private const val MAX_DESCRIPTION_LINES = 5
 
@@ -81,25 +82,25 @@ fun MessageBodyCollapsableProgressPanel(message: ChatMessageCollapsableProgressP
   ) {
     // Header Row: Contains the title and the expand/collapse button
     Row(
-      modifier = Modifier.fillMaxWidth().padding(16.dp),
+      modifier = Modifier.fillMaxWidth().padding(Dimensions.Spacing.medium),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.SpaceBetween,
     ) {
       Row(
         modifier = Modifier.weight(1f),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.md),
       ) {
         // Spinner on the most left when loading
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(24.dp)) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(Dimensions.Icon.medium)) {
           if (message.inProgress) {
             CircularProgressIndicator(
-              modifier = Modifier.size(16.dp),
-              strokeWidth = 2.dp,
+              modifier = Modifier.size(Dimensions.Icon.small),
+              strokeWidth = Dimensions.Component.strokeWidth,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
           } else {
-            Icon(message.doneIcon, contentDescription = null, modifier = Modifier.size(24.dp))
+            Icon(message.doneIcon, contentDescription = null, modifier = Modifier.size(Dimensions.Icon.medium))
           }
         }
 
@@ -121,7 +122,7 @@ fun MessageBodyCollapsableProgressPanel(message: ChatMessageCollapsableProgressP
       Icon(
         imageVector =
           if (isExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-        contentDescription = if (isExpanded) "Collapse panel" else "Expand panel",
+        contentDescription = if (isExpanded) stringResource(R.string.cd_collapse_panel) else stringResource(R.string.cd_expand_panel),
       )
     }
 
@@ -133,31 +134,31 @@ fun MessageBodyCollapsableProgressPanel(message: ChatMessageCollapsableProgressP
     ) {
       Column(
         modifier =
-          Modifier.padding(horizontal = 16.dp)
+          Modifier.padding(horizontal = Dimensions.Spacing.medium)
             .padding(
               bottom =
                 if (message.logMessages.isEmpty()) {
-                  12.dp
+                  Dimensions.Spacing.md
                 } else {
-                  8.dp
+                  Dimensions.Spacing.small
                 }
             ),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.md),
       ) {
         for (item in message.items) {
           Row(
             modifier =
               Modifier.clip(shape = MaterialTheme.shapes.medium)
                 .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                .padding(12.dp)
+                .padding(Dimensions.Spacing.md)
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.md),
           ) {
             // A colored dot.
             Box(
               modifier =
-                Modifier.size(12.dp)
+                Modifier.size(Dimensions.Spacing.md)
                   .clip(shape = CircleShape)
                   .background(MaterialTheme.colorScheme.secondaryContainer)
             )
@@ -166,7 +167,7 @@ fun MessageBodyCollapsableProgressPanel(message: ChatMessageCollapsableProgressP
               Text(
                 item.title,
                 style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.padding(bottom = 2.dp),
+                modifier = Modifier.padding(bottom = Dimensions.Spacing.xxs),
               )
 
               // Description.

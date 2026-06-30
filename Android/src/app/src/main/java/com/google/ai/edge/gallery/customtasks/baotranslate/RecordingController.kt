@@ -837,13 +837,13 @@ internal class RecordingController(
   private fun isStaleRecordingSegment(recordingSessionId: Long?): Boolean =
     recordingSessionId != null && recordingSessionId != currentRecordingSessionId
 
-	  private suspend fun processAudioSegment(
+  private suspend fun processAudioSegment(
     audioSamples: ShortArray,
     recordingSessionId: Long? = null,
     preserveRecordingStatus: Boolean = false,
     reportEmptySpeech: Boolean = true,
-	  ) {
-	    if (isStaleRecordingSegment(recordingSessionId)) return
+  ) {
+    if (isStaleRecordingSegment(recordingSessionId)) return
     conversationEvent { onProcessingStart() }
     try {
       runSegmentPipeline(audioSamples, recordingSessionId, preserveRecordingStatus, reportEmptySpeech)
@@ -860,12 +860,12 @@ internal class RecordingController(
     recordingSessionId: Long?,
     preserveRecordingStatus: Boolean,
     reportEmptySpeech: Boolean,
-	  ) {
-	    val inputStats = audioSamples.audioStats()
-	    BaoLog.i(
-	      REC_TAG,
-	      "Process audio segment preserve=$preserveRecordingStatus reportEmpty=$reportEmptySpeech $inputStats",
-	    )
+  ) {
+    val inputStats = audioSamples.audioStats()
+    BaoLog.i(
+      REC_TAG,
+      "Process audio segment preserve=$preserveRecordingStatus reportEmpty=$reportEmptySpeech $inputStats",
+    )
 
     if (!preserveRecordingStatus) {
       uiState.update { it.copy(pipelineStatus = PipelineStatus.Processing) }
@@ -905,12 +905,12 @@ internal class RecordingController(
       }
     }
 
-	    val speechSegments = vadProcessor.processAudioSegment(audioSamples)
-	    BaoLog.i(
-	      REC_TAG,
-	      "VAD returned segments=${speechSegments.size} preserve=$preserveRecordingStatus inputSamples=${audioSamples.size}",
-	    )
-	    if (isStaleRecordingSegment(recordingSessionId)) return
+    val speechSegments = vadProcessor.processAudioSegment(audioSamples)
+    BaoLog.i(
+      REC_TAG,
+      "VAD returned segments=${speechSegments.size} preserve=$preserveRecordingStatus inputSamples=${audioSamples.size}",
+    )
+    if (isStaleRecordingSegment(recordingSessionId)) return
 
     if (speechSegments.isEmpty()) {
       if (reportEmptySpeech) {
@@ -995,13 +995,13 @@ internal class RecordingController(
       if (isStaleRecordingSegment(recordingSessionId)) return
 
       when (translationOutcome) {
-	        is TranslationOutcome.Success -> {
+        is TranslationOutcome.Success -> {
           if (isStaleRecordingSegment(recordingSessionId)) return
-	          val translatedText = translationOutcome.result.translatedText
-	          BaoLog.i(
-	            REC_TAG,
-	            "Translation success preserve=$preserveRecordingStatus source=$sourceLang target=$targetLang translatedChars=${translatedText.length}",
-	          )
+          val translatedText = translationOutcome.result.translatedText
+          BaoLog.i(
+            REC_TAG,
+            "Translation success preserve=$preserveRecordingStatus source=$sourceLang target=$targetLang translatedChars=${translatedText.length}",
+          )
           // Overlapping live windows (8s window / 4s stride) re-translate the shared 4s overlap,
           // yielding a duplicate of the previous live commit. Skip exact consecutive duplicates so
           // the same phrase is neither appended nor spoken twice; still refresh the live preview.
@@ -1066,11 +1066,11 @@ internal class RecordingController(
             bleManager.sendTranscript(transcription.text, sourceLang, targetLang)
           }
         }
-	        is TranslationOutcome.Failure -> {
-	          BaoLog.w(
-	            REC_TAG,
-	            "Translation failed preserve=$preserveRecordingStatus source=$sourceLang target=$targetLang reasonChars=${translationOutcome.reason.length}",
-	          )
+        is TranslationOutcome.Failure -> {
+          BaoLog.w(
+            REC_TAG,
+            "Translation failed preserve=$preserveRecordingStatus source=$sourceLang target=$targetLang reasonChars=${translationOutcome.reason.length}",
+          )
           if (isStaleRecordingSegment(recordingSessionId)) return
           val message = TranslationMessage(
             id = UUID.randomUUID().toString(),

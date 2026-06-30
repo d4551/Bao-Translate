@@ -19,11 +19,9 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.ParcelUuid
 import android.os.SystemClock
 import android.util.Log
-import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import com.google.ai.edge.gallery.customtasks.libredrop.protocol.endpoint.BleAdvertisement
 import com.google.ai.edge.gallery.customtasks.libredrop.protocol.endpoint.BleAdvertisementHeader
@@ -343,29 +341,13 @@ public class BleFastAdvertisementScanner(
         return adapter.bluetoothLeScanner
     }
 
-    private fun hasScanPermission(): Boolean =
-        when {
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> checkSPermission()
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> hasLegacyLocationPermission()
-            else -> true
-        }
+    private fun hasScanPermission(): Boolean = checkSPermission()
 
-    @RequiresApi(Build.VERSION_CODES.S)
     private fun checkSPermission(): Boolean =
         ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.BLUETOOTH_SCAN,
         ) == PackageManager.PERMISSION_GRANTED
-
-    private fun hasLegacyLocationPermission(): Boolean =
-        ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-        ) == PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.ACCESS_COARSE_LOCATION,
-            ) == PackageManager.PERMISSION_GRANTED
 
     private fun buildFilters(): List<ScanFilter> =
         listOf(
@@ -385,21 +367,14 @@ public class BleFastAdvertisementScanner(
                 .Builder()
                 .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
                 .setReportDelay(0)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // Stock Nearby publishes the full identity as extended advertising data
-            // when possible, keeping the legacy GATT header only as a fallback.
-            builder.setLegacy(false)
-            builder.setPhy(ScanSettings.PHY_LE_ALL_SUPPORTED)
-        }
+        // Stock Nearby publishes the full identity as extended advertising data
+        // when possible, keeping the GATT header for compact discovery.
+        builder.setLegacy(false)
+        builder.setPhy(ScanSettings.PHY_LE_ALL_SUPPORTED)
         return builder.build()
     }
 
-    private fun ScanResult.isGattConnectable(): Boolean =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            isConnectable
-        } else {
-            device?.address != null
-        }
+    private fun ScanResult.isGattConnectable(): Boolean = isConnectable
 
     public companion object {
         private const val TAG: String = "BadaBleFastScan"

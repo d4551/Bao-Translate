@@ -14,8 +14,8 @@
  limitations under the License.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="721dp"
-    android:height="575dp"
+    android:width="200dp"
+    android:height="160dp"
     android:viewportWidth="721"
     android:viewportHeight="575">
   <group>

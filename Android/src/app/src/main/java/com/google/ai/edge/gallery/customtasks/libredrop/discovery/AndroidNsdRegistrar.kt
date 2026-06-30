@@ -191,7 +191,7 @@ internal class AndroidNsdRegistrar(
         private fun readHostAddress(serviceInfo: NsdServiceInfo): InetAddress? =
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    serviceInfo.hostAddresses?.firstOrNull()
+                    serviceInfo.hostAddresses.firstOrNull()
                 } else {
                     @Suppress("DEPRECATION")
                     serviceInfo.host

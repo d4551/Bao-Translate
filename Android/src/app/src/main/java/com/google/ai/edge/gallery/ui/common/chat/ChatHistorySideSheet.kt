@@ -55,6 +55,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.R
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 
 @Composable
 fun ChatHistorySideSheetContent(
@@ -68,10 +69,10 @@ fun ChatHistorySideSheetContent(
   var showConfirmDeleteDialog by remember { mutableStateOf(false) }
   var itemToDelete by remember { mutableStateOf<String?>(null) }
 
-  Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+  Column(modifier = Modifier.fillMaxSize().padding(Dimensions.Spacing.large)) {
     // Top Row: Title and Close button
     Row(
-      modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+      modifier = Modifier.fillMaxWidth().padding(bottom = Dimensions.Spacing.md),
       horizontalArrangement = Arrangement.SpaceBetween,
       verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -83,7 +84,7 @@ fun ChatHistorySideSheetContent(
 
     // Actions Row: "+ New chat" pill
     Row(
-      modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+      modifier = Modifier.fillMaxWidth().padding(bottom = Dimensions.Spacing.medium),
       horizontalArrangement = Arrangement.Start,
       verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -95,15 +96,15 @@ fun ChatHistorySideSheetContent(
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
           ),
       ) {
-        Icon(Icons.Rounded.AddComment, contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(modifier = Modifier.size(8.dp))
+        Icon(Icons.Rounded.AddComment, contentDescription = null, modifier = Modifier.size(Dimensions.Component.iconSmall))
+        Spacer(modifier = Modifier.size(Dimensions.Spacing.small))
         Text(stringResource(R.string.new_chat))
       }
     }
 
     // Subheading Row: Chat history and Clear all button
     Row(
-      modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+      modifier = Modifier.fillMaxWidth().padding(vertical = Dimensions.Spacing.small),
       horizontalArrangement = Arrangement.SpaceBetween,
       verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -118,17 +119,17 @@ fun ChatHistorySideSheetContent(
     }
 
     // History list
-    LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small)) {
       items(history) { session ->
         Row(
           modifier =
             Modifier.fillMaxWidth()
-              .clip(RoundedCornerShape(12.dp))
+              .clip(RoundedCornerShape(Dimensions.Component.rowCornerRadius))
               .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
               .clickable { onHistoryItemClicked(session.sessionId) }
-              .padding(vertical = 12.dp, horizontal = 16.dp),
+              .padding(vertical = Dimensions.Spacing.md, horizontal = Dimensions.Spacing.medium),
           verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(8.dp),
+          horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
         ) {
           Column(modifier = Modifier.weight(1f)) {
             Text(

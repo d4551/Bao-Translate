@@ -46,7 +46,11 @@ sealed interface Outcome<out E, out T> {
 }
 
 /** Returns the success value or null. */
-fun <E, T> Outcome<E, T>.getOrNull(): T? = (this as? Outcome.Success<T>)?.value
+fun <E, T> Outcome<E, T>.getOrNull(): T? =
+  when (this) {
+    is Outcome.Success -> value
+    is Outcome.Failure -> null
+  }
 
 /** Returns the success value or the result of [onFailure]. */
 inline fun <E, T> Outcome<E, T>.getOrElse(onFailure: (E) -> T): T =

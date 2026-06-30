@@ -11,8 +11,6 @@ package com.google.ai.edge.gallery.customtasks.libredrop.discovery.bootstrap
 import android.content.Context
 import android.os.Build
 import android.util.Log
-import androidx.annotation.ChecksSdkIntAtLeast
-import androidx.annotation.RequiresApi
 import com.google.location.nearby.mediums.proto.BleFramesProto
 import com.google.ai.edge.gallery.customtasks.libredrop.discovery.ble.BleDctPsmHolder
 import com.google.ai.edge.gallery.customtasks.libredrop.discovery.medium.BluetoothL2capIo
@@ -103,18 +101,14 @@ public class BleL2capInitialControlServer internal constructor(
         state.scope.cancel()
     }
 
-    @ChecksSdkIntAtLeast(api = Build.VERSION_CODES.Q)
     private fun isAvailable(): Boolean =
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
-            io.apiLevel >= Build.VERSION_CODES.Q &&
+        io.apiLevel >= Build.VERSION_CODES.Q &&
             io.hasBleHardware() &&
             io.hasConnectPermission() &&
             io.isBluetoothEnabled()
 
-    @RequiresApi(Build.VERSION_CODES.Q)
     private fun listenOnQ(): BluetoothL2capIo.Listener? = io.listen()
 
-    @RequiresApi(Build.VERSION_CODES.Q)
     private fun runAcceptLoop(
         state: ActiveState,
         acceptTransport: (ConnectedTransport) -> Unit,
@@ -274,7 +268,8 @@ private class BleL2capInitialTransport(
 
     private fun pumpIncoming() {
         try {
-            while (!closed && pumpIncomingPacket()) Unit
+            while (!closed && pumpIncomingPacket()) {
+            }
         } catch (_: EOFException) {
             close()
         } catch (io: IOException) {

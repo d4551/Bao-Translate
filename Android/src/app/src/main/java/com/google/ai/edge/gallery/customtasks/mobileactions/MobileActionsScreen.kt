@@ -113,6 +113,7 @@ import com.google.ai.edge.gallery.ui.common.textandvoiceinput.VoiceRecognizerOve
 import com.google.ai.edge.gallery.ui.modelmanager.ModelInitializationStatus
 import com.google.ai.edge.gallery.ui.modelmanager.ModelInitializationStatusType
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.litertlm.ToolProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -324,7 +325,7 @@ fun MainUi(
       context = context,
       task = task,
       model = model,
-      initStatus = initStatus!!,
+      initStatus = initStatus,
       modelManagerViewModel = modelManagerViewModel,
     )
   } else if (!modelManagerUiState.isModelInitialized(model = model)) {
@@ -337,10 +338,10 @@ fun MainUi(
     ) {
       CircularProgressIndicator(
         trackColor = MaterialTheme.colorScheme.surfaceVariant,
-        strokeWidth = 3.dp,
-        modifier = Modifier.size(24.dp),
+        strokeWidth = Dimensions.Stroke.medium,
+        modifier = Modifier.size(Dimensions.Icon.medium),
       )
-      Spacer(modifier = Modifier.size(16.dp))
+      Spacer(modifier = Modifier.size(Dimensions.Spacing.medium))
       Text(
         text = stringResource(R.string.mobile_actions_loading_model),
         style = MaterialTheme.typography.bodyMedium,
@@ -383,7 +384,7 @@ fun MainUi(
           Modifier.fillMaxSize()
             .padding(
               bottom =
-                if (WindowInsets.ime.getBottom(LocalDensity.current) == 0) bottomPadding else 8.dp
+                if (WindowInsets.ime.getBottom(LocalDensity.current) == 0) bottomPadding else Dimensions.Spacing.small
             )
             .imePadding()
       ) {
@@ -400,7 +401,7 @@ fun MainUi(
               uiState.userPrompt,
               style = MaterialTheme.typography.bodyLarge,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
-              modifier = Modifier.fillMaxWidth().padding(16.dp),
+              modifier = Modifier.fillMaxWidth().padding(Dimensions.Spacing.medium),
             )
           }
 
@@ -409,7 +410,7 @@ fun MainUi(
               modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(Dimensions.Spacing.medium)
                 .semantics { liveRegion = LiveRegionMode.Assertive },
               contentAlignment = Alignment.TopStart,
             ) {
@@ -426,15 +427,15 @@ fun MainUi(
         }
 
         Column(
-          modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-          verticalArrangement = Arrangement.spacedBy(8.dp),
+          modifier = Modifier.fillMaxWidth().padding(top = Dimensions.Spacing.small),
+          verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
         ) {
           PromptTemplateBar(processing = uiState.processing, onSend = send)
 
           Row(
-            modifier = Modifier.padding(horizontal = 16.dp),
+            modifier = Modifier.padding(horizontal = Dimensions.Spacing.medium),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
           ) {
             TextAndVoiceInput(
               task = task,
@@ -493,4 +494,3 @@ fun MainUi(
     )
   }
 }
-

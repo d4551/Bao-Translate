@@ -42,9 +42,9 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.ui.common.MarkdownText
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 
 @Composable
 fun MessageBodyThinking(
@@ -59,11 +59,11 @@ fun MessageBodyThinking(
     isExpanded = true
   }
 
-  Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+  Column(modifier = Modifier.fillMaxWidth().padding(horizontal = Dimensions.Spacing.md, vertical = Dimensions.Spacing.small)) {
     Row(
-      modifier = Modifier.clickable { isExpanded = !isExpanded }.padding(vertical = 4.dp),
+      modifier = Modifier.clickable { isExpanded = !isExpanded }.padding(vertical = Dimensions.Spacing.xs),
       verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(4.dp),
+      horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs),
     ) {
       Text(
         text = stringResource(R.string.show_thinking),
@@ -72,7 +72,7 @@ fun MessageBodyThinking(
       )
       Icon(
         imageVector = if (isExpanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
-        contentDescription = if (isExpanded) "Hide thinking" else "Show thinking",
+        contentDescription = if (isExpanded) stringResource(R.string.cd_hide_thinking) else stringResource(R.string.cd_show_thinking),
       )
     }
 
@@ -84,16 +84,16 @@ fun MessageBodyThinking(
       val lineColor = MaterialTheme.colorScheme.outlineVariant
       Column(
         modifier =
-          Modifier.padding(top = 8.dp, bottom = 4.dp, start = 8.dp)
+          Modifier.padding(top = Dimensions.Spacing.small, bottom = Dimensions.Spacing.xs, start = Dimensions.Spacing.small)
             .drawBehind {
               drawLine(
                 color = lineColor,
                 start = Offset(0f, 0f),
                 end = Offset(0f, size.height),
-                strokeWidth = 2.dp.toPx(),
+                strokeWidth = Dimensions.Component.strokeWidth.toPx(),
               )
             }
-            .padding(start = 12.dp)
+            .padding(start = Dimensions.Spacing.md)
       ) {
         LongPressCopyContainer(copyText = thinkingText, onCopyClicked = onCopyClicked) {
           MarkdownText(

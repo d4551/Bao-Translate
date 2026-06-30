@@ -775,7 +775,6 @@ class BaoTranslateViewModel @Inject constructor(
   }
 
   override fun onCleared() {
-    super.onCleared()
     if (testInstance === this) testInstance = null
     recordingController.cancelRecording()
     recordingController.releaseStreamingStt()

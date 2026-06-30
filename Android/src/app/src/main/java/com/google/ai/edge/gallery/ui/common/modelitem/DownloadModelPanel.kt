@@ -62,8 +62,8 @@ fun DownloadModelPanel(
   sharedTransitionScope: SharedTransitionScope,
   animatedVisibilityScope: AnimatedVisibilityScope,
   onTryItClicked: () -> Unit,
-  tosViewModel: TosViewModel? = null,
   modifier: Modifier = Modifier,
+  tosViewModel: TosViewModel? = null,
   downloadButtonBackgroundColor: Color = MaterialTheme.colorScheme.surfaceContainer,
 ) {
   with(sharedTransitionScope) {

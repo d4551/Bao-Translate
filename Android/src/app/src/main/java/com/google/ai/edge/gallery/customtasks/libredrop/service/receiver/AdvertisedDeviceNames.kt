@@ -76,7 +76,7 @@ public object AdvertisedDeviceNames {
             bluetoothNameGateway = AndroidBluetoothNameGateway(app),
             modelName = { Build.MODEL },
             appLabel = {
-                app.applicationInfo.loadLabel(app.packageManager)?.toString()
+                app.applicationInfo.loadLabel(app.packageManager).toString()
             },
         )
     }

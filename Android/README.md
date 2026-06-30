@@ -53,7 +53,7 @@ registered via Hilt `@IntoSet` and runs standalone within the app shell.
 ```bash
 cd src
 
-# Toolchain: Gradle 9.5.1 + AGP 9.2.1 + Kotlin 2.4.0 + compileSdk 37.
+# Toolchain: Gradle 9.6.1 + AGP 9.4.0-alpha02 + Kotlin 2.4.20-Beta1 + compileSdk 37.
 # Gradle toolchains use JDK 26 for compilation and emit Java 17 bytecode.
 export PATH="$HOME/Library/Android/sdk/platform-tools:$PATH"
 
@@ -66,11 +66,11 @@ export PATH="$HOME/Library/Android/sdk/platform-tools:$PATH"
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-* `applicationId = com.bao.translate`; `compileSdk = 37`, `targetSdk = 35`, `minSdk = 31` (Android 12).
+* `applicationId = com.google.ai.edge.gallery`; `compileSdk = 37`, `targetSdk = 37`, `minSdk = 31` (Android 12).
+* Gated Hugging Face downloads require the OAuth Gradle properties or environment variables listed
+  in [`../DEVELOPMENT.md`](../DEVELOPMENT.md); missing OAuth config blocks the auth flow.
 * `app/libs/` vendors the `sherpa-onnx` AAR. It and `onnxruntime-android` both ship
-  `libonnxruntime.so` (the same ORT 1.24.3 build); the duplicate is resolved at packaging via
-  `jniLibs.pickFirsts`. ORT 1.24.3 is pinned because sherpa's JNI binds the ELF-versioned
-  `OrtGetApiBase@VERS_1.24.3` symbol.
+  `libonnxruntime.so`; the duplicate is resolved at packaging via `jniLibs.pickFirsts`.
 
 ## On-device E2E
 

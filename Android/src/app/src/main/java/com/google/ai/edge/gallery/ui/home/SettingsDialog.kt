@@ -84,6 +84,7 @@ import com.google.ai.edge.gallery.ui.common.ClickableLink
 import com.google.ai.edge.gallery.ui.common.tos.AppTosDialog
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 import com.google.ai.edge.gallery.ui.modelmanager.getTokenStatusAndData
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.ThemeSettings
 import com.google.ai.edge.gallery.ui.theme.labelSmallNarrow
 import java.time.Instant
@@ -135,15 +136,15 @@ fun SettingsDialog(
       shape = MaterialTheme.shapes.large,
     ) {
       Column(
-        modifier = Modifier.padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.padding(Dimensions.Spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.medium),
       ) {
         // Dialog title and subtitle.
         Column {
           Text(
             stringResource(R.string.settings_title),
             style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(bottom = 8.dp),
+            modifier = Modifier.padding(bottom = Dimensions.Spacing.small),
           )
           // Subtitle.
           Text(
@@ -156,7 +157,7 @@ fun SettingsDialog(
 
         Column(
           modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false),
-          verticalArrangement = Arrangement.spacedBy(16.dp),
+          verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.medium),
         ) {
           val context = LocalContext.current
           // Theme switcher.
@@ -205,7 +206,7 @@ fun SettingsDialog(
           // HF Token management.
           Column(
             modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs),
           ) {
             Text(
               stringResource(R.string.settings_hf_token),
@@ -236,7 +237,7 @@ fun SettingsDialog(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
               )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs)) {
               OutlinedButton(
                 onClick = {
                   modelManagerViewModel.clearAccessToken()
@@ -271,7 +272,7 @@ fun SettingsDialog(
                 keyboardActions = KeyboardActions(onDone = { handleSaveToken() }),
                 modifier =
                   Modifier.fillMaxWidth()
-                    .padding(top = 4.dp)
+                    .padding(top = Dimensions.Spacing.xs)
                     .focusRequester(focusRequester)
                     .onFocusChanged { isFocused = it.isFocused },
                 onValueChange = { customHfToken = it },
@@ -281,7 +282,7 @@ fun SettingsDialog(
                 Box(
                   modifier =
                     Modifier.border(
-                        width = if (isFocused) 2.dp else 1.dp,
+                        width = if (isFocused) Dimensions.Stroke.thin else 1.dp,
                         color =
                           if (isFocused) MaterialTheme.colorScheme.primary
                           else MaterialTheme.colorScheme.outline,
@@ -291,7 +292,7 @@ fun SettingsDialog(
                   contentAlignment = Alignment.CenterStart,
                 ) {
                   Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
+                    Box(modifier = Modifier.padding(start = Dimensions.Spacing.medium).weight(1f)) {
                       if (customHfToken.isEmpty()) {
                         Text(
                           stringResource(R.string.settings_enter_token),
@@ -352,19 +353,19 @@ fun SettingsDialog(
             ClickableLink(
               url = "https://ai.google.dev/gemma/terms",
               linkText = stringResource(R.string.tos_dialog_title_gemma),
-              modifier = Modifier.padding(top = 4.dp),
+              modifier = Modifier.padding(top = Dimensions.Spacing.xs),
             )
             ClickableLink(
               url = "https://ai.google.dev/gemma/prohibited_use_policy",
               linkText = stringResource(R.string.settings_dialog_gemma_prohibited_use_policy),
-              modifier = Modifier.padding(top = 8.dp),
+              modifier = Modifier.padding(top = Dimensions.Spacing.small),
             )
           }
         }
 
         // Button row.
         Row(
-          modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+          modifier = Modifier.fillMaxWidth().padding(top = Dimensions.Spacing.small),
           horizontalArrangement = Arrangement.End,
         ) {
           // Close button

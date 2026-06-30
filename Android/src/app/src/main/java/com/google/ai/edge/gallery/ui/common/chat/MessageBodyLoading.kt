@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.ui.common.RotationalLoader
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 
 /** Composable function to display a loading indicator. */
 @Composable
@@ -53,7 +54,7 @@ fun MessageBodyLoading(message: ChatMessageLoading? = null) {
     verticalAlignment = Alignment.CenterVertically,
     modifier = Modifier.fillMaxWidth(),
   ) {
-    RotationalLoader(size = 24.dp)
+    RotationalLoader(size = Dimensions.Icon.medium)
 
     if (message?.extraProgressLabel?.isNotEmpty() == true) {
       AnimatedContent(
@@ -62,12 +63,12 @@ fun MessageBodyLoading(message: ChatMessageLoading? = null) {
       ) { label ->
         Row(
           verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(6.dp),
+          horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.sm),
         ) {
           Icon(
             Icons.Rounded.HomeRepairService,
             contentDescription = null,
-            modifier = Modifier.graphicsLayer { alpha = iconAlpha }.size(16.dp),
+            modifier = Modifier.graphicsLayer { alpha = iconAlpha }.size(Dimensions.Icon.small),
             tint = MaterialTheme.colorScheme.primary,
           )
           Text(

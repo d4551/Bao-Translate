@@ -40,6 +40,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -102,15 +103,15 @@ fun VoiceEnrollmentSheet(
   val scope = rememberCoroutineScope()
   val micPermissionDenied = stringResource(R.string.bao_translate_permission_mic_denied)
   val maxWidth = if (isTablet) Dimensions.Component.maxContentWidthTablet else Dimensions.Component.maxContentWidth
-  
+
   LaunchedEffect(Unit) {
     focusRequester.requestFocus()
   }
-	  val micInitFailed = stringResource(R.string.bao_translate_error_microphone_init)
-	  val recordingShort = stringResource(R.string.bao_translate_error_recording_short)
-	  val reduceMotion = isReducedMotion
+  val micInitFailed = stringResource(R.string.bao_translate_error_microphone_init)
+  val recordingShort = stringResource(R.string.bao_translate_error_recording_short)
+  val reduceMotion = isReducedMotion
 
-  var recordingDurationMs by remember { mutableStateOf(0L) }
+  var recordingDurationMs by remember { mutableLongStateOf(0L) }
   // Rolling amplitude history (newest last) feeding the shared WaveformRenderer — same contract as
   // the live recording path, so enrollment shows the identical scrolling waveform.
   var amplitudes by remember { mutableStateOf(emptyList<Float>()) }
@@ -177,9 +178,9 @@ fun VoiceEnrollmentSheet(
         recorder.stop()
       }
       recorder.release()
-	    }
-	    recordingJob?.cancel()
-	    audioRecord = null
+    }
+    recordingJob?.cancel()
+    audioRecord = null
 
     scope.launch {
       delay(50)
@@ -194,13 +195,13 @@ fun VoiceEnrollmentSheet(
     }
   }
 
-	  LaunchedEffect(enrollmentState) {
-	    if (enrollmentState == EnrollmentState.RECORDING) {
-	      while (isActive && enrollmentState == EnrollmentState.RECORDING) {
-	        if (recordingDurationMs >= MAX_RECORDING_MS) {
-	          onEnrollmentStateChange(EnrollmentState.PROCESSING)
-	          stopAndEnroll()
-	          break
+  LaunchedEffect(enrollmentState) {
+    if (enrollmentState == EnrollmentState.RECORDING) {
+      while (isActive && enrollmentState == EnrollmentState.RECORDING) {
+        if (recordingDurationMs >= MAX_RECORDING_MS) {
+          onEnrollmentStateChange(EnrollmentState.PROCESSING)
+          stopAndEnroll()
+          break
         }
         delay(100)
       }
@@ -208,15 +209,15 @@ fun VoiceEnrollmentSheet(
   }
 
   ModalBottomSheet(
-	    onDismissRequest = {
-	      audioRecord?.let { recorder ->
-	        if (recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-	          recorder.stop()
-	        }
-	        recorder.release()
-	      }
-	      recordingJob?.cancel()
-	      onDismiss()
+    onDismissRequest = {
+      audioRecord?.let { recorder ->
+        if (recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+          recorder.stop()
+        }
+        recorder.release()
+      }
+      recordingJob?.cancel()
+      onDismiss()
     },
     sheetState = sheetState,
     modifier = Modifier.focusRequester(focusRequester),
@@ -289,8 +290,8 @@ fun VoiceEnrollmentSheet(
               verticalAlignment = Alignment.CenterVertically,
               horizontalArrangement = Arrangement.Center,
             ) {
-	              val pulseAlpha by rememberPulseFloat(
-	                initialValue = 0.4f, targetValue = 1f, durationMillis = 800, restValue = 1f, label = "recordPulse")
+              val pulseAlpha by rememberPulseFloat(
+                initialValue = 0.4f, targetValue = 1f, durationMillis = 800, restValue = 1f, label = "recordPulse")
 
               Box(
                 modifier = Modifier

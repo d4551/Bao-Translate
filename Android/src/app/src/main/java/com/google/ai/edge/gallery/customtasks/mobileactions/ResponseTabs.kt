@@ -54,6 +54,7 @@ import com.google.ai.edge.gallery.ui.common.MarkdownText
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageWarning
 import com.google.ai.edge.gallery.ui.common.chat.MessageBodyWarning
 import com.google.ai.edge.gallery.ui.common.getTaskBgGradientColors
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 
 @Composable
 fun ColumnScope.ResponseTabs(
@@ -88,7 +89,7 @@ fun ColumnScope.ResponseTabs(
             text = {
               Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs),
               ) {
                 val titleColor =
                   if (selectedTabIndex == index) taskColor
@@ -96,7 +97,7 @@ fun ColumnScope.ResponseTabs(
                 Icon(
                   tab.icon,
                   contentDescription = null,
-                  modifier = Modifier.size(16.dp).alpha(0.7f),
+                  modifier = Modifier.size(Dimensions.Icon.small).alpha(0.7f),
                   tint = titleColor,
                 )
                 BasicText(
@@ -146,7 +147,7 @@ fun ColumnScope.ResponseTabs(
                     liveRegion = LiveRegionMode.Polite
                   }
                 }
-                .padding(16.dp),
+                .padding(Dimensions.Spacing.medium),
           )
           if (uiState.noFunctionRecognized) {
             MessageBodyWarning(
@@ -159,12 +160,12 @@ fun ColumnScope.ResponseTabs(
       } else if (selectedTabIndex == 1) {
         Column(
           modifier = Modifier.fillMaxWidth(),
-          verticalArrangement = Arrangement.spacedBy(8.dp),
+          verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
         ) {
           for ((index, details) in uiState.functionCallDetails.withIndex()) {
-            MarkdownText(text = details, modifier = Modifier.padding(16.dp))
+            MarkdownText(text = details, modifier = Modifier.padding(Dimensions.Spacing.medium))
             if (index != uiState.functionCallDetails.size - 1) {
-              HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+              HorizontalDivider(modifier = Modifier.padding(horizontal = Dimensions.Spacing.medium))
             }
           }
         }

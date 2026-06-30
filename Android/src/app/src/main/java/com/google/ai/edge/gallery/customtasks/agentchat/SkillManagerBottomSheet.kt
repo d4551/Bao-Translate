@@ -114,6 +114,7 @@ import com.google.ai.edge.gallery.firebaseAnalytics
 import com.google.ai.edge.gallery.proto.Skill
 import com.google.ai.edge.gallery.ui.common.FloatingBanner
 import com.google.ai.edge.gallery.ui.common.GalleryWebView
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.customColors
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -156,7 +157,7 @@ private val ADD_SKILL_OPTIONS =
     ),
   )
 
-val BUTTON_CONTENT_PADDING = PaddingValues(start = 12.dp, top = 2.dp, end = 12.dp, bottom = 2.dp)
+val BUTTON_CONTENT_PADDING = PaddingValues(start = Dimensions.Spacing.md, top = Dimensions.Spacing.xxs, end = Dimensions.Spacing.md, bottom = Dimensions.Spacing.xxs)
 
 private const val TAG = "AGSkillManagerBottomSheet"
 
@@ -268,8 +269,8 @@ fun SkillManagerBottomSheet(
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
           CircularProgressIndicator(
             trackColor = MaterialTheme.colorScheme.surfaceVariant,
-            strokeWidth = 3.dp,
-            modifier = Modifier.padding(end = 8.dp).size(24.dp),
+            strokeWidth = Dimensions.Stroke.medium,
+            modifier = Modifier.padding(end = Dimensions.Spacing.small).size(Dimensions.Icon.medium),
           )
         }
       }
@@ -279,7 +280,7 @@ fun SkillManagerBottomSheet(
 
         Column(
           modifier =
-            Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp).fillMaxSize().pointerInput(
+            Modifier.padding(horizontal = Dimensions.Spacing.medium).padding(bottom = Dimensions.Spacing.medium).fillMaxSize().pointerInput(
               Unit
             ) {
               detectTapGestures(onTap = { focusManager.clearFocus() })
@@ -288,7 +289,7 @@ fun SkillManagerBottomSheet(
           // Title or Multi-Select Context Bar.
           if (inMultiSelectMode) {
             Row(
-              modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+              modifier = Modifier.fillMaxWidth().padding(bottom = Dimensions.Spacing.small),
               verticalAlignment = Alignment.CenterVertically,
             ) {
               IconButton(
@@ -309,7 +310,7 @@ fun SkillManagerBottomSheet(
                   selectedCustomSkillNames.size,
                 ),
                 style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.weight(1f).padding(start = 8.dp),
+                modifier = Modifier.weight(1f).padding(start = Dimensions.Spacing.small),
               )
               IconButton(
                 modifier = Modifier.padding(end = 3.dp),
@@ -324,7 +325,7 @@ fun SkillManagerBottomSheet(
             }
           } else {
             Row(
-              modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+              modifier = Modifier.fillMaxWidth().padding(bottom = Dimensions.Spacing.small),
               verticalAlignment = Alignment.CenterVertically,
             ) {
               Column(modifier = Modifier.weight(1f)) {
@@ -360,9 +361,9 @@ fun SkillManagerBottomSheet(
 
           Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.md),
             modifier =
-              Modifier.padding(top = 8.dp, bottom = if (searchQuery.isEmpty()) 8.dp else 18.dp)
+              Modifier.padding(top = Dimensions.Spacing.small, bottom = if (searchQuery.isEmpty()) Dimensions.Spacing.small else 18.dp)
                 .height(IntrinsicSize.Min),
           ) {
             // Search bar.
@@ -414,7 +415,7 @@ fun SkillManagerBottomSheet(
             Row(
               horizontalArrangement = Arrangement.SpaceBetween,
               verticalAlignment = Alignment.CenterVertically,
-              modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+              modifier = Modifier.fillMaxWidth().padding(bottom = Dimensions.Spacing.small),
             ) {
               // Skill count.
               Text(
@@ -455,16 +456,16 @@ fun SkillManagerBottomSheet(
               LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.md),
               ) {
                 if (builtInSkills.isNotEmpty()) {
                   item(key = "built_in_header") {
                     Row(
                       modifier =
                         Modifier.fillMaxWidth()
-                          .clip(shape = RoundedCornerShape(20.dp))
+                          .clip(shape = RoundedCornerShape(Dimensions.Component.chipCornerRadius))
                           .clickable { isBuiltInExpanded = !isBuiltInExpanded }
-                          .padding(vertical = 12.dp, horizontal = 16.dp),
+                          .padding(vertical = Dimensions.Spacing.md, horizontal = Dimensions.Spacing.medium),
                       verticalAlignment = Alignment.CenterVertically,
                     ) {
                       Text(
@@ -522,9 +523,9 @@ fun SkillManagerBottomSheet(
                     Row(
                       modifier =
                         Modifier.fillMaxWidth()
-                          .clip(shape = RoundedCornerShape(20.dp))
+                          .clip(shape = RoundedCornerShape(Dimensions.Component.chipCornerRadius))
                           .clickable { isCustomExpanded = !isCustomExpanded }
-                          .padding(vertical = 12.dp, horizontal = 16.dp),
+                          .padding(vertical = Dimensions.Spacing.md, horizontal = Dimensions.Spacing.medium),
                       verticalAlignment = Alignment.CenterVertically,
                     ) {
                       Text(
@@ -646,7 +647,7 @@ fun SkillManagerBottomSheet(
           colors =
             ButtonDefaults.buttonColors(
               containerColor = MaterialTheme.customColors.errorTextColor,
-              contentColor = Color.White,
+              contentColor = MaterialTheme.colorScheme.onError,
             ),
         ) {
           Text(stringResource(R.string.delete))
@@ -797,7 +798,7 @@ fun ViewCommunitySkillsBottomSheet(onDismiss: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize()) {
       // Header section with title, description, and close button.
       Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Dimensions.Spacing.medium, vertical = Dimensions.Spacing.medium),
         verticalAlignment = Alignment.CenterVertically,
       ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -854,7 +855,7 @@ private fun SkillItemRow(
     modifier =
       Modifier.fillMaxWidth()
         .then(if (inMultiSelectMode && skill.builtIn) Modifier.alpha(0.5f) else Modifier)
-        .clip(shape = RoundedCornerShape(20.dp))
+        .clip(shape = RoundedCornerShape(Dimensions.Component.chipCornerRadius))
         .background(MaterialTheme.colorScheme.surfaceContainerLowest)
         .then(
           if (isCustom) {
@@ -868,23 +869,23 @@ private fun SkillItemRow(
             )
           } else Modifier
         )
-        .padding(horizontal = 16.dp, vertical = 12.dp),
+        .padding(horizontal = Dimensions.Spacing.medium, vertical = Dimensions.Spacing.md),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     if (inMultiSelectMode && isCustom) {
       Checkbox(
         checked = isSelectedForDeletion,
         onCheckedChange = onSelectionCheckedChange,
-        modifier = Modifier.padding(end = 12.dp),
+        modifier = Modifier.padding(end = Dimensions.Spacing.md),
       )
     }
 
     Column(modifier = Modifier.weight(1f)) {
-      Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small)) {
         // Name and description.
         Column(
-          modifier = Modifier.weight(1f).padding(top = 2.dp),
-          verticalArrangement = Arrangement.spacedBy(6.dp),
+          modifier = Modifier.weight(1f).padding(top = Dimensions.Spacing.xxs),
+          verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.sm),
         ) {
           Row(verticalAlignment = Alignment.CenterVertically) {
             val hasHomepage = !skill.homepage.isBlank()
@@ -893,7 +894,7 @@ private fun SkillItemRow(
             if (hasHomepage) {
               Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xxs),
               ) {
                 Text(
                   skill.name,
@@ -908,7 +909,7 @@ private fun SkillItemRow(
                 Icon(
                   Icons.AutoMirrored.Outlined.OpenInNew,
                   contentDescription = null,
-                  modifier = Modifier.size(16.dp),
+                  modifier = Modifier.size(Dimensions.Icon.small),
                   tint = MaterialTheme.customColors.linkColor,
                 )
               }
@@ -929,7 +930,7 @@ private fun SkillItemRow(
           checked = skill.selected,
           onCheckedChange = onSkillEnabledChange,
           modifier =
-            Modifier.offset(y = (-4).dp).semantics { contentDescription = toggleSkillDesc },
+            Modifier.offset(y = -Dimensions.Spacing.xs).semantics { contentDescription = toggleSkillDesc },
           enabled = !inMultiSelectMode,
         )
       }
@@ -939,24 +940,24 @@ private fun SkillItemRow(
         Row(
           verticalAlignment = Alignment.CenterVertically,
           horizontalArrangement = Arrangement.Start,
-          modifier = Modifier.padding(top = 8.dp),
+          modifier = Modifier.padding(top = Dimensions.Spacing.small),
         ) {
           // Edit.
           FilledTonalButton(
             onClick = onViewClick,
-            modifier = Modifier.height(32.dp).padding(end = 8.dp),
+            modifier = Modifier.height(Dimensions.Component.chipHeight).padding(end = Dimensions.Spacing.small),
             contentPadding = BUTTON_CONTENT_PADDING,
           ) {
             Icon(
               Icons.Outlined.RemoveRedEye,
               contentDescription = null,
               tint = MaterialTheme.colorScheme.onSurfaceVariant,
-              modifier = Modifier.size(18.dp),
+              modifier = Modifier.size(Dimensions.Component.iconSmall),
             )
             Text(
               stringResource(R.string.view),
               style = MaterialTheme.typography.labelMedium,
-              modifier = Modifier.padding(start = 4.dp),
+              modifier = Modifier.padding(start = Dimensions.Spacing.xs),
             )
           }
 
@@ -964,19 +965,19 @@ private fun SkillItemRow(
             // Edit secret.
             FilledTonalButton(
               onClick = onSecretClick,
-              modifier = Modifier.height(32.dp).padding(end = 8.dp),
+              modifier = Modifier.height(Dimensions.Component.chipHeight).padding(end = Dimensions.Spacing.small),
               contentPadding = BUTTON_CONTENT_PADDING,
             ) {
               Icon(
                 Icons.Outlined.VpnKey,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(Dimensions.Component.iconSmall),
               )
               Text(
                 stringResource(R.string.secret),
                 style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.padding(start = 4.dp),
+                modifier = Modifier.padding(start = Dimensions.Spacing.xs),
               )
             }
           }
@@ -986,19 +987,19 @@ private fun SkillItemRow(
             // Delete.
             OutlinedButton(
               onClick = onDeleteClick,
-              modifier = Modifier.height(32.dp),
+              modifier = Modifier.height(Dimensions.Component.chipHeight),
               contentPadding = BUTTON_CONTENT_PADDING,
             ) {
               Icon(
                 Icons.Outlined.Delete,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(Dimensions.Component.iconSmall),
               )
               Text(
                 stringResource(R.string.delete),
                 style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.padding(start = 4.dp),
+                modifier = Modifier.padding(start = Dimensions.Spacing.xs),
               )
             }
           }
@@ -1026,13 +1027,13 @@ private fun AddSkillOptionsBottomSheet(
 ) {
   val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
   ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-    Column(modifier = Modifier.padding(bottom = 16.dp)) {
+    Column(modifier = Modifier.padding(bottom = Dimensions.Spacing.medium)) {
       Text(
         stringResource(R.string.add_skill),
         style = MaterialTheme.typography.titleLarge,
-        modifier = Modifier.padding(bottom = 16.dp).padding(horizontal = 16.dp),
+        modifier = Modifier.padding(bottom = Dimensions.Spacing.medium).padding(horizontal = Dimensions.Spacing.medium),
       )
-      Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+      Column(verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.medium)) {
         ADD_SKILL_OPTIONS.forEach { option ->
           Row(
             modifier =
@@ -1048,16 +1049,16 @@ private fun AddSkillOptionsBottomSheet(
                   )
                   onDismiss()
                 }
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = Dimensions.Spacing.medium, vertical = Dimensions.Spacing.small)
           ) {
             Column(modifier = Modifier.fillMaxWidth()) {
               // Row for Icon and Title
               Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.padding(bottom = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.medium),
+                modifier = Modifier.padding(bottom = Dimensions.Spacing.xs),
               ) {
-                Icon(option.icon, contentDescription = null, modifier = Modifier.size(24.dp))
+                Icon(option.icon, contentDescription = null, modifier = Modifier.size(Dimensions.Icon.medium))
                 Text(stringResource(option.titleResId), style = MaterialTheme.typography.bodyLarge)
               }
               // Description Text
@@ -1065,7 +1066,7 @@ private fun AddSkillOptionsBottomSheet(
                 stringResource(option.descriptionResId),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 40.dp),
+                modifier = Modifier.padding(start = 40.dp), // icon 24dp + gap 16dp
               )
             }
           }

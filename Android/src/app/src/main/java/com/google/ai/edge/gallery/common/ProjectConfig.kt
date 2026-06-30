@@ -20,28 +20,30 @@ import androidx.core.net.toUri
 import com.google.ai.edge.gallery.BuildConfig
 import net.openid.appauth.AuthorizationServiceConfiguration
 
+/** Central project configuration sourced from Gradle BuildConfig fields and runtime properties. */
 object ProjectConfig {
-  // Hugging Face Client ID.
-  //
-  const val clientId = "REPLACE_WITH_YOUR_CLIENT_ID_IN_HUGGINGFACE_APP"
+  val clientId: String = BuildConfig.HUGGING_FACE_CLIENT_ID
 
-  // Registered redirect URI.
-  //
-  // The scheme needs to match the
-  // "android.defaultConfig.manifestPlaceholders["appAuthRedirectScheme"]" field in
-  // "build.gradle.kts".
-  const val redirectUri = "REPLACE_WITH_YOUR_REDIRECT_URI_IN_HUGGINGFACE_APP"
+  val redirectUri: String = BuildConfig.HUGGING_FACE_REDIRECT_URI
 
-  // OAuth 2.0 Endpoints (Authorization + Token Exchange)
-  private const val authEndpoint = "https://huggingface.co/oauth/authorize"
-  private const val tokenEndpoint = "https://huggingface.co/oauth/token"
+  private val authEndpoint: String = BuildConfig.HUGGING_FACE_AUTH_ENDPOINT
 
-  // OAuth service configuration (AppAuth library requires this)
-  val authServiceConfig =
-    AuthorizationServiceConfiguration(
-      authEndpoint.toUri(), // Authorization endpoint
-      tokenEndpoint.toUri(), // Token exchange endpoint
-    )
+  private val tokenEndpoint: String = BuildConfig.HUGGING_FACE_TOKEN_ENDPOINT
+
+  val isHuggingFaceOAuthConfigured: Boolean
+    get() =
+      clientId.isNotBlank() &&
+        redirectUri.isNotBlank() &&
+        authEndpoint.isNotBlank() &&
+        tokenEndpoint.isNotBlank()
+
+  val authServiceConfig: AuthorizationServiceConfiguration?
+    get() =
+      if (isHuggingFaceOAuthConfigured) {
+        AuthorizationServiceConfiguration(authEndpoint.toUri(), tokenEndpoint.toUri())
+      } else {
+        null
+      }
 
   /** Application version name from build config. Single source of truth for version display. */
   val versionName: String = BuildConfig.VERSION_NAME

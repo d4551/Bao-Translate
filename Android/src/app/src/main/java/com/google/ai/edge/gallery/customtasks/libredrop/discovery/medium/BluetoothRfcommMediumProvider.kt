@@ -14,9 +14,7 @@ import android.bluetooth.BluetoothServerSocket
 import android.bluetooth.BluetoothSocket
 import android.content.Context
 import android.content.pm.PackageManager
-import android.os.Build
 import android.util.Log
-import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat
 import com.google.ai.edge.gallery.customtasks.libredrop.protocol.medium.Medium
@@ -395,15 +393,8 @@ public class BluetoothRfcommMediumProvider internal constructor(
             return manager.adapter
         }
 
-        private fun hasConnectPermission(): Boolean {
-            // Pre-API-31 uses the legacy install-time BLUETOOTH /
-            // BLUETOOTH_ADMIN model — always granted if declared in the
-            // manifest, so short-circuit the runtime check.
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
-            return checkSPermission()
-        }
+        private fun hasConnectPermission(): Boolean = checkSPermission()
 
-        @RequiresApi(Build.VERSION_CODES.S)
         private fun checkSPermission(): Boolean =
             ContextCompat.checkSelfPermission(
                 context,

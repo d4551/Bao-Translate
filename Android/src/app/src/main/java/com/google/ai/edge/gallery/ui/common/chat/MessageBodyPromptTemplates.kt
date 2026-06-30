@@ -44,11 +44,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.data.PromptTemplate
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.ui.common.getTaskIconColor
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 
 private const val CARD_HEIGHT = 100
 
@@ -63,11 +66,11 @@ fun MessageBodyPromptTemplates(
   val gradientColors = listOf(color.copy(alpha = 0.5f), color)
 
   Column(
-    modifier = Modifier.padding(top = 12.dp),
-    verticalArrangement = Arrangement.spacedBy(8.dp),
+    modifier = Modifier.padding(top = Dimensions.Spacing.md),
+    verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
   ) {
     Text(
-      "Try an example prompt",
+      stringResource(R.string.try_example_prompt),
       style =
         MaterialTheme.typography.titleLarge.copy(
           fontWeight = FontWeight.Bold,
@@ -78,32 +81,32 @@ fun MessageBodyPromptTemplates(
     )
     if (message.showMakeYourOwn) {
       Text(
-        "Or make your own",
+        stringResource(R.string.or_make_your_own),
         style = MaterialTheme.typography.titleSmall,
-        modifier = Modifier.fillMaxWidth().offset(y = (-4).dp),
+        modifier = Modifier.fillMaxWidth().offset(y = -Dimensions.Spacing.xs),
         textAlign = TextAlign.Center,
       )
     }
     LazyColumn(
       modifier = Modifier.height((rowCount * (CARD_HEIGHT + 8)).dp),
-      verticalArrangement = Arrangement.spacedBy(8.dp),
+      verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
     ) {
       // Cards.
       items(message.templates) { template ->
         Box(
           modifier =
             Modifier.border(
-                width = 1.dp,
+                width = Dimensions.Stroke.hairline,
                 color = color.copy(alpha = 0.3f),
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(Dimensions.Component.cardCornerRadius),
               )
               .height(CARD_HEIGHT.dp)
-              .shadow(elevation = 2.dp, shape = RoundedCornerShape(24.dp), spotColor = color)
+              .shadow(elevation = Dimensions.Component.cardElevation, shape = RoundedCornerShape(Dimensions.Component.cardCornerRadius), spotColor = color)
               .background(MaterialTheme.colorScheme.surface)
               .clickable { onPromptClicked(template) }
         ) {
           Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 20.dp).fillMaxSize(),
+            modifier = Modifier.padding(horizontal = Dimensions.Spacing.md, vertical = Dimensions.Spacing.lg).fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
           ) {
             Text(

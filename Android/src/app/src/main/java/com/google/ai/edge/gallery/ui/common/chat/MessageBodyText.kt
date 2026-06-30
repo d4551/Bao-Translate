@@ -28,9 +28,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.ui.common.BufferedFadingMarkdownText
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.common.MarkdownText
 import com.google.ai.edge.gallery.ui.theme.customColors
 
@@ -39,7 +39,7 @@ import com.google.ai.edge.gallery.ui.theme.customColors
 fun MessageBodyText(
   message: ChatMessageText,
   inProgress: Boolean,
-  horizontalPadding: Dp = 12.dp,
+  horizontalPadding: Dp = Dimensions.Spacing.md,
   onCopyClicked: (String) -> Unit = {},
 ) {
   if (message.side == ChatSide.USER) {
@@ -47,7 +47,7 @@ fun MessageBodyText(
     LongPressCopyContainer(copyText = message.content, onCopyClicked = onCopyClicked) {
       MarkdownText(
         text = message.content,
-        modifier = Modifier.padding(vertical = 12.dp).padding(horizontal = horizontalPadding),
+        modifier = Modifier.padding(vertical = Dimensions.Spacing.md).padding(horizontal = horizontalPadding),
         textColor = userBubbleContentColor,
         linkColor = userBubbleContentColor,
       )
@@ -59,7 +59,7 @@ fun MessageBodyText(
         text = message.content,
         inProgress = inProgress,
         modifier =
-          Modifier.padding(vertical = 12.dp).padding(horizontal = horizontalPadding).semantics(
+          Modifier.padding(vertical = Dimensions.Spacing.md).padding(horizontal = horizontalPadding).semantics(
             mergeDescendants = true
           ) {
             contentDescription = cdResponse
@@ -76,7 +76,7 @@ fun MessageBodyText(
           style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.onSurface,
           modifier =
-            Modifier.padding(vertical = 12.dp).padding(horizontal = horizontalPadding).semantics {
+            Modifier.padding(vertical = Dimensions.Spacing.md).padding(horizontal = horizontalPadding).semantics {
               contentDescription = cdResponse
               // Only announce when message is complete.
               if (!inProgress) {

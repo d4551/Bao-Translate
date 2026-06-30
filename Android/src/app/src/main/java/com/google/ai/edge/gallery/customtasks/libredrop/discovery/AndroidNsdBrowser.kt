@@ -253,7 +253,7 @@ internal class AndroidNsdBrowser(
         val name = serviceInfo.serviceName ?: ""
         val addresses: List<InetAddress> =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                serviceInfo.hostAddresses ?: emptyList()
+                serviceInfo.hostAddresses
             } else {
                 @Suppress("DEPRECATION")
                 listOfNotNull(serviceInfo.host)

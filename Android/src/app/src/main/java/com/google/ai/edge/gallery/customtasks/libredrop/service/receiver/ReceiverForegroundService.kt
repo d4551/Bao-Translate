@@ -1039,17 +1039,11 @@ public class ReceiverForegroundService : Service() {
             }
 
         /**
-         * Bring up the foreground service. Wraps the platform call so
-         * callers don't need to remember `startForegroundService` vs
-         * `startService` per API level.
+         * Bring up the foreground service using the required foreground-service entry point.
          */
         public fun start(context: Context) {
             val intent = Intent(context, ReceiverForegroundService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
+            context.startForegroundService(intent)
         }
 
         /**

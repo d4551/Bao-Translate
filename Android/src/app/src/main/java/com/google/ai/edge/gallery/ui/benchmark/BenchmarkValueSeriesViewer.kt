@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.proto.ValueSeries
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.customColors
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -64,8 +65,8 @@ fun BenchmarkValueSeriesViewer(title: String, valueSeries: ValueSeries, onDismis
     containerColor = MaterialTheme.colorScheme.surface,
   ) {
     Column(
-      modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
-      verticalArrangement = Arrangement.spacedBy(12.dp),
+      modifier = Modifier.padding(horizontal = Dimensions.Spacing.medium).padding(bottom = Dimensions.Spacing.medium),
+      verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.md),
     ) {
       // Title.
       Text(
@@ -76,7 +77,7 @@ fun BenchmarkValueSeriesViewer(title: String, valueSeries: ValueSeries, onDismis
 
       val values = valueSeries.valueList
       if (values.isNotEmpty()) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs)) {
           val lineColor = MaterialTheme.colorScheme.outline
           val dotBgColor = MaterialTheme.colorScheme.surface
           val dotBorderColor = MaterialTheme.colorScheme.outline
@@ -104,10 +105,10 @@ fun BenchmarkValueSeriesViewer(title: String, valueSeries: ValueSeries, onDismis
           val scaledYRange = effectiveMax - effectiveMin
           Canvas(
             modifier =
-              Modifier.clip(RoundedCornerShape(8.dp))
+              Modifier.clip(RoundedCornerShape(Dimensions.Spacing.small))
                 .background(MaterialTheme.colorScheme.surfaceContainer)
                 .fillMaxWidth()
-                .height(80.dp)
+                .height(Dimensions.Component.imagePreviewHeight)
                 .pointerInput(values) {
                   awaitPointerEventScope {
                     while (true) {
@@ -130,7 +131,7 @@ fun BenchmarkValueSeriesViewer(title: String, valueSeries: ValueSeries, onDismis
                   }
                 }
           ) {
-            val horizontalPaddingDp = 12.dp
+            val horizontalPaddingDp = Dimensions.Spacing.md
             val horizontalPaddingPx = horizontalPaddingDp.toPx()
             val width = size.width - horizontalPaddingPx * 2
             val height = size.height
@@ -150,13 +151,13 @@ fun BenchmarkValueSeriesViewer(title: String, valueSeries: ValueSeries, onDismis
                 color = lineColor,
                 start = points[i],
                 end = points[i + 1],
-                strokeWidth = 2.dp.toPx(),
+                strokeWidth = Dimensions.Component.strokeWidth.toPx(),
               )
             }
 
             // Draw dots for each value
-            val dotRadius = 4.dp.toPx()
-            val dotBorderWidth = 2.dp.toPx()
+            val dotRadius = Dimensions.Spacing.xs.toPx()
+            val dotBorderWidth = Dimensions.Component.strokeWidth.toPx()
             for (offset in points) {
               // background
               drawCircle(color = dotBgColor, radius = dotRadius, center = offset)
@@ -180,7 +181,7 @@ fun BenchmarkValueSeriesViewer(title: String, valueSeries: ValueSeries, onDismis
                 color = tappedLineColor,
                 start = start,
                 end = end,
-                strokeWidth = 1.dp.toPx(),
+                strokeWidth = Dimensions.Stroke.hairline.toPx(),
                 pathEffect = dashPathEffect(dashIntervals, 0f),
               )
             }

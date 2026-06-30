@@ -59,6 +59,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.common.clearFocusOnKeyboardDismiss
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.customColors
 import kotlinx.coroutines.launch
 
@@ -78,7 +79,7 @@ fun LogsViewer(logs: List<LogMessage>, onDismissRequest: () -> Unit) {
     Column(modifier = Modifier.fillMaxWidth()) {
       // Top Bar: Title and Close Button
       Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Dimensions.Spacing.medium).padding(bottom = Dimensions.Spacing.small),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
       ) {
@@ -106,8 +107,8 @@ fun LogsViewer(logs: List<LogMessage>, onDismissRequest: () -> Unit) {
         placeholder = { Text(stringResource(R.string.logs_viewer_filter_text_input_placeholder)) },
         modifier =
           Modifier.fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 16.dp)
+            .padding(horizontal = Dimensions.Spacing.medium)
+            .padding(bottom = Dimensions.Spacing.medium)
             .clearFocusOnKeyboardDismiss(),
         shape = CircleShape,
         singleLine = true,
@@ -132,7 +133,7 @@ fun LogsViewer(logs: List<LogMessage>, onDismissRequest: () -> Unit) {
         mutableStateOf(setOf(LogMessageLevel.Info, LogMessageLevel.Warning, LogMessageLevel.Error))
       }
       MultiChoiceSegmentedButtonRow(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 16.dp)
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Dimensions.Spacing.medium).padding(bottom = Dimensions.Spacing.medium)
       ) {
         LogMessageLevel.entries.forEachIndexed { index, level ->
           SegmentedButton(
@@ -162,14 +163,14 @@ fun LogsViewer(logs: List<LogMessage>, onDismissRequest: () -> Unit) {
         }
 
       LazyColumn(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).weight(1f),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Dimensions.Spacing.medium).weight(1f),
+        verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.medium),
       ) {
         if (filteredLogs.isEmpty()) {
           item {
             Text(
               stringResource(R.string.logs_viewer_no_matching_logs),
-              modifier = Modifier.padding(16.dp),
+              modifier = Modifier.padding(Dimensions.Spacing.medium),
               color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
           }
@@ -178,7 +179,7 @@ fun LogsViewer(logs: List<LogMessage>, onDismissRequest: () -> Unit) {
         }
       }
 
-      Spacer(modifier = Modifier.height(16.dp))
+      Spacer(modifier = Modifier.height(Dimensions.Spacing.medium))
     }
   }
 }
@@ -193,7 +194,7 @@ private fun LogItem(log: LogMessage) {
   Row(
     modifier = Modifier.fillMaxWidth(),
     verticalAlignment = Alignment.Top,
-    horizontalArrangement = Arrangement.spacedBy(8.dp),
+    horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
   ) {
     // Severity Icon
     val icon =
@@ -212,7 +213,7 @@ private fun LogItem(log: LogMessage) {
       imageVector = icon,
       contentDescription = log.level.name,
       tint = tint,
-      modifier = Modifier.size(20.dp),
+      modifier = Modifier.size(Dimensions.Component.iconMedium),
     )
 
     // Source, LineNumber, and Message Column
@@ -233,7 +234,7 @@ private fun LogItem(log: LogMessage) {
       Text(
         log.message,
         style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier.padding(top = 4.dp),
+        modifier = Modifier.padding(top = Dimensions.Spacing.xs),
       )
     }
   }

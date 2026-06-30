@@ -11,7 +11,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.google.ai.edge.gallery.customtasks.libredrop.protocol.connection.TransferProgress
 import com.google.ai.edge.gallery.R
@@ -85,13 +84,9 @@ public object TransferProgressNotification {
     }
 
     /**
-     * Idempotently install the progress notification channel on API
-     * 26+. Pre-26 devices ignore notification channels; we still post
-     * via `NotificationCompat`, which silently degrades the
-     * channel-related fields.
+     * Idempotently install the progress notification channel.
      */
     public fun ensureChannel(context: Context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         val channel =
             NotificationChannel(
@@ -196,14 +191,23 @@ public object TransferProgressNotification {
      * against the supplied [context]'s string resources.
      */
     public fun textResolverFor(context: Context): TransferProgressNotificationContent.TextResolver =
-        TransferProgressNotificationContent.TextResolver { key, args ->
-            val resId = stringResIdFor(key)
-            // The args array is forwarded to a varargs-accepting Java
-            // API; the spread is unavoidable here because Kotlin does
-            // not synthesise an Object[]-overload of getString.
-            // Suppression keeps the call site clean.
-            @Suppress("SpreadOperator")
-            context.getString(resId, *args)
+        object : TransferProgressNotificationContent.TextResolver {
+            override fun getString(
+                key: TransferProgressNotificationContent.StringKey,
+                vararg args: Any,
+            ): String {
+                val resId = stringResIdFor(key)
+                return context.getString(resId, *args)
+            }
+
+            override fun getQuantityString(
+                key: TransferProgressNotificationContent.StringKey,
+                quantity: Int,
+                vararg args: Any,
+            ): String {
+                val resId = pluralResIdFor(key)
+                return context.resources.getQuantityString(resId, quantity, *args)
+            }
         }
 
     private fun stringResIdFor(key: TransferProgressNotificationContent.StringKey): Int =
@@ -220,12 +224,18 @@ public object TransferProgressNotification {
                 R.string.transfer_progress_body_eta
             TransferProgressNotificationContent.StringKey.DURATION_FEW_SECONDS ->
                 R.string.transfer_progress_duration_few_seconds
+            else -> throw IllegalArgumentException("No string resource for $key")
+        }
+
+    private fun pluralResIdFor(key: TransferProgressNotificationContent.StringKey): Int =
+        when (key) {
             TransferProgressNotificationContent.StringKey.DURATION_SECONDS ->
-                R.string.transfer_progress_duration_seconds
+                R.plurals.transfer_progress_duration_seconds
             TransferProgressNotificationContent.StringKey.DURATION_ABOUT_MINUTES ->
-                R.string.transfer_progress_duration_about_minutes
+                R.plurals.transfer_progress_duration_about_minutes
             TransferProgressNotificationContent.StringKey.DURATION_ABOUT_HOURS ->
-                R.string.transfer_progress_duration_about_hours
+                R.plurals.transfer_progress_duration_about_hours
+            else -> throw IllegalArgumentException("No plural resource for $key")
         }
 
     private fun cancelBroadcastIntent(

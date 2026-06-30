@@ -103,6 +103,7 @@ import com.google.ai.edge.gallery.ui.common.Accordions
 import com.google.ai.edge.gallery.ui.common.MarkdownText
 import com.google.ai.edge.gallery.ui.common.SMALL_BUTTON_CONTENT_PADDING
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.customColors
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -209,7 +210,7 @@ fun BenchmarkResultsViewer(
               )
             }
           } else {
-            Spacer(modifier = Modifier.size(48.dp))
+            Spacer(modifier = Modifier.size(Dimensions.Icon.xl))
           }
         },
         // The close button.
@@ -252,11 +253,11 @@ fun BenchmarkResultsViewer(
                 Modifier.fillMaxSize().padding(bottom = innerPadding.calculateBottomPadding()),
             ) {
               Column(
-                verticalArrangement = Arrangement.spacedBy(24.dp),
+                verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.large),
                 horizontalAlignment = Alignment.CenterHorizontally,
               ) {
                 // Progress spinner.
-                CircularProgressIndicator(strokeWidth = 4.dp, modifier = Modifier.size(36.dp))
+                CircularProgressIndicator(strokeWidth = Dimensions.Spacing.xs, modifier = Modifier.size(Dimensions.Component.shutterIconSize))
                 // Info text.
                 Text(
                   stringResource(R.string.running_benchmark_msg),
@@ -294,20 +295,20 @@ fun BenchmarkResultsViewer(
                     stringResource(R.string.benchmark_no_results),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(horizontal = 32.dp),
+                    modifier = Modifier.padding(horizontal = Dimensions.Spacing.xl),
                     textAlign = TextAlign.Center,
                   )
                 }
               } else {
                 // List.
-                LazyColumn(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                  item { Spacer(modifier = Modifier.height(16.dp)) }
+                LazyColumn(modifier = Modifier.fillMaxWidth().padding(horizontal = Dimensions.Spacing.medium)) {
+                  item { Spacer(modifier = Modifier.height(Dimensions.Spacing.medium)) }
                   if (filteredResults.size > 1) {
                     item {
                       Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.padding(bottom = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
+                        modifier = Modifier.padding(bottom = Dimensions.Spacing.medium),
                       ) {
                         OutlinedButton(
                           onClick = { viewModel.expandAll() },
@@ -316,7 +317,7 @@ fun BenchmarkResultsViewer(
                           Icon(
                             Icons.Rounded.UnfoldMoreDouble,
                             contentDescription = null,
-                            modifier = Modifier.padding(end = 4.dp).size(16.dp),
+                            modifier = Modifier.padding(end = Dimensions.Spacing.xs).size(Dimensions.Icon.small),
                           )
                           Text(stringResource(R.string.expand_all))
                         }
@@ -327,7 +328,7 @@ fun BenchmarkResultsViewer(
                           Icon(
                             Icons.Rounded.UnfoldLessDouble,
                             contentDescription = null,
-                            modifier = Modifier.padding(end = 4.dp).size(16.dp),
+                            modifier = Modifier.padding(end = Dimensions.Spacing.xs).size(Dimensions.Icon.small),
                           )
                           Text(stringResource(R.string.collapse_all))
                         }
@@ -338,7 +339,7 @@ fun BenchmarkResultsViewer(
                     index,
                     result ->
                     // Result card.
-                    var cardModifier = Modifier.clip(RoundedCornerShape(20.dp)).fillMaxWidth()
+                    var cardModifier = Modifier.clip(RoundedCornerShape(Dimensions.Component.chipCornerRadius)).fillMaxWidth()
                     if (showLazyListPlacementAnimation) {
                       cardModifier = cardModifier.animateItem()
                     }
@@ -372,20 +373,20 @@ fun BenchmarkResultsViewer(
                                     Icon(
                                       Icons.Rounded.Check,
                                       contentDescription = null,
-                                      modifier = Modifier.size(16.dp).offset(x = 2.dp),
+                                      modifier = Modifier.size(Dimensions.Icon.small).offset(x = Dimensions.Spacing.xxs),
                                     )
                                   }
                                 } else {
                                   null
                                 },
-                              modifier = Modifier.height(24.dp),
+                              modifier = Modifier.height(Dimensions.Icon.medium),
                             )
                           }
                         },
                       ) {
                         Column(
-                          verticalArrangement = Arrangement.spacedBy(8.dp),
-                          modifier = Modifier.padding(bottom = 2.dp),
+                          verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
+                          modifier = Modifier.padding(bottom = Dimensions.Spacing.xxs),
                         ) {
                           // Basic info.
                           Accordions(
@@ -398,8 +399,8 @@ fun BenchmarkResultsViewer(
                             modifier = Modifier.clip(MaterialTheme.shapes.medium),
                           ) {
                             Column(
-                              verticalArrangement = Arrangement.spacedBy(8.dp),
-                              modifier = Modifier.padding(start = 6.dp, top = 6.dp, bottom = 4.dp),
+                              verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
+                              modifier = Modifier.padding(start = Dimensions.Spacing.sm, top = Dimensions.Spacing.sm, bottom = Dimensions.Spacing.xs),
                             ) {
                               StatRow(label = stringResource(R.string.benchmark_stat_model), value = llmResult.baiscInfo.modelName)
                               StatRow(
@@ -457,8 +458,8 @@ fun BenchmarkResultsViewer(
                                           color = MaterialTheme.colorScheme.outlineVariant,
                                           shape = MaterialTheme.shapes.small,
                                         )
-                                        .padding(start = 8.dp, end = 0.dp)
-                                        .height(24.dp),
+                                        .padding(start = Dimensions.Spacing.small, end = 0.dp)
+                                        .height(Dimensions.Icon.medium),
                                   ) {
                                     Text(
                                       result.aggregation.label,
@@ -467,7 +468,7 @@ fun BenchmarkResultsViewer(
                                     )
                                     Icon(
                                       Icons.Rounded.ArrowDropDown,
-                                      modifier = Modifier.size(20.dp),
+                                      modifier = Modifier.size(Dimensions.Component.iconMedium),
                                       contentDescription = null,
                                     )
                                   }
@@ -494,8 +495,8 @@ fun BenchmarkResultsViewer(
                             hideTitleRowActionOnCollapse = true,
                           ) {
                             Column(
-                              verticalArrangement = Arrangement.spacedBy(8.dp),
-                              modifier = Modifier.padding(start = 6.dp, top = 6.dp),
+                              verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
+                              modifier = Modifier.padding(start = Dimensions.Spacing.sm, top = Dimensions.Spacing.sm),
                             ) {
                               val baselineStats =
                                 uiState.baselineResult?.benchmarkResult?.llmResult?.stats
@@ -612,18 +613,18 @@ fun BenchmarkResultsViewer(
                             ) {
                               Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs),
                               ) {
                                 Icon(
                                   Icons.Rounded.DeleteOutline,
                                   contentDescription = null,
-                                  modifier = Modifier.size(20.dp),
+                                  modifier = Modifier.size(Dimensions.Component.iconMedium),
                                 )
                                 Text(stringResource(R.string.delete))
                               }
                             }
 
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(Dimensions.Spacing.small))
 
                             // Copy
                             val clipboard = LocalClipboard.current
@@ -650,12 +651,12 @@ fun BenchmarkResultsViewer(
                             ) {
                               Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs),
                               ) {
                                 Icon(
                                   Icons.Rounded.ContentCopy,
                                   contentDescription = null,
-                                  modifier = Modifier.size(20.dp),
+                                  modifier = Modifier.size(Dimensions.Component.iconMedium),
                                   tint = MaterialTheme.colorScheme.onSecondaryContainer,
                                 )
                                 Text(
@@ -669,7 +670,7 @@ fun BenchmarkResultsViewer(
                       }
                     }
                     if (index != filteredResults.size - 1) {
-                      Spacer(modifier = Modifier.height(12.dp).animateItem(placementSpec = null))
+                      Spacer(modifier = Modifier.height(Dimensions.Spacing.md).animateItem(placementSpec = null))
                     }
                   }
                   item { Spacer(modifier = Modifier.height(innerPadding.calculateBottomPadding())) }
@@ -734,10 +735,10 @@ fun BenchmarkResultsViewer(
       sheetState = sheetState,
     ) {
       Column(
-        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.padding(horizontal = Dimensions.Spacing.medium).padding(bottom = Dimensions.Spacing.medium),
+        verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.medium),
       ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small)) {
           Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = null)
           Text(
             stringResource(R.string.benchmark_comparison_help_title),

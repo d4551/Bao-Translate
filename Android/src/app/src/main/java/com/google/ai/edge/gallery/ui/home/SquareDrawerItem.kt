@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 
 @Composable
 fun SquareDrawerItem(
@@ -56,12 +57,12 @@ fun SquareDrawerItem(
     modifier =
       modifier
         .aspectRatio(1f)
-        .clip(RoundedCornerShape(24.dp))
+        .clip(RoundedCornerShape(Dimensions.Spacing.large))
         .clickable { onClick() }
         .border(
-          width = 2.dp,
+          width = Dimensions.Stroke.thin,
           color = MaterialTheme.colorScheme.surfaceContainerHigh,
-          shape = RoundedCornerShape(24.dp),
+          shape = RoundedCornerShape(Dimensions.Spacing.large),
         )
   ) {
     Column(
@@ -91,7 +92,7 @@ fun SquareDrawerItem(
               }
             ),
       )
-      Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+      Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs)) {
         Text(
           label,
           color = MaterialTheme.colorScheme.onSurface,

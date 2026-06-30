@@ -20,7 +20,6 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
-import com.google.ai.edge.gallery.common.BaoLog
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
@@ -92,12 +91,12 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.webkit.WebViewAssetLoader
 import com.google.ai.edge.gallery.GalleryEvent
 import com.google.ai.edge.gallery.R
-import com.google.ai.edge.gallery.common.safeAs
+import com.google.ai.edge.gallery.common.BaoLog
 import com.google.ai.edge.gallery.data.ConfigKeys
+import com.google.ai.edge.gallery.data.ConfigValue
 import com.google.ai.edge.gallery.data.ModelDownloadStatusType
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.data.ValueType
-import com.google.ai.edge.gallery.data.ConfigValue
 import com.google.ai.edge.gallery.firebaseAnalytics
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageText
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageWarning
@@ -107,6 +106,7 @@ import com.google.ai.edge.gallery.ui.common.textandvoiceinput.HoldToDictateViewM
 import com.google.ai.edge.gallery.ui.common.textandvoiceinput.TextAndVoiceInput
 import com.google.ai.edge.gallery.ui.common.textandvoiceinput.VoiceRecognizerOverlay
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.customColors
 import com.google.ai.edge.litertlm.ToolProvider
 import com.google.common.io.BaseEncoding
@@ -186,13 +186,13 @@ fun TinyGardenScreen(
               contentAlignment = Alignment.Center,
             ) {
               Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
                 horizontalAlignment = Alignment.CenterHorizontally,
               ) {
                 CircularProgressIndicator(
                   trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                  strokeWidth = 3.dp,
-                  modifier = Modifier.size(24.dp),
+                  strokeWidth = Dimensions.Stroke.medium,
+                  modifier = Modifier.size(Dimensions.Icon.medium),
                 )
                 Text(
                   stringResource(R.string.resetting_engine),
@@ -202,7 +202,7 @@ fun TinyGardenScreen(
                   stringResource(R.string.reinitializing_description),
                   color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                   style = MaterialTheme.typography.bodyMedium,
-                  modifier = Modifier.padding(top = 8.dp),
+                  modifier = Modifier.padding(top = Dimensions.Spacing.small),
                 )
               }
             }
@@ -374,11 +374,15 @@ fun MainUi(
 
             // Reset conversation every {numTurns} turns.
             val numTurnsToReset =
-              ConfigValue.from(
+              when (
+                val value = ConfigValue.from(
                   value = model.configValues.getValue(ConfigKeys.RESET_CONVERSATION_TURN_COUNT.label),
                   valueType = ValueType.INT,
                 )
-                .let { (it as? ConfigValue.IntValue)?.value ?: 0 }
+              ) {
+                is ConfigValue.IntValue -> value.value
+                else -> 0
+              }
             BaoLog.d(TAG, "Target turn to reset: $numTurnsToReset")
             if (uiState.numTurns == numTurnsToReset) {
               BaoLog.d(TAG, "!! This is the turn to reset conversation")
@@ -474,8 +478,8 @@ fun MainUi(
     ) {
       CircularProgressIndicator(
         trackColor = MaterialTheme.colorScheme.surfaceVariant,
-        strokeWidth = 3.dp,
-        modifier = Modifier.size(24.dp),
+        strokeWidth = Dimensions.Stroke.medium,
+        modifier = Modifier.size(Dimensions.Icon.medium),
       )
     }
   }
@@ -486,7 +490,7 @@ fun MainUi(
         modifier =
           Modifier.padding(
             bottom =
-              if (WindowInsets.ime.getBottom(LocalDensity.current) == 0) bottomPadding else 12.dp
+              if (WindowInsets.ime.getBottom(LocalDensity.current) == 0) bottomPadding else Dimensions.Spacing.md
           )
       ) {
         // A webview to load the game which is written in javascript.
@@ -565,15 +569,10 @@ fun MainUi(
                       // If it's an external URL, launch an Android Intent to open it
                       // in the system's default browser.
                       runCatching {
-
-                        val intent = Intent(Intent.ACTION_VIEW, url.toUri())
-                        view?.context?.startActivity(intent)
-                      
-}.onFailure { e ->
-
-                        BaoLog.e(TAG, "Could not open external URL: $url", e)
-                      
-}
+                          val intent = Intent(Intent.ACTION_VIEW, url.toUri())
+                          view?.context?.startActivity(intent)
+                        }
+                        .onFailure { e -> BaoLog.e(TAG, "Could not open external URL: $url", e) }
 
                       // Return true to signal that we have handled the URL loading and
                       // the WebView should NOT load it internally.
@@ -607,20 +606,20 @@ fun MainUi(
             },
           )
 
-          SnackbarHost(hostState = snackbarHostState, modifier = Modifier.padding(bottom = 12.dp))
+          SnackbarHost(hostState = snackbarHostState, modifier = Modifier.padding(bottom = Dimensions.Spacing.md))
         }
 
         // Text and voice input.
         Row(
-          modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+          modifier = Modifier.fillMaxWidth().padding(top = Dimensions.Spacing.md),
           verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(4.dp),
+          horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.xs),
         ) {
           TextAndVoiceInput(
             task = task,
             processing = uiState.processing,
             holdToDictateViewModel = holdToDictateViewModel,
-            modifier = Modifier.padding(start = 16.dp).weight(1f),
+            modifier = Modifier.padding(start = Dimensions.Spacing.medium).weight(1f),
             onDone = { text -> processInstructionText(text = text) },
             onAmplitudeChanged = { curAmplitude = it },
             clearTextTrigger = clearTextTrigger,
@@ -630,13 +629,13 @@ fun MainUi(
             if (uiState.processing) {
               CircularProgressIndicator(
                 trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                strokeWidth = 3.dp,
-                modifier = Modifier.padding(end = 8.dp).size(24.dp),
+                strokeWidth = Dimensions.Stroke.medium,
+                modifier = Modifier.padding(end = Dimensions.Spacing.small).size(Dimensions.Icon.medium),
               )
             } else {
               IconButton(
                 onClick = { showConversationHistoryPanel = true },
-                modifier = Modifier.padding(end = 8.dp),
+                modifier = Modifier.padding(end = Dimensions.Spacing.small),
               ) {
                 Icon(
                   imageVector = Icons.Outlined.History,
@@ -686,7 +685,7 @@ fun MainUi(
     AlertDialog(
       title = { Text(stringResource(R.string.error)) },
       text = {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small)) {
           Text(errorDialogContent, style = MaterialTheme.typography.bodyMedium)
           Text(
             stringResource(R.string.reset_note),

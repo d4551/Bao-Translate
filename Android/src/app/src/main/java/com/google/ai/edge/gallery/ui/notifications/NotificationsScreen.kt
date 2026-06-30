@@ -72,6 +72,7 @@ import androidx.lifecycle.ViewModel
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.notifications.NotificationScheduleManager
 import com.google.ai.edge.gallery.proto.ScheduledNotification
+import com.google.ai.edge.gallery.ui.theme.Dimensions
 import com.google.ai.edge.gallery.ui.theme.customColors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -109,11 +110,11 @@ fun NotificationsScreen(
           Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Row(
               verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(12.dp),
+              horizontalArrangement = Arrangement.spacedBy(Dimensions.Spacing.md),
             ) {
               Icon(
                 imageVector = Icons.Rounded.Notifications,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(Dimensions.Component.iconMedium),
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurface,
               )
@@ -142,14 +143,14 @@ fun NotificationsScreen(
         Modifier.background(MaterialTheme.colorScheme.surfaceContainer)
           .fillMaxSize()
           .padding(innerPadding)
-          .padding(horizontal = 16.dp),
-      verticalArrangement = Arrangement.spacedBy(8.dp),
-      contentPadding = PaddingValues(vertical = 16.dp),
+          .padding(horizontal = Dimensions.Spacing.medium),
+      verticalArrangement = Arrangement.spacedBy(Dimensions.Spacing.small),
+      contentPadding = PaddingValues(vertical = Dimensions.Spacing.medium),
     ) {
       if (notifications.isEmpty()) {
         item {
           Box(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = Dimensions.Spacing.large),
             contentAlignment = Alignment.Center,
           ) {
             Text(
@@ -169,7 +170,7 @@ fun NotificationsScreen(
                 Modifier.fillMaxWidth()
                   .clip(MaterialTheme.shapes.small)
                   .clickable { expandedStates[name] = !isExpanded }
-                  .padding(vertical = 8.dp, horizontal = 16.dp),
+                  .padding(vertical = Dimensions.Spacing.small, horizontal = Dimensions.Spacing.medium),
               verticalAlignment = Alignment.CenterVertically,
               horizontalArrangement = Arrangement.SpaceBetween,
             ) {
@@ -182,7 +183,7 @@ fun NotificationsScreen(
               Icon(
                 imageVector =
                   if (isExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                contentDescription = if (isExpanded) "Collapse" else "Expand",
+                contentDescription = if (isExpanded) stringResource(R.string.cd_collapse_panel) else stringResource(R.string.cd_expand_panel),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
               )
             }
@@ -221,7 +222,7 @@ fun NotificationsScreen(
           colors =
             ButtonDefaults.buttonColors(
               containerColor = MaterialTheme.customColors.errorTextColor,
-              contentColor = Color.White,
+              contentColor = MaterialTheme.colorScheme.onError,
             ),
         ) {
           Text(stringResource(R.string.delete))
@@ -237,7 +238,7 @@ fun NotificationsScreen(
 }
 
 private val BUTTON_CONTENT_PADDING =
-  PaddingValues(start = 12.dp, top = 2.dp, end = 12.dp, bottom = 2.dp)
+  PaddingValues(start = Dimensions.Spacing.md, top = Dimensions.Spacing.xxs, end = Dimensions.Spacing.md, bottom = Dimensions.Spacing.xxs)
 
 @Composable
 fun NotificationItem(notification: ScheduledNotification, onDeleteClick: () -> Unit) {
@@ -247,15 +248,15 @@ fun NotificationItem(notification: ScheduledNotification, onDeleteClick: () -> U
     shape = MaterialTheme.shapes.medium,
     colors = CardDefaults.cardColors(containerColor = MaterialTheme.customColors.taskCardBgColor),
   ) {
-    Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
+    Column(modifier = Modifier.padding(Dimensions.Spacing.medium).fillMaxWidth()) {
       Text(
         text = notification.title,
         style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.Bold,
       )
-      Spacer(modifier = Modifier.height(4.dp))
+      Spacer(modifier = Modifier.height(Dimensions.Spacing.xs))
       Text(text = notification.message, style = MaterialTheme.typography.bodyMedium)
-      Spacer(modifier = Modifier.height(8.dp))
+      Spacer(modifier = Modifier.height(Dimensions.Spacing.small))
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -275,7 +276,7 @@ fun NotificationItem(notification: ScheduledNotification, onDeleteClick: () -> U
               notification.hasMonth() &&
               notification.hasDay()
           ) {
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(Dimensions.Spacing.xs))
             val dateStr = "${notification.year}/${notification.month}/${notification.day}"
             Text(
               text = stringResource(R.string.notifications_date_label, dateStr),
@@ -300,23 +301,23 @@ fun NotificationItem(notification: ScheduledNotification, onDeleteClick: () -> U
       Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.End,
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = Dimensions.Spacing.small),
       ) {
         OutlinedButton(
           onClick = onDeleteClick,
-          modifier = Modifier.height(32.dp),
+          modifier = Modifier.height(Dimensions.Component.chipHeight),
           contentPadding = BUTTON_CONTENT_PADDING,
         ) {
           Icon(
             Icons.Outlined.Delete,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(18.dp),
+            modifier = Modifier.size(Dimensions.Component.iconSmall),
           )
           Text(
             stringResource(R.string.delete),
             style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(start = 4.dp),
+            modifier = Modifier.padding(start = Dimensions.Spacing.xs),
           )
         }
       }

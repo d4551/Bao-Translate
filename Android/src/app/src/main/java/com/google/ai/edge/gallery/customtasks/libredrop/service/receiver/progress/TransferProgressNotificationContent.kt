@@ -135,16 +135,30 @@ public data class TransferProgressNotificationContent(
                 etaSeconds < 1L ->
                     resolver.getString(StringKey.DURATION_FEW_SECONDS)
                 etaSeconds <= SECONDS_THRESHOLD ->
-                    resolver.getString(StringKey.DURATION_SECONDS, etaSeconds)
+                    resolver.getQuantityString(
+                        StringKey.DURATION_SECONDS,
+                        quantityFor(etaSeconds),
+                        etaSeconds,
+                    )
                 etaSeconds < HOUR_IN_SECONDS -> {
                     val minutes = (etaSeconds + 30L) / 60L
-                    resolver.getString(StringKey.DURATION_ABOUT_MINUTES, minutes)
+                    resolver.getQuantityString(
+                        StringKey.DURATION_ABOUT_MINUTES,
+                        quantityFor(minutes),
+                        minutes,
+                    )
                 }
                 else -> {
                     val hours = (etaSeconds + 1800L) / HOUR_IN_SECONDS
-                    resolver.getString(StringKey.DURATION_ABOUT_HOURS, hours)
+                    resolver.getQuantityString(
+                        StringKey.DURATION_ABOUT_HOURS,
+                        quantityFor(hours),
+                        hours,
+                    )
                 }
             }
+
+        private fun quantityFor(value: Long): Int = value.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
 
         /**
          * Format a non-negative byte count as a short human-readable
@@ -216,5 +230,11 @@ public data class TransferProgressNotificationContent(
             key: StringKey,
             vararg args: Any,
         ): String
+
+        public fun getQuantityString(
+            key: StringKey,
+            quantity: Int,
+            vararg args: Any,
+        ): String = getString(key, *args)
     }
 }
